@@ -4886,23 +4886,50 @@ const VILLAGE_ART = {
   kumo:   { sky: ["#181a30", "#05060c"], sun: "#8f9ee0", far: "#0f1120", near: "#07080f", motif: "peaks" },
   iwa:    { sky: ["#2a1f14", "#080604"], sun: "#c99a5c", far: "#18110a", near: "#0a0705", motif: "cliffs" },
   ame:    { sky: ["#101822", "#04070a"], sun: "#6f8ba8", far: "#0b111a", near: "#05080c", motif: "towers" },
+  taki:   { sky: ["#0a2020", "#040c0c"], sun: "#4fd0c0", far: "#08181a", near: "#040c0d", motif: "mist" },
+  kusa:   { sky: ["#16230e", "#060a04"], sun: "#8fcf5a", far: "#101c0a", near: "#080f05", motif: "dunes", veg: "grass" },
+  oto:    { sky: ["#1c1226", "#07040c"], sun: "#b083e0", far: "#12091c", near: "#08050e", motif: "towers" },
+  uzu:    { sky: ["#2a1210", "#0a0403"], sun: "#e07850", far: "#1a0c0a", near: "#0c0504", motif: "mist" },
+  yu:     { sky: ["#241420", "#08040a"], sun: "#e0a0c0", far: "#180d16", near: "#0a060a", motif: "peaks" },
 };
-function VillageArt({ vid, height = 260, dim }) {
+function VillageArt({ vid, height = 260, dim, animated = true }) {
   const a = VILLAGE_ART[vid] || VILLAGE_ART.konoha;
   const uid = "v" + vid;
+  const cls = (c) => (animated ? c : "");
+  /* small drifting motes shared across every scene — leaves, sand, sparks, whatever the
+     palette implies. kept cheap: transform + opacity only, ~6 of them, no layout thrash. */
+  const motes = Array.from({ length: 7 }).map((_, i) => {
+    const cx = 18 + ((i * 53) % 364);
+    const cy = 150 + ((i * 37) % 60);
+    const dur = 5 + (i % 4) * 1.6;
+    const delay = -(i * 1.3);
+    const mx = ((i % 2 === 0 ? 1 : -1) * (10 + (i % 3) * 6));
+    return (
+      <circle key={"m" + i} className={cls("v-mote")} cx={cx} cy={cy} r={.5 + (i % 3) * .22} fill={a.sun}
+        style={{ opacity: 0, animationDuration: dur + "s", animationDelay: delay + "s", "--mx": mx + "px" }} />
+    );
+  });
   return (
-    <svg viewBox="0 0 400 220" preserveAspectRatio="xMidYMax slice" style={{ width: "100%", height, display: "block", opacity: dim ? .5 : 1 }}>
+    <svg viewBox="0 0 400 220" preserveAspectRatio="xMidYMax slice" style={{ width: "100%", height, display: "block", opacity: dim ? .5 : 1, overflow: "hidden" }}>
       <defs>
         <linearGradient id={"vs" + uid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={a.sky[0]} /><stop offset="100%" stopColor={a.sky[1]} /></linearGradient>
         <radialGradient id={"vg" + uid} cx="50%" cy="50%"><stop offset="0%" stopColor={a.sun} stopOpacity=".55" /><stop offset="100%" stopColor={a.sun} stopOpacity="0" /></radialGradient>
       </defs>
       <rect width="400" height="220" fill={"url(#vs" + uid + ")"} />
-      <circle cx="300" cy="66" r="72" fill={"url(#vg" + uid + ")"} />
+      <circle className={cls("v-sun")} cx="300" cy="66" r="72" fill={"url(#vg" + uid + ")"} />
 
       {a.motif === "faces" && (<>
+        {/* two soft cloud bands drifting past the monument at different speeds */}
+        <g className={cls("v-cloudA")} opacity=".22" fill={a.sky[0]}><ellipse cx="90" cy="58" rx="70" ry="14" /><ellipse cx="180" cy="44" rx="50" ry="10" /></g>
+        <g className={cls("v-cloudB")} opacity=".16" fill={a.sky[0]}><ellipse cx="300" cy="36" rx="60" ry="11" /></g>
         {/* the cliff, and the faces cut into it */}
         <path d="M0 96 L400 82 L400 220 L0 220 Z" fill={a.far} />
         <path d="M0 96 L400 82 L400 96 L0 110 Z" fill={a.sun} opacity=".12" />
+        {/* a slow beam of light sweeping across the carved faces */}
+        <clipPath id={"faceclip" + uid}><path d="M0 96 L400 82 L400 220 L0 220 Z" /></clipPath>
+        <g clipPath={"url(#faceclip" + uid + ")"}>
+          <rect className={cls("v-sweep")} x="-60" y="70" width="90" height="160" fill={a.sun} opacity=".14" />
+        </g>
         {[46, 122, 198, 274].map((x, i) => (
           <g key={x} opacity={.5 - i * 0.04} fill={a.near}>
             <ellipse cx={x} cy={128 - i * 2} rx="30" ry="34" />
@@ -4912,36 +4939,61 @@ function VillageArt({ vid, height = 260, dim }) {
             <rect x={x - 26} y={104 - i * 2} width="52" height="9" rx="3" fill={a.sun} opacity=".18" />
           </g>
         ))}
-        {/* rooftops below */}
+        {/* rooftops below, a handful of windows lit and flickering */}
         <g fill={a.near}>
           {[10, 44, 78, 112, 150, 190, 230, 268, 306, 344, 376].map((x, i) => (
             <g key={x}><rect x={x} y={182 + (i % 3) * 5} width="26" height="40" rx="2" />
-              <circle cx={x + 13} cy={180 + (i % 3) * 5} r="8" opacity=".8" /></g>
+              <circle className={i % 3 === 0 ? cls("v-twinkle") : ""} style={i % 3 === 0 ? { animationDelay: (i * 0.35) + "s" } : undefined}
+                cx={x + 13} cy={180 + (i % 3) * 5} r="8" opacity=".8" fill={i % 3 === 0 ? a.sun : a.near} /></g>
           ))}
         </g>
         <g stroke={a.sun} strokeWidth="1" opacity=".25">{[70, 160, 250, 330].map((x) => <line key={x} x1={x} y1="196" x2={x} y2="220" />)}</g>
+        {motes}
       </>)}
 
       {a.motif === "dunes" && (<>
-        <path d="M0 140 Q80 108 160 138 T400 128 L400 220 L0 220 Z" fill={a.far} />
+        <g className={cls("v-cloudA")} opacity=".14" fill={a.sky[0]}><ellipse cx="140" cy="40" rx="90" ry="9" /></g>
+        <path className={cls("v-shimmer")} d="M0 140 Q80 108 160 138 T400 128 L400 220 L0 220 Z" fill={a.far} />
         <path d="M0 172 Q100 148 200 176 T400 166 L400 220 L0 220 Z" fill={a.near} />
-        <g fill={a.near}>{[60, 96, 132, 300, 340].map((x, i) => <rect key={x} x={x} y={132 - (i % 3) * 8} width="22" height="60" rx="11" />)}</g>
-        <path d="M186 190 L186 120 Q200 104 214 120 L214 190 Z" fill={a.near} />
+        <g fill={a.near}>{[60, 96, 132, 300, 340].map((x, i) => a.veg === "grass"
+          ? <rect key={x} x={x} y={140 - (i % 3) * 10} width="6" height="70" rx="3" transform={"rotate(" + ((i % 2 === 0 ? 1 : -1) * 6) + " " + (x + 3) + " 210)"} />
+          : <rect key={x} x={x} y={132 - (i % 3) * 8} width="22" height="60" rx="11" />)}</g>
+        {a.veg !== "grass" && <path d="M186 190 L186 120 Q200 104 214 120 L214 190 Z" fill={a.near} />}
+        {/* low sand haze drifting across the dunes */}
+        <rect className={cls("v-cloudB")} y="150" width="400" height="18" fill={a.sun} opacity=".07" />
+        {motes}
       </>)}
 
       {a.motif === "mist" && (<>
         <path d="M0 130 L60 104 L120 132 L180 100 L240 134 L300 106 L360 136 L400 118 L400 220 L0 220 Z" fill={a.far} />
-        {[150, 168, 186, 204].map((y, i) => <rect key={y} y={y} width="400" height="7" fill={a.sun} opacity={.10 - i * 0.02} />)}
+        {/* fog bands drifting opposite directions past each other — real parallax */}
+        {[150, 168, 186, 204].map((y, i) => (
+          <rect key={y} className={cls(i % 2 === 0 ? "v-cloudA" : "v-cloudB")} y={y} width="400" height="7" fill={a.sun} opacity={.10 - i * 0.02} />
+        ))}
         <g fill={a.near}>{[40, 96, 152, 250, 320].map((x, i) => <rect key={x} x={x} y={150 + (i % 2) * 10} width="30" height="70" rx="3" />)}</g>
         <rect y="120" width="400" height="100" fill={a.sun} opacity=".07" />
+        {/* sparks of light on the water */}
+        {[70, 130, 210, 280, 340].map((x, i) => (
+          <circle key={x} className={cls("v-twinkle")} style={{ animationDelay: (i * 0.5) + "s" }} cx={x} cy={196 + (i % 2) * 6} r="1.6" fill={a.sun} opacity=".6" />
+        ))}
+        {motes}
       </>)}
 
       {a.motif === "peaks" && (<>
+        {/* a sea of cloud drifting through the mountains */}
+        <g className={cls("v-cloudA")} opacity=".24" fill={a.sky[0]}><ellipse cx="80" cy="118" rx="90" ry="12" /><ellipse cx="230" cy="128" rx="70" ry="10" /></g>
+        <g className={cls("v-cloudB")} opacity=".18" fill={a.sky[0]}><ellipse cx="330" cy="110" rx="60" ry="9" /></g>
         <path d="M0 150 L70 70 L120 132 L190 54 L260 138 L330 84 L400 150 L400 220 L0 220 Z" fill={a.far} />
         <path d="M190 54 L215 86 L165 86 Z" fill={a.sun} opacity=".35" />
         <path d="M70 70 L92 100 L48 100 Z" fill={a.sun} opacity=".28" />
         <g fill={a.near}>{[110, 150, 230, 270].map((x, i) => <rect key={x} x={x} y={146 + (i % 2) * 12} width="24" height="74" rx="3" />)}</g>
+        {/* distant stars, and the odd flash of lightning through the storm clouds */}
         <g stroke={a.sun} strokeWidth="1" opacity=".3">{[0, 1, 2].map((i) => <line key={i} x1={60 + i * 120} y1="30" x2={90 + i * 120} y2="52" />)}</g>
+        {[30, 90, 150, 250, 310, 360].map((x, i) => (
+          <circle key={x} className={cls("v-twinkle")} style={{ animationDelay: (i * 0.6) + "s" }} cx={x} cy={20 + (i % 3) * 10} r="1.2" fill="#fff" opacity=".7" />
+        ))}
+        <rect className={cls("v-flicker")} width="400" height="150" fill="#dfe6ff" opacity="0" />
+        {motes}
       </>)}
 
       {a.motif === "cliffs" && (<>
@@ -4950,12 +5002,26 @@ function VillageArt({ vid, height = 260, dim }) {
         <path d="M110 150 L290 150 L290 220 L110 220 Z" fill={a.near} />
         <g fill={a.near}>{[130, 170, 210, 250].map((x, i) => <rect key={x} x={x} y={158 + (i % 2) * 8} width="26" height="62" rx="2" />)}</g>
         <g stroke={a.sun} strokeWidth="1.2" opacity=".22">{[128, 168, 208, 248, 288].map((y, i) => <line key={y} x1="110" y1={y} x2="290" y2={y - 4} />)}</g>
+        {/* dust drifting through the canyon gap, and a ray of light down it */}
+        <clipPath id={"canyonclip" + uid}><path d="M110 96 L290 88 L290 220 L110 220 Z" /></clipPath>
+        <g clipPath={"url(#canyonclip" + uid + ")"}>
+          <rect className={cls("v-sweep")} x="60" y="80" width="60" height="150" fill={a.sun} opacity=".16" />
+        </g>
+        {motes}
       </>)}
 
       {a.motif === "towers" && (<>
-        <g stroke={a.sun} strokeWidth="1" opacity=".26">{Array.from({ length: 30 }).map((_, i) => <line key={i} x1={i * 14} y1="0" x2={i * 14 - 20} y2="220" />)}</g>
+        {/* rain, streaking — the same grid, just given motion */}
+        <g className={cls("v-rain")} stroke={a.sun} strokeWidth="1" opacity=".26">{Array.from({ length: 30 }).map((_, i) => <line key={i} x1={i * 14} y1="0" x2={i * 14 - 20} y2="220" />)}</g>
         <g fill={a.far}>{[30, 74, 118, 168, 214, 260, 308, 356].map((x, i) => <rect key={x} x={x} y={70 + ((i * 31) % 70)} width="30" height="150" rx="2" />)}</g>
-        <g fill={a.sun} opacity=".4">{[40, 128, 224, 318].map((x, i) => <rect key={x} x={x} y={90 + ((i * 27) % 50)} width="4" height="4" />)}</g>
+        <g fill={a.sun} opacity=".4">
+          {[40, 128, 224, 318].map((x, i) => (
+            <rect key={x} className={cls("v-twinkle")} style={{ animationDelay: (i * 0.45) + "s" }} x={x} y={90 + ((i * 27) % 50)} width="4" height="4" />
+          ))}
+        </g>
+        {/* lightning behind the towers, rare and brief */}
+        <rect className={cls("v-flicker")} width="400" height="220" fill="#dfe6ff" opacity="0" style={{ animationDelay: "3.2s" }} />
+        {motes}
       </>)}
       <rect y="130" width="400" height="90" fill="url(#none)" />
     </svg>
@@ -5081,11 +5147,20 @@ export default function ShinobiLife() {
   const [openFile, setOpenFile] = useState(null);
   const [histVid, setHistVid] = useState(null);
   const [yearFlash, setYearFlash] = useState(null);
+  const [arrival, setArrival] = useState(null);
+  const [arrivalLeaving, setArrivalLeaving] = useState(false);
+  function dismissArrival() {
+    if (!arrival) return;
+    setArrivalLeaving(true);
+    setTimeout(() => { setArrival(null); setArrivalLeaving(false); }, 420);
+  }
   const ripple = useRipple();
   const [themeId, setThemeId] = useState("deep");
   const [bgMode, setBgMode] = useState("village");
   const [layout, setLayout] = useState("stacked");
+  const [motion, setMotion] = useState("full");
   const theme = applyTheme(themeId);
+  useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
   const [setupStep, setSetupStep] = useState(0);
   const [clanName, setClanName] = useState("");
   const [kgName, setKgName] = useState("");
@@ -5244,6 +5319,11 @@ export default function ShinobiLife() {
       ch.roster = (ch.roster || []).filter((id) => !NAMED[id] || NAMED[id].name !== CS.n);
     }
     setC(ch); setLog(L); setScreen("play"); setModal(null);
+    if (villageExists(ch, ch.village)) {
+      setArrival(ch.village);
+      setTimeout(() => setArrivalLeaving(true), 4000);
+      setTimeout(() => { setArrival(null); setArrivalLeaving(false); }, 4420);
+    }
   }
 
   /* ---------- age up ---------- */
@@ -7462,7 +7542,9 @@ export default function ShinobiLife() {
     const press = 1 + Math.min(0.55, (b.turn || 0) * 0.038);
     d = Math.round(d * press);
     let line = e.name + " hits you with " + mn + ". " + d + " damage.";
+    let critP = false;
     if (roll(e.eva * 0.38)) {
+      critP = true;
       d = Math.round(d * 1.55);
       line = e.name + " lands " + mn + " clean — no warning, no recovery. Critical. " + d + " damage.";
     }
@@ -7478,7 +7560,11 @@ export default function ShinobiLife() {
     p.hp -= d;
     p.momentum = Math.max(-5, (p.momentum || 0) - 1.1);
     e.momentum = Math.min(5, (e.momentum || 0) + 1.0);
-    b.shakeP = (b.shakeP || 0) + 1; b.flashP = "#c0392b"; b.popP = d;
+    b.shakeP = (b.shakeP || 0) + 1;
+    b.flashP = e.nature ? (NC[e.nature] || "#c0392b") : "#c0392b";
+    b.popP = d;
+    b.critP = critP;
+    b.burstNatureP = e.nature || null;
     if (mkind === "gen") genHold(e, p, lg);
     if (p.weaving) {
       p.weaving = null; p.sealProgress = 0; p.charging = null; p.chargeLeft = 0;
@@ -7693,8 +7779,11 @@ export default function ShinobiLife() {
     p.momentum = Math.min(5, (p.momentum || 0) + 1.15);
     e.momentum = Math.max(-5, (e.momentum || 0) - 1.0);
     b.shake = (b.shake || 0) + 1;
-    b.flash = move.kind === "gen" ? "#b47fe0" : (move.kind === "tai" || move.kind === "ken") ? "#e0dcd0" : "#e2b24a";
+    b.flash = move.nature ? (NC[move.nature] || "#e2b24a")
+      : move.kind === "gen" ? "#b47fe0" : (move.kind === "tai" || move.kind === "ken") ? "#e0dcd0" : "#e2b24a";
     b.pop = d;
+    b.crit = crit;
+    b.burstNature = move.nature || null;
     let hitLine = move.name + " connects. " + d + " damage.";
     if (crit) hitLine = move.name + " lands perfect — no defence, no recovery. Critical. " + d + " damage.";
     if (nm > 1.2) hitLine += " Nature advantage. Their element folds under yours.";
@@ -8976,6 +9065,58 @@ export default function ShinobiLife() {
       .sl-hero { animation: slGlowPulse 2.6s ease-in-out infinite; }
       .sl-grain { background-image: radial-gradient(rgba(255,255,255,.028) 1px, transparent 1px); background-size: 3px 3px; }
 
+      /* ================= VILLAGE ART: ambient life in the backdrop ================= */
+      @keyframes vDriftA { 0% { transform: translateX(-4%); } 50% { transform: translateX(4%); } 100% { transform: translateX(-4%); } }
+      @keyframes vDriftB { 0% { transform: translateX(6%); } 50% { transform: translateX(-6%); } 100% { transform: translateX(6%); } }
+      @keyframes vTwinkle { 0%, 100% { opacity: .18; } 50% { opacity: .95; } }
+      @keyframes vFlicker { 0%, 92%, 100% { opacity: 0; } 93% { opacity: .85; } 94.5% { opacity: .15; } 96% { opacity: .7; } 97% { opacity: 0; } }
+      @keyframes vRain { 0% { transform: translateY(-14%); } 100% { transform: translateY(14%); } }
+      @keyframes vMote { 0% { transform: translate(0,0); opacity: 0; } 10% { opacity: .34; } 88% { opacity: .18; } 100% { transform: translate(var(--mx,10px),-120px); opacity: 0; } }
+      @keyframes vShimmer { 0%, 100% { transform: scaleY(1) translateY(0); } 50% { transform: scaleY(1.015) translateY(-1px); } }
+      @keyframes vSweepSlow { 0% { transform: translateX(-140%) skewX(-10deg); opacity: 0; } 12% { opacity: .5; } 45% { opacity: 0; } 100% { transform: translateX(240%) skewX(-10deg); opacity: 0; } }
+      @keyframes vSunPulse { 0%, 100% { opacity: .45; } 50% { opacity: .75; } }
+      .v-cloudA { animation: vDriftA 24s ease-in-out infinite; will-change: transform; }
+      .v-cloudB { animation: vDriftB 34s ease-in-out infinite; will-change: transform; }
+      .v-twinkle { animation: vTwinkle 3.2s ease-in-out infinite; }
+      .v-flicker { animation: vFlicker 8s ease-in-out infinite; }
+      .v-rain { animation: vRain .65s linear infinite; }
+      .v-mote { animation: vMote linear infinite; will-change: transform, opacity; }
+      .v-shimmer { animation: vShimmer 6s ease-in-out infinite; transform-origin: center bottom; }
+      .v-sweep { animation: vSweepSlow 9s ease-in-out infinite; }
+      .v-sun { animation: vSunPulse 5s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .v-cloudA, .v-cloudB, .v-twinkle, .v-flicker, .v-rain, .v-mote, .v-shimmer, .v-sweep, .v-sun { animation: none !important; }
+      }
+      body.sl-motion-off .v-cloudA, body.sl-motion-off .v-cloudB, body.sl-motion-off .v-twinkle,
+      body.sl-motion-off .v-flicker, body.sl-motion-off .v-rain, body.sl-motion-off .v-mote,
+      body.sl-motion-off .v-shimmer, body.sl-motion-off .v-sweep, body.sl-motion-off .v-sun { animation: none !important; }
+
+      /* ================= ARRIVAL: the first sight of a place ================= */
+      @keyframes arrFade { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes arrOut { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes arrArt { 0% { transform: scale(1.18); filter: blur(3px) saturate(.6) brightness(.7); opacity: .3; } 100% { transform: scale(1); filter: blur(0) saturate(1) brightness(1); opacity: 1; } }
+      @keyframes arrVeil { 0% { opacity: 0; } 35% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes arrSweep { 0% { transform: translateX(-130%) skewX(-12deg); opacity: 0; } 10% { opacity: .55; } 42% { opacity: 0; } 100% { transform: translateX(230%) skewX(-12deg); opacity: 0; } }
+      @keyframes arrTick { 0% { opacity: 0; transform: translateY(10px); } 35% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes arrTitle { 0% { opacity: 0; transform: translateY(26px) scale(.96); letter-spacing: .8em; filter: blur(6px); } 45% { opacity: 1; filter: blur(0); } 85% { opacity: 1; transform: none; letter-spacing: .02em; } 100% { opacity: 0; transform: translateY(-8px); } }
+      @keyframes arrLine { 0% { transform: scaleX(0); opacity: 0; } 30% { opacity: 1; } 78% { transform: scaleX(1); opacity: 1; } 100% { opacity: 0; } }
+      @keyframes arrSub { 0% { opacity: 0; transform: translateY(14px); } 45% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+      .arr-wrap { animation: arrFade .5s ease both; }
+      .arr-wrap.arr-leave { animation: arrOut .45s ease both; }
+      .arr-art { animation: arrArt 4.4s cubic-bezier(.16,.8,.3,1) both; }
+      .arr-veil { animation: arrVeil 4.4s ease both; }
+      .arr-sweep { animation: arrSweep 2.6s ease-out .7s both; }
+      .arr-tick { animation: arrTick 4.4s ease both; }
+      .arr-title { animation: arrTitle 4.4s cubic-bezier(.2,.7,.3,1) .15s both; }
+      .arr-line { animation: arrLine 4.4s ease .3s both; transform-origin: center; }
+      .arr-sub { animation: arrSub 4.4s ease .4s both; }
+      @media (prefers-reduced-motion: reduce) {
+        .arr-art, .arr-veil, .arr-sweep, .arr-tick, .arr-title, .arr-line, .arr-sub { animation-duration: .01s !important; }
+      }
+      body.sl-motion-off .arr-art, body.sl-motion-off .arr-veil, body.sl-motion-off .arr-sweep,
+      body.sl-motion-off .arr-tick, body.sl-motion-off .arr-title, body.sl-motion-off .arr-line,
+      body.sl-motion-off .arr-sub { animation-duration: .01s !important; }
+
       /* ================= DEPTH: real 3D surfaces ================= */
       /* perspective creates a containing block for fixed elements, so it must never sit on an
          ancestor of a modal or overlay — it lives on the tile decks and nothing else. */
@@ -9048,6 +9189,20 @@ export default function ShinobiLife() {
       .sl-eye { animation: slEye 1.1s ease-out both; }
       .sl-slide { animation: slSlideUp .34s cubic-bezier(.2,.8,.3,1) both; }
       .sl-lowhp { animation: slBarPulse 1.1s ease-in-out infinite; }
+      /* ---------- combat: elemental impact burst ---------- */
+      @keyframes hitRay { 0% { transform: translate(-50%,-50%) rotate(var(--ang)) translateX(2px) scaleX(.3); opacity: 1; } 65% { opacity: .85; } 100% { transform: translate(-50%,-50%) rotate(var(--ang)) translateX(42px) scaleX(1); opacity: 0; } }
+      @keyframes hitCore { 0% { transform: translate(-50%,-50%) scale(.15); opacity: .95; } 100% { transform: translate(-50%,-50%) scale(2.6); opacity: 0; } }
+      @keyframes hitCrit { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+      .hit-burst { position: absolute; left: 50%; top: 44%; width: 0; height: 0; pointer-events: none; z-index: 2; }
+      .hit-core { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; animation: hitCore .55s ease-out both; }
+      .hit-ray { position: absolute; left: 0; top: 0; width: 24px; height: 2.5px; border-radius: 2px; transform-origin: 0 50%; animation: hitRay .48s cubic-bezier(.2,.7,.3,1) both; }
+      .hit-crit { animation: slFloat 1.2s ease-out forwards, hitCrit .5s ease-in-out .05s; }
+      @media (prefers-reduced-motion: reduce) {
+        .hit-burst, .hit-core, .hit-ray { display: none !important; }
+        .hit-crit { animation: slFloat 1.2s ease-out forwards; }
+      }
+      body.sl-motion-off .hit-burst, body.sl-motion-off .hit-core, body.sl-motion-off .hit-ray { display: none !important; }
+      body.sl-motion-off .hit-crit { animation: slFloat 1.2s ease-out forwards; }
       @keyframes slCount { from { opacity: .35; transform: translateY(-4px) scale(1.16); } to { opacity: 1; transform: none; } }
       .sl-count { animation: slCount .45s cubic-bezier(.2,.8,.3,1) both; }
       @keyframes slPanelIn { from { opacity: 0; transform: translateY(10px) scale(.995); } to { opacity: 1; transform: none; } }
@@ -9378,6 +9533,41 @@ export default function ShinobiLife() {
           </div>
         </div>
       )}
+      {arrival != null && (() => {
+        const av = VILLAGES.find((v) => v.id === arrival);
+        const ainfo = VILLAGE_ART[arrival] || VILLAGE_ART.konoha;
+        return (
+          <div className={"arr-wrap" + (arrivalLeaving ? " arr-leave" : "")} onClick={dismissArrival}
+            style={{ position: "fixed", inset: 0, zIndex: 68, overflow: "hidden", cursor: "pointer" }}>
+            <div className="arr-art" style={{ position: "absolute", inset: 0 }}>
+              <VillageArt vid={arrival} height="100%" />
+            </div>
+            <div className="arr-veil" style={{ position: "absolute", inset: 0,
+              background: "linear-gradient(180deg, rgba(4,5,10,.10) 0%, rgba(4,5,10,.42) 46%, rgba(4,5,10,.88) 100%)" }} />
+            <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+              <div className="arr-sweep" style={{ position: "absolute", inset: "-20% 0", width: "40%",
+                background: "linear-gradient(100deg, transparent 35%, rgba(255,255,255,.5), transparent 65%)" }} />
+            </div>
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", paddingBottom: "12vh", padding: "0 20px 12vh" }}>
+              <div className="arr-tick" style={{ color: ainfo.sun, fontSize: FS(9, 11), letterSpacing: ".5em", fontWeight: 800, textAlign: "center" }}>
+                YOU ARE BORN IN
+              </div>
+              <div className="arr-title" style={{ fontFamily: SERIF, fontSize: "clamp(30px,6.4vw,64px)", lineHeight: 1.05, fontWeight: 700, color: "#f4f2ea",
+                textShadow: "0 0 60px " + ainfo.sun + "99, 0 2px 24px rgba(0,0,0,.6)", marginTop: 10, textAlign: "center" }}>
+                {av ? av.name : "an unknown place"}
+              </div>
+              <div className="arr-line" style={{ width: "min(40vmin,320px)", height: 1, marginTop: 16,
+                background: "linear-gradient(90deg, transparent, " + ainfo.sun + ", transparent)" }} />
+              <div className="arr-sub" style={{ color: "#cdd0d8", fontSize: FS(12, 14), marginTop: 14, maxWidth: 480, textAlign: "center", lineHeight: 1.5 }}>
+                {av ? av.hidden + ", " + av.land + "." : ""}
+              </div>
+              <div className="arr-sub" style={{ color: "#8b8f9a", fontSize: FS(10, 11.5), marginTop: 18, letterSpacing: ".08em" }}>
+                tap anywhere to continue
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {yearFlash != null && (
         <div style={{ position: "fixed", inset: 0, zIndex: 60, pointerEvents: "none", overflow: "hidden" }}>
           {/* a veil that actually covers the page — the year turn should be its own moment */}
@@ -9841,7 +10031,22 @@ export default function ShinobiLife() {
             <div key={"e" + (bt.shake || 0)} style={{ ...card, borderLeft: "3px solid " + T.blood, position: "relative", overflow: "hidden" }}
               className={"p-3 mb-2" + (bt.shake ? " sl-hit" : "")}>
               {bt.flash && <div key={"f" + bt.shake} className="sl-flash" style={{ position: "absolute", inset: 0, background: bt.flash, pointerEvents: "none", opacity: 0 }} />}
-              {bt.pop ? <div key={"p" + bt.shake} className="sl-float" style={{ position: "absolute", right: 14, top: 8, color: T.blood, fontWeight: 800, fontSize: 20, pointerEvents: "none", textShadow: "0 2px 12px rgba(0,0,0,.8)" }}>−{bt.pop}</div> : null}
+              {bt.shake ? (
+                <div key={"burst" + bt.shake} className="hit-burst" aria-hidden>
+                  <div className="hit-core" style={{ background: "radial-gradient(circle, " + (bt.flash || T.blood) + "cc, transparent 70%)" }} />
+                  {Array.from({ length: bt.crit ? 12 : 7 }).map((_, i2) => (
+                    <span key={i2} className="hit-ray" style={{ "--ang": (i2 * (360 / (bt.crit ? 12 : 7))) + "deg", background: bt.flash || T.blood }} />
+                  ))}
+                </div>
+              ) : null}
+              {bt.pop ? (
+                <div key={"p" + bt.shake} className={"sl-float" + (bt.crit ? " hit-crit" : "")}
+                  style={{ position: "absolute", right: 14, top: bt.crit ? 4 : 8, color: bt.crit ? "#ffd23f" : T.blood, fontWeight: 800,
+                    fontSize: bt.crit ? 30 : 20, pointerEvents: "none", textShadow: "0 2px 12px rgba(0,0,0,.8), 0 0 18px " + (bt.flash || T.blood) + "aa", textAlign: "right" }}>
+                  {bt.crit && <div style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: -2 }}>CRITICAL</div>}
+                  −{bt.pop}
+                </div>
+              ) : null}
               <div className="flex justify-between items-baseline" style={{ position: "relative" }}>
                 <div><div className="font-bold">{bt.e.name}</div><div style={{ color: T.dim }} className="text-xs">{bt.e.title}{bt.e.nature ? " · " + bt.e.nature : ""}</div></div>
                 <div className="text-xs" style={{ color: T.dim, fontVariantNumeric: "tabular-nums" }}>{Math.max(0, bt.e.hp)} / {bt.e.max}</div>
@@ -9861,12 +10066,29 @@ export default function ShinobiLife() {
               {bt.log.map((l, i) => <div key={i} style={{ fontFamily: SERIF, color: l.k === "g" ? T.good : l.k === "b" ? T.bad : l.k === "e" ? T.epic : T.text }} className="text-sm py-1 leading-snug">{l.t}</div>)}
             </div>
 
-            <div style={{ ...card, borderLeft: "3px solid " + accent }} className="p-3 mb-2">
-              <div className="flex justify-between text-xs mb-1">
+            <div style={{ ...card, borderLeft: "3px solid " + accent, position: "relative", overflow: "hidden" }}
+              className={"p-3 mb-2" + (bt.shakeP ? " sl-hit" : "")}>
+              {bt.flashP && <div key={"fp" + bt.shakeP} className="sl-flash" style={{ position: "absolute", inset: 0, background: bt.flashP, pointerEvents: "none", opacity: 0 }} />}
+              {bt.shakeP ? (
+                <div key={"burstp" + bt.shakeP} className="hit-burst" style={{ top: "56%" }} aria-hidden>
+                  <div className="hit-core" style={{ background: "radial-gradient(circle, " + (bt.flashP || T.bad) + "cc, transparent 70%)" }} />
+                  {Array.from({ length: bt.critP ? 12 : 7 }).map((_, i2) => (
+                    <span key={i2} className="hit-ray" style={{ "--ang": (i2 * (360 / (bt.critP ? 12 : 7))) + "deg", background: bt.flashP || T.bad }} />
+                  ))}
+                </div>
+              ) : null}
+              <div className="flex justify-between text-xs mb-1" style={{ position: "relative" }}>
                 <b>{c.name}</b>
                 <span style={{ color: T.dim }}>Turn {bt.turn} · {RANGE_LABEL[bt.p.range] || "Mid range"}</span>
               </div>
-              {bt.popP ? <div key={"pp" + (bt.shakeP || 0)} className="sl-float" style={{ position: "absolute", left: 14, top: 4, color: T.bad, fontWeight: 800, fontSize: 18, pointerEvents: "none" }}>−{bt.popP}</div> : null}
+              {bt.popP ? (
+                <div key={"pp" + (bt.shakeP || 0)} className={"sl-float" + (bt.critP ? " hit-crit" : "")}
+                  style={{ position: "absolute", left: 14, top: bt.critP ? 0 : 4, color: bt.critP ? "#ffd23f" : T.bad, fontWeight: 800,
+                    fontSize: bt.critP ? 26 : 18, pointerEvents: "none", textShadow: "0 0 14px " + (bt.flashP || T.bad) + "aa" }}>
+                  {bt.critP && <div style={{ fontSize: 9, letterSpacing: ".2em", marginBottom: -2 }}>CRITICAL</div>}
+                  −{bt.popP}
+                </div>
+              ) : null}
               <div className={"mb-1" + (bt.p.hp < bt.p.max * 0.25 ? " sl-lowhp" : "")}><Bar v={Math.max(0, bt.p.hp)} max={bt.p.max} col={T.good} h={7} /></div>
               <div className="flex justify-between text-xs mb-1" style={{ color: T.dim, position: "relative" }}><span>HP {Math.max(0, bt.p.hp)}/{bt.p.max}</span><span style={{ color: T.ck }}>Chakra {bt.p.ck}/{bt.p.ckMax}</span></div>
               <Bar v={bt.p.ck} max={bt.p.ckMax} col={T.ck} h={5} />
@@ -9883,14 +10105,17 @@ export default function ShinobiLife() {
                 {bt.p.fx.def > 0 && <Chip col={T.good}>Guard up</Chip>}
                 {bt.p.fx.evade > 0 && <Chip col={T.good}>Evading</Chip>}
                 {bt.p.fx.acc > 0 && <Chip col={T.good}>Reading</Chip>}
-                {bt.p.weaving && <Chip col={T.gold}>Weaving {bt.p.weaving} {sealGlyphs(sealsNeeded(MOVES[bt.p.weaving] || { seals: 1 }), bt.p.sealProgress || 0)}</Chip>}
+                {bt.p.weaving && <span className="sl-hero" style={{ borderRadius: 99, display: "inline-flex" }}><Chip col={T.gold}>Weaving {bt.p.weaving} {sealGlyphs(sealsNeeded(MOVES[bt.p.weaving] || { seals: 1 }), bt.p.sealProgress || 0)}</Chip></span>}
               </div>
             </div>
 
             {bt.over ? (
-              <div>
-                <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".2em" }} className="text-center font-bold mb-2">{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
-                <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10 }} className="w-full py-3 font-bold">Continue</button>
+              <div className="sl-rise" style={{ position: "relative", textAlign: "center", padding: "10px 0 4px" }}>
+                <div aria-hidden style={{ position: "absolute", left: "50%", top: "38%", width: 220, height: 220, transform: "translate(-50%,-50%)",
+                  background: "radial-gradient(circle, " + (bt.win ? T.good : T.bad) + "33, transparent 68%)", pointerEvents: "none" }} className={bt.win ? "sl-hero" : ""} />
+                <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".35em", position: "relative", textShadow: "0 0 30px " + (bt.win ? T.good : T.bad) + "77" }}
+                  className="font-bold mb-3 text-2xl">{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
+                <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10, position: "relative" }} className="w-full py-3 font-bold">Continue</button>
               </div>
             ) : (
               <div style={{ maxHeight: "34vh" }} className="overflow-auto">
@@ -11316,6 +11541,11 @@ export default function ShinobiLife() {
               {bgMode === "village" ? <VillageArt vid={c.village} height={150} /> : <EraArt era={c.era} height={150} />}
             </div>
           )}
+          <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MOTION</div>
+          {[["full", "Full motion", "Every animation on — drifting clouds and rain over the village art, the arrival scene when you're born, hit-shake and jutsu effects in battle, all of it."],
+            ["reduced", "Reduced motion", "Ambient animation off — backgrounds hold still, cinematics cut straight to the point. Battle feedback stays, just calmer."]].map(([id, n2, d2]) => (
+            <Row key={id} label={n2} sub={d2} right={motion === id ? "In use" : "Use"} onClick={() => setMotion(id)} disabled={motion === id} tone={motion === id ? accent : null} />
+          ))}
         </Modal>
       )}
 
