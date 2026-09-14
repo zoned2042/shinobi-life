@@ -820,7 +820,6 @@ const DEATH_HOW = {
   chiyo: "gave her life to bring back a boy from Sunagakure, and did not make a speech about it",
   danzo: "died by his own hand rather than be taken, still certain he had been right",
   konan: "died defending the country she had spent her life holding together with paper",
-  neji: "died in the open, between an enemy and the people he was shielding",
   madaraRe: "was ended in the field, having got everything he planned for and none of what he wanted",
   kaguya: "was sealed again, by the descendants of the sons who did it the first time",
   koji: "burned out doing the one decent thing he had left",
@@ -828,7 +827,7 @@ const DEATH_HOW = {
   isshiki: "ran out of the time he had been counting down for a thousand years",
   minato: "died sealing the Nine-Tails into their own newborn son",
   kushina: "died the same night, holding the beast still long enough for the seal to take",
-  hashirama: "died of age, in a village that existed because of them",
+  hashirama: "died of old age in the village he had built — the only one of the founders who lived long enough to grow old",
   tobirama: "died covering the retreat of their own squad against the Gold and Silver Brothers",
   jiraiya: "was killed in Amegakure, and got a message out first",
   itachi: "died on their own terms, at the end of a fight they arranged",
@@ -1269,8 +1268,13 @@ function buildWar(c, L, opts) {
   const foes = opts.foes.filter(Boolean);
   if (!foes.length) return;
   const sworn = ((c.rule && c.rule.allies) || []).filter((a) => !foes.some((f) => f.key === a));
-  const canon = greatWarAt(c.year);
   const multi = foes.length > 1;
+  /* the calendar alone does not make a war "the Great War" — a random single-front
+     border roll that happens to land inside those years is still just a border war.
+     it only gets the canon name and treatment when it is either explicitly flagged
+     (the scripted conscription in greatWarTick) or is itself a multi-nation fight. */
+  const canonAt = greatWarAt(c.year);
+  const canon = canonAt && (opts.great || multi) ? canonAt : null;
   const great = !!canon || opts.great || foes.length >= 3;
   /* three or more at once is not a border war any more, whatever you meant it to be */
   const declaredGreat = foes.length >= 3 && !canon;
@@ -1336,7 +1340,7 @@ function beginClanWar(c, L, foeArg) {
 }
 
 const pactHolds = (c, key) => !!(c.pacts && c.pacts[key] > c.year);
-function beginWar(c, L, forcedEnemy) {
+function beginWar(c, L, forcedEnemy, great) {
   const ERA = eraOf(c);
   const targets = Array.isArray(forcedEnemy) ? forcedEnemy : forcedEnemy ? [forcedEnemy] : [];
   if (ERA.hideVillages && !targets.length) { beginClanWar(c, L); return; }
@@ -1366,7 +1370,7 @@ function beginWar(c, L, forcedEnemy) {
     ? targets.map((t) => VILLAGES.find((v) => v.id === t)).filter(Boolean)
     : (opts.length ? [pick(opts)] : []);
   if (!evs.length) return;
-  buildWar(c, L, { foes: evs.map((v) => villageFoe(c, v)) });
+  buildWar(c, L, { foes: evs.map((v) => villageFoe(c, v)), great });
 }
 
 /* the enemy is losing and sends for help */
@@ -2089,11 +2093,25 @@ function greatWarTick(c, L) {
   }
   if (!g) { if (c.greatWar) { const done = c.greatWar; c.greatWar = null; if (c.war && c.war.great) c.war = null;
       P(L, "The " + (ORDINALS[done.no - 1] || "") + " Great Ninja War is over. Whatever it was about, nobody is saying it out loud any more.", "e"); } return; }
-  if (c.greatWar && c.greatWar.no === g.no) return;
+  if (c.greatWar && c.greatWar.no === g.no) {
+    /* already registered for this great war — but somebody who was too young to be
+       posted when it opened does not get to sit the rest of it out just because the
+       enrolment check only used to run on the opening tick. it comes for them too,
+       the year they turn 12, same as the war promised. */
+    if (c.greatWar.side >= 0 && !c.greatWar.enrolled && c.age >= 12 && !c.war) {
+      const mine2 = c.village;
+      const foes2 = (g.all ? g.all.filter((k) => k !== mine2) : (g.sides[1 - c.greatWar.side] || [])).filter((k) => k !== "akatsuki");
+      P(L, "You are " + c.age + " now. The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War still needs bodies, and yours is one of them. You have been posted to a front.", "e");
+      beginWar(c, L, foes2.length ? foes2 : null, true);
+      if (c.war) { c.war.great = true; c.war.no = g.no; }
+      c.greatWar.enrolled = true;
+    }
+    return;
+  }
   const mine = c.village;
   const inIt = g.all ? g.all.includes(mine) : (g.sides || []).some((sd) => sd.includes(mine));
   const side = g.all ? (inIt ? 0 : -1) : (g.sides || []).findIndex((sd) => sd.includes(mine));
-  c.greatWar = { no: g.no, side, from: g.from, to: g.to, all: !!g.all };
+  c.greatWar = { no: g.no, side, from: g.from, to: g.to, all: !!g.all, enrolled: false };
   if (side < 0) {
     P(L, "The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War has opened and " + (villageExists(c, mine) ? vName2(mine) : "your country") + " is not in it. That will last as long as it is useful to somebody.", "n");
     return;
@@ -2103,8 +2121,9 @@ function greatWarTick(c, L) {
   P(L, "The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War. " + (g.all ? "Every great nation against every other — " + vName2(mine) + " against " + joinList(foes.map(nameOf)) + ", and none of them against each other any less." : vName2(mine) + " is in it against " + joinList(foes.map(nameOf)) + ", and so is everybody who can hold a kunai.")
     + (c.age < 12 ? " You are " + c.age + ". They will come for your year eventually." : " You have been posted to a front."), "e");
   if (c.age >= 12 && !c.war) {
-    beginWar(c, L, foes.length ? foes : null);
+    beginWar(c, L, foes.length ? foes : null, true);
     if (c.war) { c.war.great = true; c.war.no = g.no; }
+    c.greatWar.enrolled = true;
   }
 }
 function clanHeadTick(c, L) {
@@ -4161,19 +4180,44 @@ function rollTick(c, L) {
     /* people get old and stop. a roll of eighty-year-old jonin is not a village. */
     if (p2.age >= 58 && roll((p2.age - 56) * 6)) {
       list.splice(i, 1);
-      if (p2.rank === "Jonin" && roll(30)) newsItem(c, p2.name + " has stood down after " + (p2.age - 12) + " years on the roll. " + vName2(vid) + " is one jonin short and everybody under thirty noticed.", "THE VILLAGES");
+      if (p2.rank === "Jonin" && roll(30)) {
+        newsItem(c, pick([
+          p2.name + " has stood down after " + (p2.age - 12) + " years on the roll. " + vName2(vid) + " is one jonin short and everybody under thirty noticed.",
+          "After " + (p2.age - 12) + " years, " + p2.name + " has handed in the vest. " + vName2(vid) + " has not named a replacement yet.",
+          p2.name + " is retiring from active duty at " + p2.age + ". The genin who trained under them are, by now, mostly jonin themselves.",
+          "The tower has confirmed " + p2.name + "'s retirement. " + (p2.age - 12) + " years on the roll ends with a desk, not a headstone, which counts as a good outcome.",
+        ]), "THE VILLAGES");
+      }
       continue;
     }
     if (roll(risk)) {
       list.splice(i, 1);
-      if (roll(24)) newsItem(c, p2.name + ", " + p2.rank + " of " + vName2(vid) + ", has been struck off the roll. The tower has not said which of the reasons it was.", "OBITUARIES");
+      if (roll(24)) {
+        newsItem(c, pick([
+          p2.name + ", " + p2.rank + " of " + vName2(vid) + ", has been struck off the roll. The tower has not said which of the reasons it was.",
+          vName2(vid) + " has quietly removed " + p2.name + " from the active roll. No cause was given and none was asked for.",
+          p2.name + ", " + p2.rank + ", did not report for the spring muster. " + vName2(vid) + " has listed them as struck off.",
+          "The roll at " + vName2(vid) + " is one " + p2.rank.toLowerCase() + " shorter. " + p2.name + " will not be replaced this season.",
+        ]), "OBITUARIES");
+      }
     }
   }
   /* and the Academy keeps feeding it */
   if (roll(80)) { const n = rr(1, 3); for (let i = 0; i < n; i++) list.push(makeVillager(c, "Academy Student")); }
   if (promoted.length && roll(45)) {
-    const p2 = pick(promoted);
-    newsItem(c, p2.name + " has been raised to " + p2.rank + " in " + vName2(vid) + " at " + p2.age + ".", "THE VILLAGES");
+    if (promoted.length > 1 && roll(35)) {
+      const lead = promoted[0];
+      newsItem(c, promoted.length + " shinobi were raised in rank across " + vName2(vid) + " this season, " + lead.name + " to " + lead.rank + " among them.", "THE VILLAGES");
+    } else {
+      const p2 = pick(promoted);
+      newsItem(c, pick([
+        p2.name + " has been raised to " + p2.rank + " in " + vName2(vid) + " at " + p2.age + ".",
+        vName2(vid) + " has raised " + p2.name + " to " + p2.rank + ". They are " + p2.age + ".",
+        "The tower has confirmed " + p2.name + "'s promotion to " + p2.rank + ", at " + p2.age + " — on schedule, for once.",
+        p2.name + ", " + p2.age + ", is " + p2.rank + " now. Nobody outside their own squad will remember the ceremony.",
+        "One more name for the " + p2.rank + " roll at " + vName2(vid) + ": " + p2.name + ", " + p2.age + ".",
+      ]), "THE VILLAGES");
+    }
   }
 }
 
@@ -4341,6 +4385,27 @@ const VILLAGE_SHAPE = [
   { r: "Kage", n: 1 }, { r: "Jonin Commander", n: 1 }, { r: "Jonin", n: 50 },
   { r: "Special Jonin", n: 40 }, { r: "Chunin", n: 220 }, { r: "Genin", n: 180 }, { r: "Academy Student", n: 240 },
 ];
+/* a foreign village's rank and file, generated on the fly for display only. it never
+   touches character state (no c.usedNames bookkeeping, nothing to commit) — this is
+   just flavour for a village you don't live in, so it doesn't need the uniqueness
+   guarantees the real roll gives your own village. cached per (village, year) so the
+   names and ages don't reshuffle on every re-render while you're looking at them. */
+const _lightRollCache = {};
+function lightRosterFor(vid, year) {
+  const key = vid + ":" + year;
+  if (_lightRollCache[key]) return _lightRollCache[key];
+  const shape = [["Academy Student", 10], ["Genin", 9], ["Chunin", 10], ["Special Jonin", 6], ["Jonin", 7]];
+  const out = [];
+  shape.forEach(([r, n]) => {
+    const idx = Math.max(0, ROLL_RANKS.indexOf(r));
+    const base = [8, 14, 20, 26, 30, 40][idx] || 14;
+    for (let i = 0; i < n; i++) {
+      out.push({ name: randName(roll(50) ? "m" : "f"), rank: r, age: base + rr(0, 9), pw: [14, 30, 48, 62, 78, 88][idx] + rr(-6, 8) });
+    }
+  });
+  _lightRollCache[key] = out;
+  return out;
+}
 function villageRoll(c, vid) {
   const v = VILLAGES.find((x) => x.id === vid);
   if (!v) return null;
@@ -4350,6 +4415,7 @@ function villageRoll(c, vid) {
   const named = livingRoster(c).filter((id) => namedVillage(id) === vid && id !== me && id !== seated);
   const kage = c.kages && c.kages[vid] ? c.kages[vid] : null;
   const mine = c.village === vid;
+  const foreignRoster = (!mine && villageExists(c, vid) && !eraOf(c).hideVillages) ? lightRosterFor(vid, c.year) : null;
   const rows = VILLAGE_SHAPE.map((slot) => {
     let people = [];
     if (slot.r === "Kage") {
@@ -4363,6 +4429,10 @@ function villageRoll(c, vid) {
     /* the actual roll: named people with ages who came up through the ranks */
     if (mine && c.roll && c.roll[vid]) {
       const locals = c.roll[vid].filter((p2) => p2.rank === slot.r)
+        .map((p2) => ({ name: p2.name, note: p2.age + " years old", pw: p2.pw, age: p2.age }));
+      people = people.concat(locals);
+    } else if (foreignRoster) {
+      const locals = foreignRoster.filter((p2) => p2.rank === slot.r)
         .map((p2) => ({ name: p2.name, note: p2.age + " years old", pw: p2.pw, age: p2.age }));
       people = people.concat(locals);
     }
@@ -8321,6 +8391,7 @@ export default function ShinobiLife() {
       if (passes >= need) {
         c.rank = 2; c.rankName = rankLabel(c, 2);
         P(L, TT(c, "gradPass"), "e");
+        newsItem(c, c.name + " has graduated " + TT(c, "school") + " and been placed with a squad in " + vName2(c.village) + ".", "THE VILLAGES");
         if (!c.squadLocked) makeTeam(c, L);
         else P(L, "You were already placed. " + (c.squad ? c.squad.name : "Your cell") + " under " + (c.sensei ? c.sensei.name : "your sensei") + ".", "e");
         c.pending = "specialty";
@@ -8330,6 +8401,7 @@ export default function ShinobiLife() {
       if (passes >= need) {
         c.rank = 3; c.rankName = rankLabel(c, 3); c.standing = cl(c.standing + 12);
         P(L, TT(c, "examPass"), "e");
+        newsItem(c, c.name + " has passed " + TT(c, "exam") + " and been raised to Chunin in " + vName2(c.village) + ".", "THE VILLAGES");
         if (c.natures.length < 2) assignNature(c, L);
       } else { c.standing = cl(c.standing - 3); P(L, "You washed out of " + TT(c, "exam") + ". Next year.", "b"); }
     }
@@ -8352,7 +8424,9 @@ export default function ShinobiLife() {
         }
         if (power(c) < 52) { P(L, "You put your name in against people who have been jonin-grade for a decade. You are not there yet and the file says so.", "b"); return; }
         if (roll(joninOdds(c))) {
-          c.joninVacancy = false; c.rank = 4; c.rankName = rankLabel(c, 4); P(L, TT(c, "joninPass"), "e"); if (c.natures.length < 3) assignNature(c, L); } else P(L, pick([
+          c.joninVacancy = false; c.rank = 4; c.rankName = rankLabel(c, 4); P(L, TT(c, "joninPass"), "e");
+          newsItem(c, c.name + " has been raised to Jonin in " + vName2(c.village) + ".", "THE VILLAGES", true);
+          if (c.natures.length < 3) assignNature(c, L); } else P(L, pick([
         "Your " + TT(c, "jonin") + " was denied. There are barely twenty of them in the whole village and the list is not being lengthened this year.",
         "The " + TT(c, "council") + " read your file and passed. Two others were passed with you and one of them has ten years on you.",
         "Denied. They did not say you were not good enough — they said the seat above you is not empty.",
