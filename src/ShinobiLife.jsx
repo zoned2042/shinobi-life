@@ -5385,7 +5385,7 @@ export default function ShinobiLife() {
   }
 
   /* ---------- creation ---------- */
-  const clanOptions = [{ n: "__random", d: "Let fate decide." }, ...CLANS.filter((x) => x.v === draft.village), CLANS.find((x) => x.n === "Civilian-born")];
+  const clanOptions = [{ n: "__random", d: "Let fate decide." }, ...CLANS.filter((x) => x.v === draft.village || x.v === "any"), CLANS.find((x) => x.n === "Civilian-born")];
   function rollPreview() { const p2 = newChar(draft.name.trim(), draft.gender, draft.village, draft.clan, draft.era); p2.clanChoice = draft.clan; setPreview(p2); }
   function begin() {
     const ok = preview && preview.clanChoice === draft.clan && preview.village === draft.village && preview.era === draft.era;
