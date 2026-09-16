@@ -5283,6 +5283,9 @@ export default function ShinobiLife() {
   const [musicReady, setMusicReady] = useState(false);
   const [musicError, setMusicError] = useState(false);
   const ytPlayerRef = useRef(null);
+  const ytPlayerActuallyReady = useRef(false);
+  const pendingTrackRef = useRef(null);
+  const pendingPlayRef = useRef(false);
   useEffect(() => {
     if (window.YT && window.YT.Player) { setMusicReady(true); return; }
     if (!document.getElementById("yt-iframe-api")) {
@@ -5300,7 +5303,18 @@ export default function ShinobiLife() {
       height: "1", width: "1",
       playerVars: { autoplay: 0, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
       events: {
-        onReady: (e) => { e.target.setVolume(musicVolume); },
+        onReady: (e) => {
+          ytPlayerActuallyReady.current = true;
+          e.target.setVolume(musicVolume);
+          if (pendingTrackRef.current) {
+            const id = pendingTrackRef.current;
+            pendingTrackRef.current = null;
+            e.target.loadVideoById(id);
+          } else if (pendingPlayRef.current) {
+            pendingPlayRef.current = false;
+            e.target.playVideo();
+          }
+        },
         onStateChange: (e) => { setMusicPlaying(e.data === window.YT.PlayerState.PLAYING); },
         onError: () => { setMusicError(true); setMusicPlaying(false); },
       },
@@ -5309,13 +5323,21 @@ export default function ShinobiLife() {
   function playMusicTrack(id) {
     setMusicTrackId(id);
     setMusicError(false);
-    if (ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
+    if (ytPlayerActuallyReady.current && ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
       ytPlayerRef.current.loadVideoById(id);
       ytPlayerRef.current.setVolume(musicVolume);
+    } else {
+      pendingTrackRef.current = id;
+      pendingPlayRef.current = false;
     }
   }
   function toggleMusic() {
-    if (!ytPlayerRef.current) return;
+    if (!ytPlayerActuallyReady.current || !ytPlayerRef.current) {
+      if (musicTrackId) pendingTrackRef.current = musicTrackId;
+      else if (MUSIC_TRACKS.length) { setMusicTrackId(MUSIC_TRACKS[0].id); pendingTrackRef.current = MUSIC_TRACKS[0].id; }
+      pendingPlayRef.current = true;
+      return;
+    }
     if (musicPlaying) { ytPlayerRef.current.pauseVideo(); return; }
     if (musicTrackId && ytPlayerRef.current.playVideo) { ytPlayerRef.current.playVideo(); return; }
     if (MUSIC_TRACKS.length) playMusicTrack(MUSIC_TRACKS[0].id);
