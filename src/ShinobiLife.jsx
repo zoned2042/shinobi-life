@@ -143,11 +143,10 @@ const CLANS = [
 
 const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
-/* background music — played through YouTube's own embedded player (not a hosted
-   audio file), so it only ever plays what the rights holder has allowed embedded. */
+/* background music — audio files served alongside the game from ./audio/ */
 const MUSIC_TRACKS = [
-  { id: "2upuBiEiXDk", name: "Naruto Theme Song" },
-  { id: "IrxMWAGYUkI", name: "Naruto Theme Song 2" },
+  { id: "song1", name: "Song 1", src: "audio/song1.mp3" },
+  { id: "parajo", name: "Parajo", src: "audio/parajo.mp3" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -5276,75 +5275,33 @@ export default function ShinobiLife() {
   const theme = applyTheme(themeId);
   useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
 
-  /* ---------- background music (YouTube embed, audio only) ---------- */
+  /* ---------- background music (local audio files under ./audio/) ---------- */
   const [musicTrackId, setMusicTrackId] = useState(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(45);
-  const [musicReady, setMusicReady] = useState(false);
   const [musicError, setMusicError] = useState(false);
-  const ytPlayerRef = useRef(null);
-  const ytPlayerActuallyReady = useRef(false);
-  const pendingTrackRef = useRef(null);
-  const pendingPlayRef = useRef(false);
-  useEffect(() => {
-    if (window.YT && window.YT.Player) { setMusicReady(true); return; }
-    if (!document.getElementById("yt-iframe-api")) {
-      const tag = document.createElement("script");
-      tag.id = "yt-iframe-api";
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-    }
-    const prevReady = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => { if (prevReady) prevReady(); setMusicReady(true); };
-  }, []);
-  useEffect(() => {
-    if (!musicReady || ytPlayerRef.current) return;
-    ytPlayerRef.current = new window.YT.Player("yt-music-player", {
-      height: "1", width: "1",
-      playerVars: { autoplay: 0, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
-      events: {
-        onReady: (e) => {
-          ytPlayerActuallyReady.current = true;
-          e.target.setVolume(musicVolume);
-          if (pendingTrackRef.current) {
-            const id = pendingTrackRef.current;
-            pendingTrackRef.current = null;
-            e.target.loadVideoById(id);
-          } else if (pendingPlayRef.current) {
-            pendingPlayRef.current = false;
-            e.target.playVideo();
-          }
-        },
-        onStateChange: (e) => { setMusicPlaying(e.data === window.YT.PlayerState.PLAYING); },
-        onError: () => { setMusicError(true); setMusicPlaying(false); },
-      },
-    });
-  }, [musicReady]);
+  const audioRef = useRef(null);
   function playMusicTrack(id) {
+    const track = MUSIC_TRACKS.find((t) => t.id === id);
+    const el = audioRef.current;
+    if (!track || !el) return;
     setMusicTrackId(id);
     setMusicError(false);
-    if (ytPlayerActuallyReady.current && ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
-      ytPlayerRef.current.loadVideoById(id);
-      ytPlayerRef.current.setVolume(musicVolume);
-    } else {
-      pendingTrackRef.current = id;
-      pendingPlayRef.current = false;
-    }
+    if (el.getAttribute("src") !== track.src) el.src = track.src;
+    el.volume = musicVolume / 100;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => { setMusicError(true); setMusicPlaying(false); });
   }
   function toggleMusic() {
-    if (!ytPlayerActuallyReady.current || !ytPlayerRef.current) {
-      if (musicTrackId) pendingTrackRef.current = musicTrackId;
-      else if (MUSIC_TRACKS.length) { setMusicTrackId(MUSIC_TRACKS[0].id); pendingTrackRef.current = MUSIC_TRACKS[0].id; }
-      pendingPlayRef.current = true;
-      return;
-    }
-    if (musicPlaying) { ytPlayerRef.current.pauseVideo(); return; }
-    if (musicTrackId && ytPlayerRef.current.playVideo) { ytPlayerRef.current.playVideo(); return; }
+    const el = audioRef.current;
+    if (!el) return;
+    if (musicPlaying) { el.pause(); return; }
+    if (musicTrackId) { playMusicTrack(musicTrackId); return; }
     if (MUSIC_TRACKS.length) playMusicTrack(MUSIC_TRACKS[0].id);
   }
   function setMusicVol(v) {
     setMusicVolume(v);
-    if (ytPlayerRef.current && ytPlayerRef.current.setVolume) ytPlayerRef.current.setVolume(v);
+    if (audioRef.current) audioRef.current.volume = v / 100;
   }
   const [setupStep, setSetupStep] = useState(0);
   const [clanName, setClanName] = useState("");
@@ -9649,7 +9606,10 @@ export default function ShinobiLife() {
   return (
     <div className={"sl-scale lay-" + layout} style={{ background: bgMode === "none" ? "linear-gradient(180deg,#04050a 0%," + T.bg + " 42%,#030409 100%)" : T.bg, backgroundAttachment: "fixed", color: T.text, minHeight: "100dvh", fontFamily: UI, position: "relative" }}>
       {/* background music lives here, outside any modal, so it keeps playing across screens */}
-      <div id="yt-music-player" aria-hidden style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden" }} />
+      <audio ref={audioRef} loop preload="none" style={{ display: "none" }}
+        onPlay={() => { setMusicPlaying(true); setMusicError(false); }}
+        onPause={() => setMusicPlaying(false)}
+        onError={() => { setMusicError(true); setMusicPlaying(false); }} />
       {ATMOS}
       {bgMode !== "none" && (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
@@ -11742,17 +11702,17 @@ export default function ShinobiLife() {
 
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MUSIC</div>
           <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
-            Played through YouTube's own embedded player — audio only, nothing downloaded. If a track won't play here, its owner has embedding turned off; open it on YouTube instead.
+            Plays from the game's own audio folder — no internet needed. A track loops until you pause it or pick another.
           </div>
           {MUSIC_TRACKS.map((t) => (
-            <Row key={t.id} label={t.name} sub={musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Loaded — paused") : "Tap to play"}
+            <Row key={t.id} label={t.name} sub={musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Paused") : "Tap to play"}
               right={musicTrackId === t.id ? (musicPlaying ? "⏸" : "▶") : "▶"}
               onClick={() => (musicTrackId === t.id ? toggleMusic() : playMusicTrack(t.id))}
               tone={musicTrackId === t.id ? accent : null} />
           ))}
           {musicError && (
             <div style={{ color: T.bad, fontSize: 11, marginTop: 4 }}>
-              That track couldn't be played here — try <a href={"https://www.youtube.com/watch?v=" + musicTrackId} target="_blank" rel="noreferrer" style={{ color: accent, textDecoration: "underline" }}>opening it on YouTube</a> instead.
+              That track wouldn't play — check that the <span style={{ color: T.text }}>audio</span> folder sits next to index.html.
             </div>
           )}
           {musicTrackId && !musicError && (
