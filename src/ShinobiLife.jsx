@@ -143,6 +143,11 @@ const CLANS = [
 
 const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
+/* background music — played through YouTube's own embedded player (not a hosted
+   audio file), so it only ever plays what the rights holder has allowed embedded. */
+const MUSIC_TRACKS = [
+  { id: "2upuBiEiXDk", name: "Naruto Theme Song" },
+];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
   "Ice Release": "#9fd8ea", "Lava Release": "#e2703a", "Magnet Release": "#c9a6d6", "Explosion Release": "#e0844a",
@@ -5231,6 +5236,55 @@ export default function ShinobiLife() {
   const [motion, setMotion] = useState("full");
   const theme = applyTheme(themeId);
   useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
+
+  /* ---------- background music (YouTube embed, audio only) ---------- */
+  const [musicTrackId, setMusicTrackId] = useState(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(45);
+  const [musicReady, setMusicReady] = useState(false);
+  const [musicError, setMusicError] = useState(false);
+  const ytPlayerRef = useRef(null);
+  useEffect(() => {
+    if (window.YT && window.YT.Player) { setMusicReady(true); return; }
+    if (!document.getElementById("yt-iframe-api")) {
+      const tag = document.createElement("script");
+      tag.id = "yt-iframe-api";
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+    }
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (prevReady) prevReady(); setMusicReady(true); };
+  }, []);
+  useEffect(() => {
+    if (!musicReady || ytPlayerRef.current) return;
+    ytPlayerRef.current = new window.YT.Player("yt-music-player", {
+      height: "1", width: "1",
+      playerVars: { autoplay: 0, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
+      events: {
+        onReady: (e) => { e.target.setVolume(musicVolume); },
+        onStateChange: (e) => { setMusicPlaying(e.data === window.YT.PlayerState.PLAYING); },
+        onError: () => { setMusicError(true); setMusicPlaying(false); },
+      },
+    });
+  }, [musicReady]);
+  function playMusicTrack(id) {
+    setMusicTrackId(id);
+    setMusicError(false);
+    if (ytPlayerRef.current && ytPlayerRef.current.loadVideoById) {
+      ytPlayerRef.current.loadVideoById(id);
+      ytPlayerRef.current.setVolume(musicVolume);
+    }
+  }
+  function toggleMusic() {
+    if (!ytPlayerRef.current) return;
+    if (musicPlaying) { ytPlayerRef.current.pauseVideo(); return; }
+    if (musicTrackId && ytPlayerRef.current.playVideo) { ytPlayerRef.current.playVideo(); return; }
+    if (MUSIC_TRACKS.length) playMusicTrack(MUSIC_TRACKS[0].id);
+  }
+  function setMusicVol(v) {
+    setMusicVolume(v);
+    if (ytPlayerRef.current && ytPlayerRef.current.setVolume) ytPlayerRef.current.setVolume(v);
+  }
   const [setupStep, setSetupStep] = useState(0);
   const [clanName, setClanName] = useState("");
   const [kgName, setKgName] = useState("");
@@ -9531,6 +9585,8 @@ export default function ShinobiLife() {
 
   return (
     <div className={"sl-scale lay-" + layout} style={{ background: bgMode === "none" ? "linear-gradient(180deg,#04050a 0%," + T.bg + " 42%,#030409 100%)" : T.bg, backgroundAttachment: "fixed", color: T.text, minHeight: "100dvh", fontFamily: UI, position: "relative" }}>
+      {/* background music lives here, outside any modal, so it keeps playing across screens */}
+      <div id="yt-music-player" aria-hidden style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden" }} />
       {ATMOS}
       {bgMode !== "none" && (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
@@ -11620,6 +11676,32 @@ export default function ShinobiLife() {
             ["reduced", "Reduced motion", "Ambient animation off — backgrounds hold still, cinematics cut straight to the point. Battle feedback stays, just calmer."]].map(([id, n2, d2]) => (
             <Row key={id} label={n2} sub={d2} right={motion === id ? "In use" : "Use"} onClick={() => setMotion(id)} disabled={motion === id} tone={motion === id ? accent : null} />
           ))}
+
+          <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MUSIC</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            Played through YouTube's own embedded player — audio only, nothing downloaded. If a track won't play here, its owner has embedding turned off; open it on YouTube instead.
+          </div>
+          {MUSIC_TRACKS.map((t) => (
+            <Row key={t.id} label={t.name} sub={musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Loaded — paused") : "Tap to play"}
+              right={musicTrackId === t.id ? (musicPlaying ? "⏸" : "▶") : "▶"}
+              onClick={() => (musicTrackId === t.id ? toggleMusic() : playMusicTrack(t.id))}
+              tone={musicTrackId === t.id ? accent : null} />
+          ))}
+          {musicError && (
+            <div style={{ color: T.bad, fontSize: 11, marginTop: 4 }}>
+              That track couldn't be played here — try <a href={"https://www.youtube.com/watch?v=" + musicTrackId} target="_blank" rel="noreferrer" style={{ color: accent, textDecoration: "underline" }}>opening it on YouTube</a> instead.
+            </div>
+          )}
+          {musicTrackId && !musicError && (
+            <div className="flex items-center gap-3 mt-2">
+              <button onClick={toggleMusic} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.text, borderRadius: 8, width: 40, height: 40, flexShrink: 0 }} className="font-bold">
+                {musicPlaying ? "⏸" : "▶"}
+              </button>
+              <input type="range" min="0" max="100" value={musicVolume} onChange={(e) => setMusicVol(Number(e.target.value))}
+                style={{ flex: 1, accentColor: accent }} aria-label="Music volume" />
+              <span style={{ color: T.dim, fontSize: 11, width: 30, textAlign: "right" }}>{musicVolume}%</span>
+            </div>
+          )}
         </Modal>
       )}
 
