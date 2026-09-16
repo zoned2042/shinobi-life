@@ -4154,7 +4154,12 @@ function daimyoTick(c, L) {
 /* a village is not a number per rank. it is people with names, ages and power,
    who get promoted when they earn it and mostly do not. */
 const ROLL_RANKS = ["Academy Student", "Genin", "Chunin", "Special Jonin", "Jonin", "Jonin Commander"];
-const ROLL_GATE = { "Academy Student": { age: 12, pw: 18 }, "Genin": { age: 15, pw: 34 }, "Chunin": { age: 20, pw: 52 }, "Special Jonin": { age: 24, pw: 66 }, "Jonin": { age: 30, pw: 82 } };
+/* Jonin's age floor used to sit at 30 flat, which quietly ruled out the exact thing the
+   game's own canon starts brag about — "Jonin at thirteen, your father's name around
+   your neck" is Kakashi's actual pitch at character creation. The power threshold (82)
+   is still the real gate; dropping the age floor just stops blocking the outlier who
+   clears it early, the way the fiction always said was possible. */
+const ROLL_GATE = { "Academy Student": { age: 12, pw: 18 }, "Genin": { age: 15, pw: 34 }, "Chunin": { age: 20, pw: 52 }, "Special Jonin": { age: 24, pw: 66 }, "Jonin": { age: 13, pw: 82 } };
 function makeVillager(c, rank) {
   const idx = Math.max(0, ROLL_RANKS.indexOf(rank));
   const base = [8, 14, 20, 26, 30, 40][idx] || 14;
@@ -4415,6 +4420,15 @@ const VILLAGE_SHAPE = [
   { r: "Kage", n: 1 }, { r: "Jonin Commander", n: 1 }, { r: "Jonin", n: 50 },
   { r: "Special Jonin", n: 40 }, { r: "Chunin", n: 220 }, { r: "Genin", n: 180 }, { r: "Academy Student", n: 240 },
 ];
+/* no village actually runs a round headcount — "50 jonin" was never a real cap, just
+   the number the roll happened to show. give each village its own stable size instead,
+   so the roster reads like an actual village rather than a fixed quota. */
+function vRollTarget(vid, base) {
+  let h = 0;
+  for (let i = 0; i < vid.length; i++) h = (h * 31 + vid.charCodeAt(i)) >>> 0;
+  const spread = Math.round(base * 0.4);
+  return spread ? Math.max(1, base + (h % (spread * 2 + 1)) - spread) : base;
+}
 /* a foreign village's rank and file, generated on the fly for display only. it never
    touches character state (no c.usedNames bookkeeping, nothing to commit) — this is
    just flavour for a village you don't live in, so it doesn't need the uniqueness
@@ -4471,7 +4485,7 @@ function villageRoll(c, vid) {
     }
     const seen2 = [];
     const uniq = people.filter((p2) => { const k = p2.name + (p2.you ? "-you" : ""); if (seen2.includes(k)) return false; seen2.push(k); return true; });
-    return { rank: slot.r, count: Math.max(slot.n, uniq.length), people: uniq.sort((a, b) => (b.pw || 0) - (a.pw || 0)).slice(0, 10) };
+    return { rank: slot.r, count: Math.max(vRollTarget(vid, slot.n), uniq.length), people: uniq.sort((a, b) => (b.pw || 0) - (a.pw || 0)).slice(0, 10) };
   });
   const everyone = rows.flatMap((r) => r.people);
   const strongest = everyone.sort((a, b) => (b.pw || 0) - (a.pw || 0))[0] || null;
@@ -5595,7 +5609,7 @@ export default function ShinobiLife() {
       if (!c.world) c.world = worldInit(c);
       worldTick(c, L);
       /* the jonin roll is finite — a place on it opens when somebody leaves it */
-      if (!c.joninVacancy && c.rank === 3 && c.age >= 16 && roll(c.war ? 45 : 26)) {
+      if (!c.joninVacancy && c.rank === 3 && c.age >= 13 && roll(c.war ? 45 : 26)) {
         c.joninVacancy = true;
         P(L, pick([
           "A jonin of " + (villageExists(c, c.village) ? vName2(c.village) : "the clan") + " was buried this week. There is a place on the roll for the first time in years.",
@@ -9531,7 +9545,7 @@ export default function ShinobiLife() {
   const pw = power(c);
   const canAcademy = c.rank === 1 && c.age >= 12;
   const canExam = c.rank === 2 && c.age >= 12 && c.examCooldown === 0 && !c.rogue && !c.founded;
-  const canJonin = c.rank === 3 && c.chuninYears >= 2 && !c.rogue && !c.founded;
+  const canJonin = c.rank === 3 && c.chuninYears >= 1 && !c.rogue && !c.founded;
   const canAnbu = !c.anbu && !c.rogue && !c.founded && !eraOf(c).hideVillages && c.rank >= 2 && (c.age >= 11 && (pw >= 36 || c.rank >= 4));
   const anbuCapt = c.anbu && !c.anbu.captain && c.anbu.missions >= 3 && pw >= 48;
   const anbuComm = c.anbu && c.anbu.captain && !c.anbu.commander && c.anbu.missions >= 8 && pw >= 60;
