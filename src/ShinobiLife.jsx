@@ -147,6 +147,7 @@ const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Wat
    audio file), so it only ever plays what the rights holder has allowed embedded. */
 const MUSIC_TRACKS = [
   { id: "2upuBiEiXDk", name: "Naruto Theme Song" },
+  { id: "IrxMWAGYUkI", name: "Naruto Theme Song 2" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -3172,7 +3173,7 @@ const DOJUTSU_PATHS = [
     stats: { nin: 20, cha: 22, gen: 20 }, form: "rinnesharingan" },
   { id: "jogan", n: "Jogan", tier: 3,
     d: "Nobody knows what it is. It sees the places between one world and another and opens them.",
-    needs: (c) => c.clan === "Otsutsuki" && c.age >= 8 && (c.otsu || 0) >= 20,
+    needs: (c) => (c.clan === "Otsutsuki" || c.karmaHost) && c.age >= 8 && (c.otsu || 0) >= 20,
     grants: ["Jogan: Dimensional Sight", "Vanishing Rasengan"],
     stats: { int: 16, gen: 12 } },
 ];
@@ -3953,6 +3954,30 @@ DILEMMAS.push(
     ["Listen", (c, L) => { ST("int", 7)(c); c.standing = cl(c.standing + 5); P(L, "You started listening. Half of what they say is right and you have got better at spotting which half.", "g"); }],
     ["Put them in their place", (c, L) => { c.standing = cl(c.standing - 4); ST("cha", 3)(c); P(L, "You corrected them publicly and were right, and it did not feel like winning.", "n"); }],
     ["Ask them to take your teams", (c, L) => { ST("int", 4)(c); c.standing = cl(c.standing + 9); P(L, "You started sending them out with your squads. Within two years they were better at it than you were.", "e"); }]]),
+  /* the one non-Otsutsuki route into celestial chakra — rare, and only once you are
+     already somebody. otsutsukiTick() already knows what to do with karmaHost; this
+     is the only place that ever sets it. */
+  D("otsuMark", (c) => c.clan !== "Otsutsuki" && !c.karmaHost && c.rank >= 4 && c.age >= 16,
+    "Something in the sky is looking for you",
+    "It came down outside the village with no army behind it and no interest in the gate guards — pale, tailed, patient — and it has been watching you specifically since it landed. It says one word. Vessel.",
+    [
+      ["Accept the mark", (c, L) => {
+        c.karmaHost = true;
+        if (!c.eye) c.eye = { t: "Byakugan" };
+        if (!c.eyePaths) c.eyePaths = [];
+        if (!c.eyePaths.includes("byakugan")) c.eyePaths.push("byakugan");
+        c.otsu = (c.otsu || 0) + rr(8, 14);
+        addTitle(c, "Karma Vessel");
+        P(L, "It pressed two fingers to the back of your hand and a mark burned itself into the skin, black lines closing into a shape that was not there a second ago. Something ancient is awake in you now, and it does not intend to leave.", "e");
+        newsItem(c, c.name + " has been seen with a mark on the hand that no seal-master in " + vName2(c.village) + " can identify, or will discuss.", "BINGO BOOK", true);
+      }],
+      ["Refuse, and fight", (c, L) => {
+        const win = roll(cl(28 + c.stats.tai * 0.3 + c.stats.nin * 0.3, 8, 65));
+        if (win) { c.standing = cl(c.standing + 15); ST("tai", 6)(c); P(L, "You put everything you had into it and it left — not beaten, bored. 'Later, then,' it said, and was gone before the jonin on watch even reached the wall.", "g"); }
+        else { c.health = cl(c.health - rr(20, 40)); P(L, "It did not fight back so much as correct you, twice, and then it was simply gone. You are lucky to be walking, and it did not look like luck had anything to do with it.", "b"); }
+      }],
+      ["Run", (c, L) => { c.standing = cl(c.standing - 8); P(L, "You ran, and did not stop until the village gates were shut behind you. You still feel watched some nights, and you are almost certainly right.", "n"); }],
+    ]),
 );
 /* the rest of the tail, generated from compact rows so there are enough of them
    that a full lineage stops repeating */
@@ -7443,6 +7468,7 @@ export default function ShinobiLife() {
         Object.entries(path.stats || {}).forEach(([k, n]) => { c2.stats[k] = cl(c2.stats[k] + n); });
         (path.grants || []).forEach((j) => learn(c2, L2, j, null));
         addTitle(c2, path.n);
+        if (path.id === "rinnesharingan") addTitle(c2, "Planet Destroyer");
         c2.otsu = (c2.otsu || 0) + 8;
         P(L2, "It opened. " + path.n + " — " + path.d, "e");
         newsItem(c2, "Something has been seen with eyes that are not on any clan register in any village. " + (c2.epithet ? cap(c2.epithet) : c2.name) + " is the name attached to the reports.", "BINGO BOOK", true);
@@ -7468,6 +7494,7 @@ export default function ShinobiLife() {
         learn(c2, L2, "Expansive Truth-Seeking Ball", null);
         learn(c2, L2, "All-Killing Ash Bones", null);
         addTitle(c2, "Ate the fruit");
+        addTitle(c2, "Nation Killer");
         c2.infamy = cl(c2.infamy + 40);
         P(L2, "You took it off the branch and ate it in front of them. Everything is louder and slower and further away and you are not going to be tired again.", "e");
         newsItem(c2, "THE COUNTRY AROUND THE TREE IS DEAD. Everything that grew there has gone to ash and whatever ate the fruit walked away from it changed. Four Kage are meeting.", "WAR", true);
@@ -11564,7 +11591,7 @@ export default function ShinobiLife() {
                 sub={d2.d + (have ? "" : ok ? " You can open this now." : d2.id === "tenseigan" ? " Needs the Byakugan and 30 celestial chakra."
                   : d2.id === "rinnegan" ? " Needs a Mangekyo, or 45 celestial chakra."
                   : d2.id === "rinnesharingan" ? " Needs 70 celestial chakra and the fruit."
-                  : d2.id === "jogan" ? " Needs Otsutsuki blood and 20 celestial chakra." : "")}
+                  : d2.id === "jogan" ? " Needs Otsutsuki blood (or the mark) and 20 celestial chakra." : "")}
                 right={have ? "Open" : ok ? "Awaken" : "Locked"}
                 onClick={() => otsuAct("awaken", d2.id)} disabled={have || !ok || c.actions < 1}
                 tone={have ? null : ok ? T.epic : null} />
