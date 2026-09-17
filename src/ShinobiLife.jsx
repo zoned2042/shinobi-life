@@ -145,8 +145,8 @@ const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
 /* background music — audio files served alongside the game from ./audio/ */
 const MUSIC_TRACKS = [
-  { id: "song1", name: "Song 1", src: "audio/song1.mp3" },
-  { id: "parajo", name: "Parajo", src: "audio/parajo.mp3" },
+  { id: "song1", name: "Naruto Theme", src: "audio/song1.mp3" },
+  { id: "parajo", name: "Blue Bird", src: "audio/parajo.mp3" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -276,30 +276,30 @@ const MOVES = {};
     arr.forEach(([name, tier]) => {
       if (MOVES[name]) return;
       const nature = NATURES.includes(pool) || ADVANCED.includes(pool) ? pool : null;
-      /* seals: how many turns of hand signs before the technique can fire.
-         0 = instant (basic tai, academy techniques). Higher tier = longer weave. */
-      const seals = tier <= 1 ? 0 : tier === 2 ? 0 : tier === 3 ? 1 : tier === 4 ? 1 : tier === 5 ? 2 : 3;
-      MOVES[name] = { name, tier, kind: kindOf(pool), nature, pow: 12 + tier * 15, cost: 4 + tier * 7, seals };
+      MOVES[name] = { name, tier, kind: kindOf(pool), nature, pow: 12 + tier * 15, cost: 4 + tier * 7 };
     });
   });
   const extras = ["Amaterasu", "Tsukuyomi", "Susanoo", "Perfect Susanoo", "Sage Mode", "Toad Sage Mode", "Snake Sage Mode", "Slug Sage Mode", "Six Paths Sage Mode", "Tailed Beast Bomb", "Tailed Beast Bomb Barrage", "Tailed Beast Mode", "Chakra Mode", "Chakra Arms", "Chakra Sharing", "Version One Cloak", "Version Two Transformation", "Almighty Push", "Universal Pull", "Chibaku Tensei", "Preta Path Absorption", "Outer Path: Rinne Rebirth", "Night Guy", "Evening Elephant", "Curse Mark: Second State", "Tenseigan Chakra Mode", "Truth-Seeking Orbs", "Baryon Mode", "Baryon Mode: Adamantine Fist", "Kurama Chakra Mode", "Lightning Release Chakra Mode", "Susanoo: Yasaka Beads", "Six Paths: Tailed Beast Rasenshuriken", "Blue Flame Cloak", "Fire Style: Cat Claw Blaze", "Sand Shield", "Wind Style: Drilling Air Bullet", "Magnet Style: Sand Binding Coffin", "Coral Palm", "Water Style: Shell Shockwave", "Lava Style: Molten Fist", "Lava Style: Scorching Torrent", "Boil Style: Steam Ram", "Boil Style: Pressure Burst", "Corrosive Slime Spray", "Acid Mist Barrier", "Scale Powder", "Wind Style: Wing Cutter", "Chakra Wings", "Ink Clone", "Lariat", "Tentacle Bind", "Nine-Tails Chakra Cloak", "Tailed Beast Rasengan", "Mini Tailed Beast Bomb", "Gate of Opening", "Gate of Healing", "Gate of Life", "Gate of Pain", "Gate of Limit", "Gate of View", "Gate of Wonder", "Gate of Death"];
-  extras.forEach((n) => { if (!MOVES[n]) MOVES[n] = { name: n, tier: 4, kind: "nin", nature: null, pow: 62, cost: 26, seals: 1 }; });
+  extras.forEach((n) => { if (!MOVES[n]) MOVES[n] = { name: n, tier: 4, kind: "nin", nature: null, pow: 62, cost: 26 }; });
   Object.entries(MOVE_OVERRIDE).forEach(([n, o]) => {
-    const base = MOVES[n] || { name: n, tier: 4, nature: null, pow: 55, cost: 25, kind: "nin", seals: 1 };
+    const base = MOVES[n] || { name: n, tier: 4, nature: null, pow: 55, cost: 25, kind: "nin" };
     MOVES[n] = { ...base, ...o, name: n };
-    if (MOVES[n].seals === undefined) {
-      const t = MOVES[n].tier || 4;
-      MOVES[n].seals = t <= 2 ? 0 : t === 3 ? 1 : t === 4 ? 1 : t === 5 ? 2 : 3;
-    }
   });
   ["Gate of Opening", "Gate of Healing", "Gate of Life", "Gate of Pain", "Gate of Limit", "Gate of View", "Gate of Wonder", "Gate of Death"].forEach((g, i) => {
-    MOVES[g] = { name: g, tier: 3 + Math.floor(i / 3), kind: "buff", eff: "gate", nature: null, pow: 0, cost: 10 + i * 4, seals: 0 };
+    MOVES[g] = { name: g, tier: 3 + Math.floor(i / 3), kind: "buff", eff: "gate", nature: null, pow: 0, cost: 10 + i * 4 };
   });
   ["Lariat", "Coral Palm", "Gentle Fist", "Front Lotus", "Reverse Lotus", "Morning Peacock", "Dance of the Camellia"].forEach((n) => { if (MOVES[n]) MOVES[n].kind = "tai"; });
-  /* taijutsu and pure physical techniques are almost always instant — no hand seals */
+  /* hand seals: how many seals make up the quick-time sequence before a technique fires,
+     resolved in the same turn as the cast rather than spent across several. Taijutsu and
+     pure physical techniques are instant. Support casts (buffs/heals) are capped low so
+     keeping yourself alive never turns into the hardest thing in the fight. Computed last,
+     from the final tier and kind, so a MOVE_OVERRIDE that changes either one is never stale. */
   Object.values(MOVES).forEach((m) => {
-    if (m.kind === "tai" || m.kind === "ken" || m.kind === "wep") m.seals = Math.min(m.seals || 0, 0);
-    if (m.kind === "heal" || m.kind === "buff") m.seals = Math.min(m.seals || 0, 1);
+    const t = m.tier || 2;
+    let seals = t <= 2 ? 0 : t === 3 ? 3 : t === 4 ? 4 : t === 5 ? 5 : 6;
+    if (m.kind === "tai" || m.kind === "ken" || m.kind === "wep") seals = 0;
+    if (m.kind === "heal" || m.kind === "buff") seals = Math.min(seals, 2);
+    m.seals = seals;
   });
 })();
 
@@ -2184,6 +2184,20 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "8.7", n: "Hand Seals, Reworked", items: [
+    "Hand seals no longer cost real turns. Picking a technique that needs them opens a quick-time sequence — press the seal shown before the beat runs out — that resolves entirely within the same turn you cast it. No more standing there eating free hits while you build up a technique across several turns",
+    "A rushed or botched sequence still fires — just weaker (as low as ~55% power). A clean sequence gets a small bonus on top. Either way you are never fully punished for missing a beat, and the enemy never gets more than their normal one turn out of your cast",
+    "Fixed a real bug this touched in passing: a seal-gated heal or buff (Strength of a Hundred Seal, Shadow Clone Jutsu, anything tier 3+) was resolving through the damage-dealing code path instead of actually healing or buffing you, because the release step never checked move.kind. It does now",
+    "Renamed the two background tracks under Appearance > Music: 'Song 1' is now Naruto Theme, 'Parajo' is now Blue Bird",
+  ] },
+  { v: "8.6", n: "War, Succession, ANBU", items: [
+    "The Great Wars had real belligerents put back in — Konoha+Suna vs Kumo+Iwa in the First, vs Iwa+Kumo+Kiri in the Second, vs Iwa alone in the Third — instead of a five-way free-for-all that read as 'you against all four other nations' every time",
+    "Fixed a war headline appearing years after a Great War's actual, correctly-dated start: joining an already-announced war (e.g. conscripted late, at 12) no longer re-declares it as breaking news",
+    "Stepping down or being deposed as Kage no longer permanently blocks taking the seat anywhere else — only the village you actually left. Also fixed the seat not resetting properly on a second ascension (stale treasury/council from the old village, ruling screen silently broken)",
+    "ANBU operatives get a real alias alongside their mask and squad number, shown wherever the codename appears. Added a stealth option to move on your own Kage as an ANBU operative — clean and unattributed if it lands, a real fight if they wake up first. Two new black ops",
+    "The Otsutsuki are a real power spike now, with a choice of Byakugan, Sharingan or Rinnegan at creation. Otsutsuki family (Kaguya, Hagoromo, Hamura, Ashura, Indra) show up under People. Titles can be hand-picked from ones you've actually earned, under Profile",
+    "Local background music (no YouTube dependency), Village Roll ages for other villages, wider news coverage, and Hashirama's death line fixed to actually make sense",
+  ] },
   { v: "8.5", n: "Rasenshuriken", items: [
     "Wind Style: Spiraling Shuriken is called the Rasenshuriken, everywhere — the move itself, the Wind pool, the study list, Naruto's moveset and signature, and the technique histories, which still credit him with making it in 1008",
     "One side effect worth having: there was already a limit written for a technique called Rasenshuriken — a three-turn cooldown and ten health to throw one — that had been matching nothing because the move was filed under the long name. The rename makes that rule live, so the Rasenshuriken now costs to use and cannot be thrown every turn",
@@ -2913,12 +2927,20 @@ function loss(c, L, who) {
 }
 
 /* ============================ COMBAT ENGINE ============================ */
-/* ============================ COMBAT CORE (v9 tactical) ============================ */
+/* ============================ COMBAT CORE (v10 tactical) ============================ */
 /* Range: close (tai dominant), mid (balanced / ninjutsu sweet spot), far (ninjutsu & ranged)
    Momentum: the aggressor who keeps landing hits gains pressure; the one on the back foot pays for it.
    Specialty: your chosen path warps the numbers and the language.
-   Hand seals: high-tier techniques can be interrupted if you take a clean hit while weaving. */
+   Hand seals: forming them is a quick-time sequence resolved on the spot, in the same turn
+   you spend casting — not a multi-turn commitment that leaves you eating free hits while you
+   build it. Accuracy on the sequence scales the technique's power instead of making it. */
 const RANGE_LABEL = { close: "Close range", mid: "Mid range", far: "Long range" };
+/* the twelve seals, same order the histories use */
+const HAND_SEALS = [
+  { id: "rat", n: "Rat" }, { id: "ox", n: "Ox" }, { id: "tiger", n: "Tiger" }, { id: "hare", n: "Hare" },
+  { id: "dragon", n: "Dragon" }, { id: "snake", n: "Snake" }, { id: "horse", n: "Horse" }, { id: "ram", n: "Ram" },
+  { id: "monkey", n: "Monkey" }, { id: "bird", n: "Bird" }, { id: "dog", n: "Dog" }, { id: "boar", n: "Boar" },
+];
 const SPEC_COMBAT = {
   nin:  { tai: 0.85, nin: 1.25, gen: 0.9,  label: "ninjutsu specialist" },
   tai:  { tai: 1.30, nin: 0.80, gen: 0.75, label: "taijutsu specialist" },
@@ -5224,6 +5246,58 @@ function Bar({ v, max, col, h = 6 }) {
 function Chip({ children, col }) {
   return <span className="sl-pop" style={{ background: T.panel2, border: "1px solid " + (col ? col + "66" : T.line), color: col || T.soft, padding: "3px 8px", borderRadius: 99, fontSize: 11, whiteSpace: "nowrap" }}>{children}</span>;
 }
+/* the hand-seal quick-time panel: form the sequence shown, in order, before the beat runs
+   out. Every step answers something — right, wrong, or timed out — and the sequence always
+   completes in the same number of beats, so there is no way to get stuck in it. */
+function SealQTEPanel({ qte, answer, cancel, accent, stepMs }) {
+  const { move, sequence, options, index, hits, results } = qte;
+  const total = sequence.length;
+  const cur = options[Math.min(index, options.length - 1)] || [];
+  return (
+    <div className="sl-rise" style={{ padding: "4px 0" }}>
+      <style>{`
+        @keyframes sealBeatShrink { from { width: 100%; } to { width: 0%; } }
+        .seal-beat-bar { animation: sealBeatShrink var(--sealms) linear forwards; }
+        @media (prefers-reduced-motion: reduce) { .seal-beat-bar { animation-duration: calc(var(--sealms) * 1) !important; } }
+      `}</style>
+      <div className="flex items-center justify-between mb-2">
+        <div style={{ color: accent, fontSize: 11, letterSpacing: ".14em" }} className="font-bold">FORM THE SEALS — {move.name.toUpperCase()}</div>
+        <button onClick={cancel} style={{ color: T.dim, fontSize: 11 }} className="font-semibold px-2">Cancel</button>
+      </div>
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+        {sequence.map((s, i) => {
+          const done = i < results.length;
+          const good = done && results[i];
+          return (
+            <span key={i} style={{
+              width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10, fontWeight: 800,
+              background: done ? (good ? T.good + "22" : T.bad + "22") : i === index ? accent + "22" : T.panel,
+              border: "1px solid " + (done ? (good ? T.good : T.bad) : i === index ? accent : T.line),
+              color: done ? (good ? T.good : T.bad) : i === index ? accent : T.dim,
+            }}>{done ? (good ? "✓" : "✕") : s.n.slice(0, 2).toUpperCase()}</span>
+          );
+        })}
+      </div>
+      <div style={{ background: T.panel2, borderRadius: 99, height: 5, overflow: "hidden", marginBottom: 14 }}>
+        <div key={index} className="seal-beat-bar" style={{ "--sealms": stepMs + "ms", height: "100%", background: accent }} />
+      </div>
+      <div className="grid grid-cols-2 gap-2" style={{ opacity: qte.done ? .5 : 1, pointerEvents: qte.done ? "none" : "auto" }}>
+        {cur.map((opt, i) => (
+          <button key={opt.id} onClick={() => answer(opt.id)} disabled={qte.done}
+            style={{ background: T.panel, border: "1px solid " + T.line, color: T.text, borderRadius: 8, position: "relative" }}
+            className="py-3 text-sm font-bold">
+            <span style={{ position: "absolute", top: 4, left: 6, fontSize: 9, color: T.dim, fontWeight: 700 }}>{i + 1}</span>
+            {opt.n}
+          </button>
+        ))}
+      </div>
+      <div style={{ color: T.dim, fontSize: 10.5, marginTop: 8 }}>
+        Tap the seal, or press 1-4. {hits}/{total} clean so far.
+      </div>
+    </div>
+  );
+}
 function Modal({ title, accent, onClose, children, wide }) {
   const key = accent || SKIN.key;
   return (
@@ -5370,6 +5444,8 @@ export default function ShinobiLife() {
   const [summitAgenda, setSummitAgenda] = useState("alliance");
   const [quest, setQuest] = useState(null);
   const [bt, setBt] = useState(null);
+  const [sealQTE, setSealQTE] = useState(null);
+  const sealQTETimer = useRef(null);
   const [vName, setVName] = useState("");
   const [vLand, setVLand] = useState("");
   const [taps, setTaps] = useState(0);
@@ -7527,7 +7603,7 @@ export default function ShinobiLife() {
     if (c.specialty && SPEC_COMBAT[c.specialty]) {
       lg.push({ t: "You fight as a " + SPEC_COMBAT[c.specialty].label + ".", k: "n" });
     }
-    lg.push({ t: "Form the seals. Release when they are complete. Get hit while weaving and the sequence breaks.", k: "n" });
+    lg.push({ t: "Anything past a basic technique means forming seals — a quick sequence, on the spot. Catch it clean and the technique lands harder.", k: "n" });
     setQuest(null);
     setBt({ p, e, log: lg, turn: 1, over: false, win: false, ctx, guard: c.guardBattles > 0, used: {}, cool: {} });
   }
@@ -7683,15 +7759,16 @@ export default function ShinobiLife() {
     });
   }
   /* ============================ HAND-SEAL COMBAT ============================
-     You do not pick a finished technique from a list.
-     You WEAVE (form hand seals). When the seals are complete you RELEASE.
-     Instant techniques (tai, basic) fire the same turn.
-     Getting hit while weaving can break the seals. */
+     You do not spend turns weaving while the enemy gets free hits on you. Picking a
+     technique that needs seals opens a quick-time sequence — press the seal shown before
+     the beat runs out. It resolves in the same turn as the cast: your accuracy on the
+     sequence scales how well the technique lands, but a botched sequence still fires,
+     just weaker. Instant techniques (tai, basic) skip the sequence entirely. */
   function sealsNeeded(m) {
     if (!m) return 0;
     if (m.seals !== undefined) return m.seals;
     const t = m.tier || 2;
-    return t <= 2 ? 0 : t === 3 ? 1 : t === 4 ? 1 : t === 5 ? 2 : 3;
+    return t <= 2 ? 0 : t === 3 ? 3 : t === 4 ? 4 : t === 5 ? 5 : 6;
   }
   function sealGlyphs(n, done) {
     const total = Math.max(1, n);
@@ -7700,18 +7777,6 @@ export default function ShinobiLife() {
     return s;
   }
   function playerMoves() {
-    /* When already weaving: only Continue / Release / Abandon / Guard / Item */
-    if (bt && bt.p && bt.p.weaving) {
-      const m = MOVES[bt.p.weaving] || { name: bt.p.weaving, seals: 1 };
-      const need = sealsNeeded(m);
-      const done = bt.p.sealProgress || 0;
-      const ready = done >= need;
-      return [
-        { name: ready ? "Release — " + m.name : "Continue seals", kind: "weave_continue", tech: m.name, ready },
-        { name: "Abandon seals", kind: "weave_abort" },
-        { name: "Guard", kind: "buff", eff: "def", cost: 0, pow: 0 },
-      ];
-    }
     const list = [];
     /* Instant physical */
     list.push({ name: "Strike", kind: "tai", pow: 14, cost: 0, nature: null, seals: 0 });
@@ -7813,10 +7878,6 @@ export default function ShinobiLife() {
     b.critP = critP;
     b.burstNatureP = e.nature || null;
     if (mkind === "gen") genHold(e, p, lg);
-    if (p.weaving) {
-      p.weaving = null; p.sealProgress = 0; p.charging = null; p.chargeLeft = 0;
-      lg.push({ t: "The hit breaks your hand seals mid-sequence. Whatever you were building is gone.", k: "b" });
-    }
 
     if (e.hp < e.max * 0.2 && !e.cornered && roll(42)) {
       e.cornered = true;
@@ -7853,7 +7914,69 @@ export default function ShinobiLife() {
       }
     }
   }
-  function act(move, itemId) {
+  /* how long each beat stays live — a little tighter for a longer sequence, never brutal */
+  function sealStepMs(total) { return Math.max(820, 1500 - total * 55); }
+  function openSealQTE(move) {
+    if (!bt || bt.over || sealQTE) return;
+    const need = sealsNeeded(move);
+    const cost = move.kind === "buff" && move.eff === "evade" ? evadeCost(bt.p, move.cost || 0) : (move.cost || 0);
+    if (cost > bt.p.ck) return;
+    const sequence = [];
+    for (let i = 0; i < need; i++) {
+      const pool = i > 0 ? HAND_SEALS.filter((x) => x.id !== sequence[i - 1].id) : HAND_SEALS;
+      sequence.push(pick(pool));
+    }
+    const options = sequence.map((s) => {
+      const rest = HAND_SEALS.filter((x) => x.id !== s.id);
+      const decoys = [];
+      while (decoys.length < 3) { const d = pick(rest); if (!decoys.some((x) => x.id === d.id)) decoys.push(d); }
+      const four = [s, ...decoys];
+      for (let i = four.length - 1; i > 0; i--) { const j = R(i + 1); const t = four[i]; four[i] = four[j]; four[j] = t; }
+      return four;
+    });
+    setSealQTE({ move, sequence, options, index: 0, hits: 0, results: [] });
+  }
+  function closeSealQTE() {
+    if (sealQTETimer.current) { clearTimeout(sealQTETimer.current); sealQTETimer.current = null; }
+    setSealQTE(null);
+  }
+  function answerSealQTE(pickedId) {
+    /* whoever calls this (a click, or the beat timer firing) is the one answer for this
+       step — clear any pending timer so it cannot also fire and double-advance */
+    if (sealQTETimer.current) { clearTimeout(sealQTETimer.current); sealQTETimer.current = null; }
+    setSealQTE((prev) => {
+      if (!prev || prev.done) return prev;
+      const correct = prev.sequence[prev.index].id === pickedId;
+      const hits = prev.hits + (correct ? 1 : 0);
+      const results = [...prev.results, correct];
+      const nextIndex = prev.index + 1;
+      if (nextIndex >= prev.sequence.length) {
+        const acc = hits / prev.sequence.length;
+        setTimeout(() => { act(prev.move, null, acc); setSealQTE(null); }, 260);
+        return { ...prev, hits, results, index: nextIndex, done: true };
+      }
+      return { ...prev, hits, results, index: nextIndex };
+    });
+  }
+  /* the beat timer and the keyboard input (1-4, matching the four seals on screen) */
+  useEffect(() => {
+    if (!sealQTE || sealQTE.done) return;
+    const total = sealQTE.sequence.length;
+    if (sealQTETimer.current) clearTimeout(sealQTETimer.current);
+    sealQTETimer.current = setTimeout(() => answerSealQTE(null), sealStepMs(total));
+    const onKey = (ev) => {
+      const n = { "1": 0, "2": 1, "3": 2, "4": 3 }[ev.key];
+      if (n === undefined) return;
+      const opts = sealQTE.options[sealQTE.index];
+      if (!opts || !opts[n]) return;
+      answerSealQTE(opts[n].id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sealQTE && sealQTE.index, sealQTE && !!sealQTE.done]);
+  useEffect(() => { if (!bt) closeSealQTE(); }, [bt]);
+  function act(move, itemId, qteAcc) {
     if (!bt || bt.over) return;
     const b = clone(bt); const lg = b.log; const p = b.p, e = b.e;
 
@@ -7887,7 +8010,6 @@ export default function ShinobiLife() {
       const cost = next === "close" ? 4 : 6;
       if (p.ck < cost) { lg.push({ t: "Not enough chakra to shift range.", k: "b" }); setBt(b); return; }
       p.ck -= cost; p.range = next; e.range = next;
-      if (p.weaving) { p.weaving = null; p.sealProgress = 0; lg.push({ t: "Moving breaks the seals. Whatever you were building is gone.", k: "b" }); }
       lg.push({ t: next === "close"
         ? "Body Flicker. Dust and leaves explode outward. Close range — fists and blades."
         : next === "far"
@@ -7903,60 +8025,11 @@ export default function ShinobiLife() {
       endTurn(); return;
     }
 
-    /* ---------- abort weave ---------- */
-    if (move && move.kind === "weave_abort") {
-      lg.push({ t: "You drop the seals. Chakra bleeds off into nothing.", k: "n" });
-      p.weaving = null; p.sealProgress = 0; p.charging = null; p.chargeLeft = 0;
-      endTurn(); return;
-    }
-
-    /* ---------- continue / release weave ---------- */
-    if (move && move.kind === "weave_continue") {
-      const techName = move.tech || p.weaving;
-      const m = MOVES[techName] || { name: techName, seals: 1, kind: "nin", pow: 40, cost: 20 };
-      const need = sealsNeeded(m);
-      p.sealProgress = (p.sealProgress || 0) + 1;
-      if (p.sealProgress < need) {
-        lg.push({ t: "Hand seals. " + sealGlyphs(need, p.sealProgress) + "  (" + p.sealProgress + "/" + need + ")  Building " + m.name + ".", k: "n" });
-        endTurn(); return;
-      }
-      /* RELEASE */
-      const realCost = m.cost || 0;
-      if (realCost > p.ck) {
-        lg.push({ t: "The seals are complete but the chakra is not there. " + realCost + " needed, " + p.ck + " left. It collapses.", k: "b" });
-        p.weaving = null; p.sealProgress = 0;
-        endTurn(); return;
-      }
-      p.ck -= realCost;
-      p.weaving = null; p.sealProgress = 0; p.charging = null; p.chargeLeft = 0;
-      /* ultimate rules still apply on release */
-      const rule = ULT_RULES[m.name];
-      if (rule) {
-        b.used = b.used || {}; b.cool = b.cool || {};
-        if (rule.once && (b.used[m.name] || 0) >= rule.once) {
-          lg.push({ t: "You have already spent that technique in this fight.", k: "b" }); endTurn(); return;
-        }
-        if (rule.cd && (b.cool[m.name] || 0) > 0) {
-          lg.push({ t: m.name + " is still cooling.", k: "b" }); endTurn(); return;
-        }
-        if (rule.needsForm && !rule.needsForm.includes(p.form)) {
-          lg.push({ t: m.name + " needs the form. You are not holding it.", k: "b" }); endTurn(); return;
-        }
-        b.used[m.name] = (b.used[m.name] || 0) + 1;
-        if (rule.cd) b.cool[m.name] = rule.cd;
-        const c2 = rule.cost2 || {};
-        if (c2.hp) { p.hp -= c2.hp; lg.push({ t: "It takes " + c2.hp + " out of you to fire.", k: "b" }); }
-        if (c2.blind) { b.eyeCost = (b.eyeCost || 0) + c2.blind; lg.push({ t: "Your vision tunnels.", k: "b" }); }
-        if (c2.eye) { b.eyeGone = true; lg.push({ t: "That eye is finished.", k: "b" }); }
-        if (c2.lifespan) b.lifeCost = (b.lifeCost || 0) + c2.lifespan;
-        if (c2.fatal) { b.fatalUse = m.name; lg.push({ t: "You called it knowing what it takes.", k: "b" }); }
-      }
-      lg.push({ t: "Seals complete. " + m.name + " — released.", k: "e" });
-      resolveTech(p, e, m, b, lg);
-      endTurn(); return;
-    }
-
-    /* ---------- start a technique (weave or instant) ---------- */
+    /* ---------- cast a technique, instant or sealed ----------
+       any hand seals this needed already ran as a quick-time sequence before act() was
+       called — see openSealQTE / resolveSealQTE — so by the time we get here it always
+       resolves in this single turn. qteAcc (0-1, undefined for seal-less moves) carries
+       how clean that sequence was and scales the result in resolveTech. */
     if (!move) { setBt(b); return; }
 
     const rule = ULT_RULES[move.name];
@@ -7973,43 +8046,36 @@ export default function ShinobiLife() {
       }
     }
 
-    const need = sealsNeeded(move);
     const realCost = move.kind === "buff" && move.eff === "evade" ? evadeCost(p, move.cost || 0) : (move.cost || 0);
+    if (realCost > p.ck) { lg.push({ t: "Not enough chakra — " + realCost + " needed.", k: "b" }); setBt(b); return; }
+    p.ck -= realCost;
 
-    /* instant techniques (seals 0) fire immediately */
-    if (need <= 0) {
-      if (realCost > p.ck) { lg.push({ t: "Not enough chakra — " + realCost + " needed.", k: "b" }); setBt(b); return; }
-      p.ck -= realCost;
-      if (move.name === "Breaking a Genjutsu") { genBreak(p, lg); endTurn(); return; }
-      if (move.kind === "buff") { applyBuff(p, move.eff || "atk", lg, "You"); endTurn(); return; }
-      if (move.kind === "heal") {
-        const h = Math.min(move.pow || 20, p.max - p.hp); p.hp += h;
-        lg.push({ t: move.name + ". Green light. +" + h + " HP.", k: "g" }); endTurn(); return;
-      }
-      resolveTech(p, e, move, b, lg);
-      endTurn(); return;
+    if (rule) {
+      b.used[move.name] = (b.used[move.name] || 0) + 1;
+      if (rule.cd) b.cool[move.name] = rule.cd;
+      const c2 = rule.cost2 || {};
+      if (c2.hp) { p.hp -= c2.hp; lg.push({ t: "It takes " + c2.hp + " out of you to fire.", k: "b" }); }
+      if (c2.blind) { b.eyeCost = (b.eyeCost || 0) + c2.blind; lg.push({ t: "Your vision tunnels.", k: "b" }); }
+      if (c2.eye) { b.eyeGone = true; lg.push({ t: "That eye is finished.", k: "b" }); }
+      if (c2.lifespan) b.lifeCost = (b.lifeCost || 0) + c2.lifespan;
+      if (c2.fatal) { b.fatalUse = move.name; lg.push({ t: "You called it knowing what it takes.", k: "b" }); }
     }
 
-    /* start weaving */
-    if (realCost > p.ck + 10) {
-      /* soft check — full cost paid on release */
-      lg.push({ t: "You do not have the chakra to finish that. Start something cheaper.", k: "b" }); setBt(b); return;
+    if (move.name === "Breaking a Genjutsu") { genBreak(p, lg); endTurn(); return; }
+    if (move.kind === "buff") { applyBuff(p, move.eff || "atk", lg, "You"); endTurn(); return; }
+    if (move.kind === "heal") {
+      const h = Math.min(Math.round((move.pow || 20) * (qteAcc === undefined ? 1 : cl(0.6 + qteAcc * 0.4, 0.6, 1))), p.max - p.hp);
+      p.hp += h;
+      lg.push({ t: move.name + ". Green light. +" + h + " HP.", k: "g" }); endTurn(); return;
     }
-    p.weaving = move.name;
-    p.sealProgress = 1;
-    p.charging = move.name;
-    const total = need;
-    if (total <= 1) {
-      /* one-seal technique: start and can release next action, but this turn is the weave */
-      lg.push({ t: "Hand seals. " + sealGlyphs(total, 1) + "  Building " + move.name + ". One more and it fires.", k: "n" });
-    } else {
-      lg.push({ t: "Hand seals. " + sealGlyphs(total, 1) + "  (" + 1 + "/" + total + ")  You begin " + move.name + ". Do not get hit.", k: "n" });
-    }
-    endTurn();
+    resolveTech(p, e, move, b, lg, qteAcc);
+    endTurn(); return;
   }
 
-  /* fire a resolved technique — shared by instant and release */
-  function resolveTech(attacker, defender, move, b, lg) {
+  /* fire a resolved technique — shared by instant and sealed casts.
+     qteAcc (0-1) is how clean the hand-seal sequence was, when there was one — a rushed
+     or botched sequence still fires, just weaker, rather than wasting the whole turn. */
+  function resolveTech(attacker, defender, move, b, lg, qteAcc) {
     const p = attacker; const e = defender;
     p._lastKind = move.kind;
     if (!tryHit(p, e, lg)) {
@@ -8018,8 +8084,12 @@ export default function ShinobiLife() {
       return;
     }
     let d = calcDmg(p, e, move.kind, move.pow, move.nature, move.pierce);
+    /* a rushed or botched seal sequence still fires — just weaker. a clean one gets a
+       small bonus on top, so playing it well is worth something beyond just "not worse". */
+    const sealMult = qteAcc === undefined ? 1 : cl(0.55 + qteAcc * 0.53, 0.55, 1.08);
+    d = Math.round(d * sealMult);
     if (c.cheats && c.cheats.oneShot) d = 999999;
-    const crit = roll(p.eva * 0.36);
+    const crit = roll(p.eva * 0.36 * (qteAcc === undefined ? 1 : cl(0.4 + qteAcc, 0.4, 1.3)));
     if (crit) d = Math.round(d * 1.65);
     const nm = natMult(move.nature, e.nature);
     e.hp -= d;
@@ -8033,6 +8103,10 @@ export default function ShinobiLife() {
     b.burstNature = move.nature || null;
     let hitLine = move.name + " connects. " + d + " damage.";
     if (crit) hitLine = move.name + " lands perfect — no defence, no recovery. Critical. " + d + " damage.";
+    if (qteAcc !== undefined) {
+      if (qteAcc >= 0.99) hitLine += " The seals came together clean.";
+      else if (qteAcc < 0.4) hitLine += " The seals were rushed and sloppy — it still lands, just not at full strength.";
+    }
     if (nm > 1.2) hitLine += " Nature advantage. Their element folds under yours.";
     else if (nm < 0.8) hitLine += " Their nature blunts the worst of it.";
     lg.push({ t: hitLine, k: "g" });
@@ -8041,10 +8115,6 @@ export default function ShinobiLife() {
     if (move.eff === "burn") { e.fx.burn = 3; lg.push({ t: "Black flame catches and will not go out.", k: "g" }); }
     if (move.self) { p.hp = Math.max(1, p.hp - move.self); lg.push({ t: "The technique costs you " + move.self + " HP.", k: "b" }); }
     if (move.pierce) lg.push({ t: "It goes straight through the guard.", k: "g" });
-    if (e.weaving) {
-      e.weaving = null; e.sealProgress = 0; e.charging = null; e.chargeLeft = 0;
-      lg.push({ t: "Your hit breaks their seals mid-weave. Whatever they were building dies unfinished.", k: "g" });
-    }
   }
 
   function flee() {
@@ -10397,7 +10467,6 @@ export default function ShinobiLife() {
                 {bt.p.fx.def > 0 && <Chip col={T.good}>Guard up</Chip>}
                 {bt.p.fx.evade > 0 && <Chip col={T.good}>Evading</Chip>}
                 {bt.p.fx.acc > 0 && <Chip col={T.good}>Reading</Chip>}
-                {bt.p.weaving && <span className="sl-hero" style={{ borderRadius: 99, display: "inline-flex" }}><Chip col={T.gold}>Weaving {bt.p.weaving} {sealGlyphs(sealsNeeded(MOVES[bt.p.weaving] || { seals: 1 }), bt.p.sealProgress || 0)}</Chip></span>}
               </div>
             </div>
 
@@ -10409,6 +10478,8 @@ export default function ShinobiLife() {
                   className="font-bold mb-3 text-2xl">{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
                 <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10, position: "relative" }} className="w-full py-3 font-bold">Continue</button>
               </div>
+            ) : sealQTE ? (
+              <SealQTEPanel qte={sealQTE} answer={answerSealQTE} cancel={closeSealQTE} accent={accent} stepMs={sealStepMs(sealQTE.sequence.length)} />
             ) : (
               <div style={{ maxHeight: "34vh" }} className="overflow-auto">
                 <div className="grid grid-cols-2 gap-2 mb-2">
@@ -10423,15 +10494,6 @@ export default function ShinobiLife() {
                         </button>
                       );
                     }
-                    if (m.kind === "weave_continue" || m.kind === "weave_abort") {
-                      return (
-                        <button key={"w" + i} onClick={() => act(m)}
-                          style={{ background: m.ready ? T.gold + "22" : T.panel, border: "1px solid " + (m.ready ? T.gold : T.line), color: T.text, borderRadius: 8 }} className="px-2.5 py-2 text-left">
-                          <div className="text-xs font-bold leading-tight">{m.name}</div>
-                          <div style={{ fontSize: 10, color: m.ready ? T.gold : T.dim }}>{m.ready ? "seals complete — fire it" : m.kind === "weave_abort" ? "drop the sequence" : "keep forming seals"}</div>
-                        </button>
-                      );
-                    }
                     const rule = ULT_RULES[m.name];
                     const usedN = (bt.used && bt.used[m.name]) || 0;
                     const cd = (bt.cool && bt.cool[m.name]) || 0;
@@ -10439,11 +10501,11 @@ export default function ShinobiLife() {
                     const cooling = rule && rule.cd && cd > 0;
                     const wrongForm = rule && rule.needsForm && !rule.needsForm.includes(bt.p.form);
                     const need = sealsNeeded(m);
-                    const short = spent || cooling || wrongForm || ((m.cost || 0) > bt.p.ck + 15 && need > 0);
-                    const sealNote = need <= 0 ? "instant" : need + " seal" + (need === 1 ? "" : "s");
+                    const short = spent || cooling || wrongForm || ((m.cost || 0) > bt.p.ck);
+                    const sealNote = need <= 0 ? "instant" : need + " seal" + (need === 1 ? "" : "s") + " · tap to cast";
                     const note = spent ? "spent" : cooling ? cd + " turn" + (cd === 1 ? "" : "s") : wrongForm ? "needs form" : null;
                     return (
-                      <button key={i} onClick={() => act(m)} disabled={short}
+                      <button key={i} onClick={() => (need > 0 ? openSealQTE(m) : act(m))} disabled={short}
                         style={{ background: m.tier >= 6 ? "#1d1808" : T.panel, border: "1px solid " + (m.tier >= 6 ? T.gold + "99" : need > 0 ? accent + "88" : T.line), color: short ? T.dim : T.text, opacity: short ? .4 : 1, borderRadius: 8 }} className="px-2.5 py-2 text-left">
                         <div className="text-xs font-bold leading-tight">{need > 0 ? "Weave: " + m.name : m.name}</div>
                         <div style={{ fontSize: 10 }}>
