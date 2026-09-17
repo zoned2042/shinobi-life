@@ -3181,6 +3181,14 @@ function relationTick(c, L) {
 
 /* ============================ THE OTSUTSUKI ============================ */
 /* They are not shinobi. They are what shinobi are made out of, and they came back for it. */
+/* the blood before you. all of them are long dead — that is the point of listing them. */
+const OTSUTSUKI_ANCESTORS = [
+  { id: "kaguya", n: "Kaguya Otsutsuki", d: "The one who ate the fruit first. Mother of the clan as the world came to know it, and the reason there is a moon." },
+  { id: "hagoromo", n: "Hagoromo Otsutsuki", d: "The Sage of the Six Paths. Split the Ten-Tails apart rather than let the world die with him, and gave it ninjutsu on the way out." },
+  { id: "hamura", n: "Hamura Otsutsuki", d: "The quieter brother. Took the Byakugan line to the far side of the moon and founded the branch of the clan that still watches from there." },
+  { id: "ashura", n: "Ashura Otsutsuki", d: "Hagoromo's younger son. Chosen for his heart rather than his gift — the root of every will-of-fire clan since." },
+  { id: "indra", n: "Indra Otsutsuki", d: "Hagoromo's elder son. Chosen for nothing, and resented it his whole life — the root of the Sharingan line." },
+];
 const DOJUTSU_PATHS = [
   { id: "byakugan", n: "Byakugan", tier: 1,
     d: "Three hundred and sixty degrees, through walls, down to the chakra in a person's arm.",
@@ -3592,10 +3600,17 @@ function checkEpithet(c, L) {
   const earned = EPITHETS.filter((e) => { try { return e.w(c); } catch (err) { return false; } })
     .sort((a, b) => b.pri - a.pri)[0];
   if (!earned) return;
+  const isNew = !(c.epithets || []).includes(earned.n);
+  if (isNew) c.epithets = (c.epithets || []).concat([earned.n]);
+  /* once you have picked one yourself, the world stops overwriting it on its own —
+     new ones still get earned and added to the list, just not forced on you */
+  if (c.epithetPicked) {
+    if (isNew) P(L, "People have started calling you something new — " + earned.n + ". You can pick it up under Profile if you want it.", "n");
+    return;
+  }
   if (c.epithet === earned.n) return;
   const first = !c.epithet;
   c.epithet = earned.n;
-  c.epithets = (c.epithets || []).concat([earned.n]).filter((x, i, a) => a.indexOf(x) === i);
   P(L, first
     ? "People have started calling you something. " + c.name + " " + earned.n + " — you did not pick it and you cannot stop it."
     : "What they call you has changed. You are " + c.name + " " + earned.n + " now.", "e");
@@ -7196,6 +7211,20 @@ export default function ShinobiLife() {
     { id: "face", n: "Carve the Faces Into the Cliff", d: "Yours and every one before it, cut into the rock above the village.", cost: 400000, e: "+15 standing, permanently." },
   ];
   const isLeader = (cc) => (cc.rank >= 6 || !!cc.founded) && !cc.retired;
+  /* pick which of your earned epithets people actually use — or hand it back to the world.
+     you can only choose among ones you have genuinely earned; nothing here is invented. */
+  function chooseEpithet(name) {
+    commit((c2, L2) => {
+      if (name === null) {
+        c2.epithetPicked = false;
+        P(L2, "You stop correcting people. Whatever they are calling you this year is what it is.", "n");
+      } else {
+        c2.epithet = name;
+        c2.epithetPicked = true;
+        P(L2, "You started answering to " + name + ". It sticks faster once you stop flinching at it.", "n");
+      }
+    });
+  }
   /* the same figure the promotion roll uses, so the panel can show it honestly */
   const joninOdds = (cc) => cl(26 + (power(cc) - 66) * 1.7 + cc.standing * 0.22 + (cc.jutsu.length - 10) * 0.6, 6, 88);
   /* an ANBU operative doesn't have to announce it — most of the time the hat just
@@ -10749,6 +10778,15 @@ export default function ShinobiLife() {
           ))}
           <Row label={c.parents.f.name} sub={c.parents.f.alive ? "Your father" : "Deceased"} disabled />
           <Row label={c.parents.m.name} sub={c.parents.m.alive ? "Your mother" : "Deceased"} disabled />
+          {c.clan === "Otsutsuki" && (
+            <>
+              <div style={{ color: T.epic, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">THE LINE BEHIND YOU</div>
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Every one of them is long dead. None of them stopped being your blood for it.</div>
+              {OTSUTSUKI_ANCESTORS.map((a) => (
+                <Row key={a.id} label={a.n} sub={a.d + " Deceased, long before you were born."} disabled />
+              ))}
+            </>
+          )}
         </Modal>
       )}
 
@@ -12916,6 +12954,21 @@ export default function ShinobiLife() {
             ))}
           </div>
           {c.titles.length > 0 && <div className="mb-4 flex flex-wrap gap-2">{c.titles.map((t, i) => <Chip key={i} col={T.gold}>{t}</Chip>)}</div>}
+          {(c.epithets || []).length > 0 && (
+            <div className="mb-4">
+              <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mb-2">WHAT THEY CALL YOU</div>
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                Every one of these was earned, not chosen. Pick which one you actually answer to — or let the world decide for you.
+              </div>
+              {c.epithets.map((e, i) => (
+                <Row key={i} label={e} sub={c.epithetPicked && c.epithet === e ? "This is what you go by" : "Earned, not currently in use"}
+                  right={c.epithetPicked && c.epithet === e ? "In use" : "Use this"}
+                  onClick={() => chooseEpithet(e)} disabled={c.epithetPicked && c.epithet === e} tone={c.epithetPicked && c.epithet === e ? T.gold : null} />
+              ))}
+              <Row label="Let the world decide" sub="Whatever you have earned most recently, or most loudly, becomes what they call you — automatically, same as before you started picking."
+                right={!c.epithetPicked ? "In use" : "Use"} onClick={() => chooseEpithet(null)} disabled={!c.epithetPicked} tone={!c.epithetPicked ? T.gold : null} />
+            </div>
+          )}
           <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mb-2">JUTSU ({c.jutsu.length})</div>
           {c.jutsu.length === 0 && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">You have not learned a single technique yet.</div>}
           {["LEGENDARY", "Ninjutsu", "Taijutsu", "Illusion", "Transformation", "Defence", "Evasion", "Support", "Healing", "Technique"].map((cat) => {
