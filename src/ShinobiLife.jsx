@@ -546,7 +546,11 @@ const NAMED = {
   urashiki: N("Urashiki Otsutsuki", "The chakra thief", 96, 54, "Chakra", "Steals chakra, rewinds time, and gloats through both.", [["Time Rewind", 0, "guard"], ["Chakra Siphon Rod", 1.3, "nin"], ["Fishing Rod Snare", 1.2, "tai"]], "Chakra Siphon Rod"),
   momoshiki: N("Momoshiki Otsutsuki", "The harvester", 106, 54, "Chakra", "Eats chakra fruit and treats your world as an orchard.", [["Absorb and Amplify", 1.4, "nin"], ["Rinnegan Shrink", 1.35, "nin"], ["Golden Barrier", 0, "guard"]], "Absorb and Amplify"),
 };
-
+/* reverse lookup — a student's name to whichever NAMED entry it belongs to, if any.
+   a canon figure already has a real death year and a real history tracked elsewhere;
+   nothing that only knows how to make up genin fates should be allowed near them. */
+const NAMED_ID_BY_NAME = {};
+Object.entries(NAMED).forEach(([id, v]) => { NAMED_ID_BY_NAME[v.name] = id; });
 
 const ERA_RESERVE = {
   warring: ["tajima", "kawarama", "toka", "izuna", "butsuma"],
@@ -2184,6 +2188,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "8.8", n: "The Tobirama Cell Bug, and Full Arsenals", items: [
+    "Fixed a real one: a canon sensei's cell (the Tobirama Cell — Hiruzen, Danzo, Homura, Koharu — and the same pattern under Hashirama) reassigned itself the moment it dissolved, because nothing marked it as already given out. That is what put the same four names in both 'already taught' and 'your students' at once, with contradictory ranks in each list",
+    "Deeper cause of the fate text making no sense: Hiruzen and Danzo are tracked historical figures with a real death year recorded elsewhere in the game, but the cell-dissolution code didn't know that and was rolling them a random genin fate — 'killed on a mission you were not on' — same as it would for a made-up student. Any tracked figure now gets a fate that doesn't contradict their real history, and can no longer be killed off early on a field trip that was never meant to touch them",
+    "Every selectable Kage — Hashirama, Tobirama, Hiruzen, Minato, Tsunade, Kakashi, Naruto — now starts with their actual arsenal instead of two or three headline moves. Tobirama alone goes from 2 jutsu to 8: both Water Dragon Bullet and Grand Waterfall Flow, Hiding in Mist, Water Prison, Flying Thunder God, Shadow Clone Jutsu, Body Flicker and Edo Tensei",
+  ] },
   { v: "8.7", n: "Hand Seals, Reworked", items: [
     "Hand seals no longer cost real turns. Picking a technique that needs them opens a quick-time sequence — press the seal shown before the beat runs out — that resolves entirely within the same turn you cast it. No more standing there eating free hits while you build up a technique across several turns",
     "A rushed or botched sequence still fires — just weaker (as low as ~55% power). A clean sequence gets a small bonus on top. Either way you are never fully punished for missing a beat, and the enemy never gets more than their normal one turn out of your cast",
@@ -3152,19 +3161,33 @@ const CANON_STARTS = [
     stats: { nin: 50, tai: 44, gen: 30, int: 52, spd: 52, ck: 60 }, jutsu: ["Shadow Clone Jutsu", "Rasengan"], d: "Your father is the Hokage and is never home. The mark on your hand is nobody's fault yet." },
   /* --- take the seat as --- */
   { id: "hashirama", n: "Hashirama Senju", role: "kage", era: "founding", village: "konoha", clan: "Senju", kg: "Wood Release", seat: true, seatAge: 35,
-    stats: { nin: 96, tai: 82, gen: 74, int: 80, spd: 78, ck: 99 }, jutsu: ["Wood Style: Great Forest", "Sage Mode"], d: "The God of Shinobi, first to hold the hat, and the only man Madara ever feared." },
+    stats: { nin: 96, tai: 82, gen: 74, int: 80, spd: 78, ck: 99 },
+    jutsu: ["Wood Style: Binding Roots", "Wood Style: Great Forest", "Wood Style: True Thousand Hands", "Water Style: Water Dragon Bullet", "Water Style: Wild Wave", "Sage Mode", "Shadow Clone Jutsu", "Body Flicker", "Substitution Jutsu"],
+    d: "The God of Shinobi, first to hold the hat, and the only man Madara ever feared." },
   { id: "tobirama", n: "Tobirama Senju", role: "kage", era: "founding", village: "konoha", clan: "Senju", seat: true, seatAge: 38,
-    stats: { nin: 92, tai: 74, gen: 78, int: 96, spd: 90, ck: 84 }, jutsu: ["Water Style: Water Dragon Bullet", "Flying Thunder God"], d: "Second Hokage. Invented half of what everyone else uses, and holds the seat for two years before the war takes you." },
+    stats: { nin: 92, tai: 74, gen: 78, int: 96, spd: 90, ck: 84 },
+    jutsu: ["Water Style: Water Dragon Bullet", "Water Style: Grand Waterfall Flow", "Water Style: Hiding in Mist", "Water Style: Water Prison", "Flying Thunder God", "Shadow Clone Jutsu", "Body Flicker", "Edo Tensei"],
+    d: "Second Hokage. Invented half of what everyone else uses, and holds the seat for two years before the war takes you." },
   { id: "hiruzen", n: "Hiruzen Sarutobi", role: "kage", era: "sannin", village: "konoha", clan: "Sarutobi", seat: true, seatAge: 22, polymath: true, natures: ["Fire", "Earth"],
-    stats: { nin: 94, tai: 76, gen: 88, int: 92, spd: 74, ck: 88 }, jutsu: ["Reaper Death Seal", "Fire Style: Fireball Jutsu"], d: "The Professor. Every technique in the village and a seat you will hold longer than anyone." },
+    stats: { nin: 94, tai: 76, gen: 88, int: 92, spd: 74, ck: 88 },
+    jutsu: ["Reaper Death Seal", "Fire Style: Fireball Jutsu", "Fire Style: Dragon Flame Bomb", "Fire Style: Great Fire Annihilation", "Earth Style: Mud Wall", "Earth Style: Earth Dome", "Earth Style: Mountain Uplift", "Shadow Clone Jutsu", "Body Flicker", "Substitution Jutsu", "Transformation Jutsu", "Chakra Sensing"],
+    d: "The Professor. Every technique in the village and a seat you will hold longer than anyone." },
   { id: "minatoK", n: "Minato Namikaze", role: "kage", era: "third", village: "konoha", clan: "Namikaze", seat: true, seatAge: 23,
-    stats: { nin: 92, tai: 78, gen: 70, int: 94, spd: 99, ck: 82 }, jutsu: ["Flying Thunder God", "Rasengan"], d: "The Yellow Flash. Fourth Hokage, three years in the seat, and a night coming that you already know the shape of." },
+    stats: { nin: 92, tai: 78, gen: 70, int: 94, spd: 99, ck: 82 },
+    jutsu: ["Flying Thunder God", "Rasengan", "Reaper Death Seal", "Contract Seal", "Five Elements Seal", "Sage Mode", "Body Flicker", "Shadow Clone Jutsu"],
+    d: "The Yellow Flash. Fourth Hokage, three years in the seat, and a night coming that you already know the shape of." },
   { id: "tsunadeK", n: "Tsunade", role: "kage", era: "naruto", village: "konoha", clan: "Senju", seat: true, seatAge: 51,
-    stats: { nin: 84, tai: 96, gen: 62, int: 88, spd: 68, ck: 80 }, jutsu: ["Mystical Palm Jutsu", "Creation Rebirth"], d: "Fifth Hokage, last of the Senju, and the best medic alive whether you want the job or not." },
+    stats: { nin: 84, tai: 96, gen: 62, int: 88, spd: 68, ck: 80 },
+    jutsu: ["Mystical Palm Jutsu", "Creation Rebirth", "Strength of a Hundred Seal", "Chakra Scalpel", "Poison Extraction", "Body Flicker"],
+    d: "Fifth Hokage, last of the Senju, and the best medic alive whether you want the job or not." },
   { id: "kakashiK", n: "Kakashi Hatake", copyNin: true, role: "kage", era: "boruto", village: "konoha", clan: "Hatake", seat: true, seatAge: 31, polymath: true, natures: ["Lightning", "Water", "Earth"],
-    stats: { nin: 88, tai: 76, gen: 74, int: 92, spd: 80, ck: 70 }, jutsu: ["Lightning Style: Lightning Blade", "Lightning Style: Kirin"], d: "Sixth Hokage, and the only one who took the job because nobody else would." },
+    stats: { nin: 88, tai: 76, gen: 74, int: 92, spd: 80, ck: 70 },
+    jutsu: ["Lightning Style: Lightning Blade", "Lightning Style: Kirin", "Kamui", "Copy Wheel Eye", "Water Style: Water Dragon Bullet", "Earth Style: Mud Wall", "Fire Style: Fireball Jutsu", "Silent Killing", "Body Flicker", "Substitution Jutsu"],
+    d: "Sixth Hokage, and the only one who took the job because nobody else would." },
   { id: "narutoK", n: "Naruto Uzumaki", role: "kage", era: "boruto", village: "konoha", clan: "Uzumaki", seat: true, seatAge: 31, beast: 9,
-    stats: { nin: 98, tai: 88, gen: 40, int: 70, spd: 90, ck: 99 }, jutsu: ["Shadow Clone Jutsu", "Tailed Beast Rasengan", "Sage Mode"], d: "Seventh Hokage. You got everything you said you would and the paperwork is endless." },
+    stats: { nin: 98, tai: 88, gen: 40, int: 70, spd: 90, ck: 99 },
+    jutsu: ["Shadow Clone Jutsu", "Multi-Shadow Clone Jutsu", "Rasengan", "Rasenshuriken", "Tailed Beast Rasengan", "Sage Mode", "Toad Sage Mode", "Six Paths Sage Mode", "Six Paths: Tailed Beast Rasenshuriken", "Tailed Beast Bomb", "Kurama Chakra Mode", "Baryon Mode"],
+    d: "Seventh Hokage. You got everything you said you would and the paperwork is endless." },
 ];
 
 /* ============================ PEOPLE ============================ */
@@ -4702,8 +4725,14 @@ function studentProgressTick(c, L) {
     if (!c.formerStudents) c.formerStudents = [];
     c.students.forEach((st) => {
       const canon = STUDENT_FATES[st.name];
+      /* a name that belongs to a tracked historical figure already has a real death year
+         and a real history running elsewhere in the game — the made-up fate roll below is
+         for invented students only, and must never be allowed to contradict it */
+      const isNamed = !!NAMED_ID_BY_NAME[st.name];
       let fate = canon, extra = {};
-      if (!canon) {
+      if (!canon && isNamed) {
+        fate = "went back to the life the histories already have written down for them";
+      } else if (!canon) {
         /* what became of them has to fit how far they actually got */
         const ri2 = STUDENT_RANKS.indexOf(st.rank || "Genin");
         const fits = GENERIC_FATES.filter((f) => ri2 >= (f.min || 0) && (f.max === undefined || ri2 <= f.max));
@@ -4711,7 +4740,7 @@ function studentProgressTick(c, L) {
         const f = pick(pool); fate = f.t; extra = f;
         if (f.t.includes("made jonin")) st.rank = "Jonin";
       }
-      if (!st.alive) fate = "was killed while they were still yours, and you signed the letter";
+      if (!st.alive && !isNamed) fate = "was killed while they were still yours, and you signed the letter";
       c.formerStudents.push({ name: st.name, rank: st.rank || "Genin", pw: st.pw, fate, year: c.year, squad: c.studentSquad });
       if (extra.standing) c.standing = cl(c.standing + extra.standing);
       if (extra.infamy) c.infamy = cl(c.infamy + extra.infamy);
@@ -4744,11 +4773,16 @@ function studentTitleTick(c, L) {
   newsItem(c, "Three " + (c.founded ? c.founded.name : vName2(c.village)) + " shinobi survived " + e2.by + " at " + e2.where + ". He has named them " + e2.title + ". They were taught by " + c.name + ".", "BINGO BOOK", true);
 }
 function assignSenseiSquad(c, L) {
-  if (!c.canonId || c.students) return;
+  /* canonSquadDone: the canon cell is a one-time assignment. Without this, the moment
+     it dissolves (c.students goes back to null) this fires again on the very next tick
+     and hands you the exact same four names as a brand new cell — which is how a squad
+     ends up listed as both "already taught" and "your students" at once. */
+  if (!c.canonId || c.students || c.canonSquadDone) return;
   const sq = SENSEI_SQUADS[c.canonId];
   if (!sq || c.rank < 4) return;
   c.students = sq.mates.map((m) => ({ name: m, alive: true, pw: rr(24, 44) }));
   c.studentSquad = sq.n;
+  c.canonSquadDone = true;
   if (sq.earns) c.studentEarn = sq.earns;
   P(L, "The tower has given you a cell of your own. " + sq.n + " — " + joinList(sq.mates) + ". " + sq.d, "e");
   newsItem(c, c.name + " has been assigned " + sq.n + " as their first command: " + joinList(sq.mates) + ".", "THE VILLAGES");
@@ -6949,7 +6983,9 @@ export default function ShinobiLife() {
           P(L, "You took them out on something real and brought all three back. They came back different.", "e");
         } else {
           const hurt = pick(live);
-          if (live.length > 1 && roll(28)) {
+          /* a tracked historical figure does not get to die on a made-up C-rank —
+             their real death year, if they have one, is handled elsewhere */
+          if (live.length > 1 && roll(28) && !NAMED_ID_BY_NAME[hurt.name]) {
             hurt.alive = false; c.standing = cl(c.standing - 8);
             P(L, hurt.name + " did not come back. You were their sensei and you chose the mission.", "b");
             newsItem(c, hurt.name + " of " + (c.founded ? c.founded.name : vName2(c.village)) + " has been killed on a C-rank that turned. They were " + c.name + "'s student.", "OBITUARIES", true);
