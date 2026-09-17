@@ -1323,10 +1323,19 @@ function buildWar(c, L, opts) {
   P(L, w.name + " has begun. " + cap(side) + " against " + foeSummary(w) + ". The fighting opens at " + w.front + ".", "e");
   if (w.blurb) P(L, w.blurb, "n");
   if (w.allies.length) P(L, "Sworn to you and not yet committed: " + joinList(w.allies.map((a) => a.name)) + ". They will have to be called.", "n");
-  /* one headline for the declaration, however many they are */
-  newsItem(c, w.name + " has been declared. " + cap(side) + (multi
-    ? " stands against " + foes.length + (ERA.hideVillages ? " clans" : " countries") + " at once — " + shortList(foes.map((f) => f.name), 3) + "."
-    : " stands against " + foes[0].name + " under " + foes[0].leaderName + "."), "WAR", true);
+  /* one headline for the declaration, however many they are — but a canon Great War was
+     already announced to the world on the calendar year it actually started (see HISTORIC).
+     somebody posted to its front years late (too young at the outbreak, for instance) is
+     not a fresh declaration, and saying so a second time, years off, is exactly the "the
+     war doesn't happen in the year it's supposed to" bug: the headline that actually
+     matters here is that this village has joined a war already in progress. */
+  newsItem(c, canon
+    ? cap(side) + " has been posted to the front of " + w.name + ". " + (multi
+      ? "Stands against " + foes.length + (ERA.hideVillages ? " clans" : " countries") + " at once — " + shortList(foes.map((f) => f.name), 3) + "."
+      : "Stands against " + foes[0].name + " under " + foes[0].leaderName + ".")
+    : w.name + " has been declared. " + cap(side) + (multi
+      ? " stands against " + foes.length + (ERA.hideVillages ? " clans" : " countries") + " at once — " + shortList(foes.map((f) => f.name), 3) + "."
+      : " stands against " + foes[0].name + " under " + foes[0].leaderName + "."), "WAR", true);
   if (declaredGreat) P(L, "This is not a border war any more. " + foes.length + " at once is what the histories call a Great War, and this one has your name on the first page of it.", "e");
 }
 
@@ -2168,6 +2177,8 @@ const ANBU_OPS = [
   { id: "purge", n: "Internal Purge", d: "The traitor is one of your own. The order came from the top and it is not up for discussion.", def: "hunter", pay: [100000, 220000], rep: 6, ms: 1, dark: true },
   { id: "shadow", n: "The Kage's Shadow", d: "Stand behind them at the summit and be ready for the room, not the speech.", def: "missing", pay: [150000, 320000], rep: 8, ms: 1 },
   { id: "defector", n: "Hunt a Defector", d: "They took the scroll and a head start. Bring back both, or neither.", def: "missing", pay: [180000, 400000], rep: 7, ms: 1 },
+  { id: "watch", n: "The Long Watch", d: "Three months in a rented room across the street, learning a stranger's schedule before you learn their name. Then it stops being a schedule.", def: "hunter", pay: [130000, 280000], rep: 9, ms: 2 },
+  { id: "cradle", n: "Cut the Cradle", d: "A bloodline is being bred like livestock somewhere it shouldn't be. Somebody in the tower wants it to stop existing before the council finds out it ever did.", def: "swordsman", pay: [160000, 340000], rep: 10, ms: 2, dark: true },
   { id: "blackout", n: "Blackout Operation", d: "No mission number, no debrief, no record. If you are caught the village will deny you exist.", def: "akatsuki", pay: [300000, 700000], rep: 12, ms: 2, dark: true },
 ];
 
@@ -5605,7 +5616,7 @@ export default function ShinobiLife() {
           if (roll(40)) {
             P(L, "They moved against you and had the numbers. You were removed from the seat by your own council.", "b");
             v.history.push({ name: c.name, title: c.rankName, from: v.reignStart, to: c.age, deed: "removed by the council" });
-            c.retired = true; c.rank = 4; c.rankName = "Deposed " + v.kageWord; c.standing = cl(c.standing - 30);
+            c.retired = true; c.retiredFrom = c.village; c.rank = 4; c.rankName = "Deposed " + v.kageWord; c.standing = cl(c.standing - 30);
             newsItem(c, c.name + " has been removed from the seat of " + v.kageWord + " by the village council.");
           }
         }
@@ -6480,7 +6491,7 @@ export default function ShinobiLife() {
         ln3.current = { id: nx.id && !isDead(c, nx.id) ? nx.id : null, name: nx.id && NAMED[nx.id] && !isDead(c, nx.id) ? NAMED[nx.id].name : nm, from: c.year, term: nx.term || rr(14, 26), player: false };
         c.kages[c.village] = { named: ln3.current.id, name: ln3.current.name, title: kageOrdinal(ln3) + " " + kageWordFor(c, c.village) };
       }
-      c.retired = true; c.rank = 5; c.rankName = "Elder of " + v.name;
+      c.retired = true; c.retiredFrom = c.village; c.rank = 5; c.rankName = "Elder of " + v.name;
       addTitle(c, kageTitleFor(v) + " (retired)");
       if (!c.founded) c.kages[c.village] = { named: null, name: nm, title: v.kageWord };
       c.rule.successor = nm;
@@ -6644,9 +6655,10 @@ export default function ShinobiLife() {
       const ch = cl(32 + (power(c) - 38) * 2 + c.standing * 0.25 - (prodigy ? 10 : 0), 5, 92);
       if (roll(ch)) {
         const mask = pick(ANBU_MASKS.filter((m) => true));
-        c.anbu = { code: mask, missions: 0, captain: false, commander: false, squad: rr(2, 9), joined: c.age };
+        const alias = givenName(c.gender);
+        c.anbu = { code: mask, alias, missions: 0, captain: false, commander: false, squad: rr(2, 9), joined: c.age };
         addTitle(c, TT(c, "anbuName") + ": " + mask);
-        P(L, "A porcelain " + mask.toLowerCase() + " mask was left on your pillow with no note. You are " + mask + " of Squad " + c.anbu.squad + " now, and the name your parents gave you does not get used on duty.", "e");
+        P(L, "A porcelain " + mask.toLowerCase() + " mask was left on your pillow with no note, and a single name written under it that is not yours — " + alias + ". You are " + mask + " of Squad " + c.anbu.squad + " now, and the name your parents gave you does not get used on duty.", "e");
         if (prodigy) { P(L, "You are " + c.age + ". Nobody that young has been taken in living memory, and the older operatives have noticed.", "e"); newsItem(c, "An operative younger than any on record has been sworn into " + TT(c, "anbuName") + "."); }
       } else P(L, TT(c, "anbuName") + " watched you for a year and passed. No explanation given.", "b");
     });
@@ -8604,8 +8616,11 @@ export default function ShinobiLife() {
       } else P(L, "The tower passed you over for " + rankLabel(c, 5) + " this year.", "b");
     }
       if (target === 6) {
-        if (c.retired) {
-          P(L, "You stepped down. A village does not hand the seat back to the person who put it down — you would have to take it, and everyone would know you took it.", "b");
+        /* stepping down (or being deposed) only closes the door on the seat you left —
+           a different village has never heard that story and will judge you on your own
+           record there, same as anybody else who walks in with a strong file. */
+        if (c.retired && c.retiredFrom === c.village) {
+          P(L, "You stepped down here. This village does not hand the seat back to the person who put it down — you would have to take it, and everyone would know you took it.", "b");
           return;
         }
         const seatHeld = !eraOf(c).hideVillages && c.line && c.line[c.village] && c.line[c.village].current && !c.line[c.village].current.player;
@@ -8614,6 +8629,10 @@ export default function ShinobiLife() {
           return;
         }
         if (roll(cl(12 + (power(c) - 78) * 2.2 + (c.standing - 60) * 0.7, 2, 85))) {
+          /* a second seat, wherever it is, is a fresh reign — not an extension of the one
+             you already stepped down from, and not still carrying that village's treasury
+             and council into a tower it has never set foot in */
+          c.retired = false; c.retiredFrom = null; c.vil = null;
           if (eraOf(c).hideVillages) {
             const kt = eraOf(c).kage || "Clan Head";
             c.rank = 6; c.rankName = kt; addTitle(c, kt); c.standing = 100;
@@ -10105,7 +10124,7 @@ export default function ShinobiLife() {
             {c.vil && <div><span style={{ color: T.gold }}>{c.vil.name} </span>gen {c.vil.gen} · morale {c.vil.morale} · council {councilLoyalty(c.vil)}</div>}
             {c.vil && c.vil.decrees.length > 0 && <div><span style={{ color: T.dim }}>Decrees </span>{c.vil.decrees.length}</div>}
             {c.retired && <div style={{ color: T.dim }}>Retired from the seat</div>}
-            {c.anbu && <div><span style={{ color: T.epic }}>{TT(c, "anbuName")} </span>{c.anbu.code} · Squad {c.anbu.squad}{c.anbu.commander ? " · Commander" : c.anbu.captain ? " · Captain" : ""} · {c.anbu.missions} ops</div>}
+            {c.anbu && <div><span style={{ color: T.epic }}>{TT(c, "anbuName")} </span>{c.anbu.code}{c.anbu.alias ? " (" + c.anbu.alias + ")" : ""} · Squad {c.anbu.squad}{c.anbu.commander ? " · Commander" : c.anbu.captain ? " · Captain" : ""} · {c.anbu.missions} ops</div>}
             {c.war && <div><span style={{ color: T.blood }}>{c.war.name} </span>vs {c.war.enemyName} · {c.war.momentum}% · front {c.war.front}</div>}
             {c.reanimated.length > 0 && <div><span style={{ color: T.epic }}>Reanimated </span>{c.reanimated.map((id) => NAMED[id].name).join(", ")}</div>}
             {c.dead.length > 0 && <div><span style={{ color: T.dim }}>Names killed </span>{c.dead.length}</div>}
@@ -10803,7 +10822,7 @@ export default function ShinobiLife() {
                 : "Requires 2 years at " + rankLabel(c, 3)}
               right={canJonin && c.joninVacancy ? "~" + Math.round(joninOdds(c)) + "%" : canJonin ? "Roll full" : null}
               onClick={() => promote(4)} disabled={!canJonin} tone={canJonin && c.joninVacancy ? accent : null} />
-            {(!eraOf(c).hideVillages || c.anbu) && <Row label={c.anbu ? TT(c, "anbuName") + " \u2014 you are " + c.anbu.code : "Answer " + TT(c, "anbu")}
+            {(!eraOf(c).hideVillages || c.anbu) && <Row label={c.anbu ? TT(c, "anbuName") + " \u2014 you are " + c.anbu.code + (c.anbu.alias ? ", " + c.anbu.alias : "") : "Answer " + TT(c, "anbu")}
               sub={c.anbu ? "Open the black ops file" : canAnbu ? (c.age < 14 ? "They do not usually take anyone this young. They are watching you anyway." : "Masks, black ops, no names") : "Requires age 11 and power 36"}
               right={c.anbu ? "Open" : "Apply"} onClick={() => (c.anbu ? setModal("anbu") : joinAnbu())} disabled={!c.anbu && !canAnbu} tone={c.anbu ? T.epic : null} />}
             <Row label={"Accept promotion to " + rankLabel(c, 5)} sub={canElite ? "The rank above jonin, and the paperwork that comes with it" : "Requires 2 years at " + rankLabel(c, 4)} onClick={() => promote(5)} disabled={!canElite} />
@@ -11309,7 +11328,7 @@ export default function ShinobiLife() {
           <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 8 }} className="p-3 mb-3">
             <div className="flex justify-between items-baseline">
               <div>
-                <div className="text-lg font-bold" style={{ color: T.epic }}>{c.anbu.code}</div>
+                <div className="text-lg font-bold" style={{ color: T.epic }}>{c.anbu.code}{c.anbu.alias ? <span style={{ color: T.dim, fontWeight: 500, fontSize: 13 }}> — {c.anbu.alias}</span> : null}</div>
                 <div style={{ color: T.dim }} className="text-xs">Squad {c.anbu.squad} · {c.anbu.commander ? "Commander" : c.anbu.captain ? "Squad Captain" : "Operative"} · sworn in at {c.anbu.joined != null ? c.anbu.joined : c.age}</div>
               </div>
               <div className="text-right"><div style={{ color: T.gold }} className="text-sm font-bold">{c.anbu.missions}</div><div style={{ color: T.dim }} className="text-xs">operations</div></div>
