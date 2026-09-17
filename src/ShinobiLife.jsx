@@ -907,14 +907,16 @@ function seedHistoricDeaths(c) {
   });
 }
 
-/* the four great wars, with who actually fought them and what they were about */
+/* the four great wars, with who actually fought them and what they were about.
+   real fronts, not a five-way free-for-all — Konoha and Suna stood together in
+   every one of the first three, the way the records actually have it. */
 const GREAT_WARS = [
-  { no: 1, from: 927, to: 940, all: ["konoha", "suna", "kumo", "iwa", "kiri"], over: "the borders the founding left unsettled",
-    note: "Five nations, no alliances that hold, everybody against everybody. Tobirama Senju dies covering a retreat and the map is redrawn twice before anybody signs." },
-  { no: 2, from: 958, to: 969, all: ["konoha", "suna", "kumo", "iwa", "kiri"], over: "Amegakure, and everybody's right to march through it",
+  { no: 1, from: 927, to: 940, sides: [["konoha", "suna"], ["kumo", "iwa"]], over: "the borders the founding left unsettled",
+    note: "Kirigakure stays out of it, already turning inward toward what it will become. Tobirama Senju dies covering a retreat and the map is redrawn twice before anybody signs." },
+  { no: 2, from: 958, to: 969, sides: [["konoha", "suna"], ["iwa", "kumo", "kiri"]], over: "Amegakure, and everybody's right to march through it",
     note: "The war that makes three orphans in Ame into something else, and gives three Konoha genin a name." },
-  { no: 3, from: 969, to: 973, all: ["konoha", "suna", "kumo", "iwa", "kiri"], over: "Kusagakure and the bridge at Kannabi",
-    note: "Fought mostly by children. Kakashi makes jonin at thirteen and loses Obito the same season." },
+  { no: 3, from: 969, to: 973, sides: [["konoha", "suna"], ["iwa"]], over: "Kusagakure and the bridge at Kannabi",
+    note: "Kumogakure and Kirigakure sit this one out. Fought mostly by children. Kakashi makes jonin at thirteen and loses Obito the same season." },
   { no: 4, from: 1000, to: 1001, sides: [["konoha", "suna", "kiri", "kumo", "iwa"], ["akatsuki"]], over: "the beasts, and one man's plan for the moon",
     note: "The Allied Shinobi Forces, all five villages under one command for the first and last time." },
 ];
@@ -5687,9 +5689,13 @@ export default function ShinobiLife() {
           }
         }
       }
-      if (c.age >= 12 && roll(c.war ? 16 : 6)) {
+      /* a Great War raises the death toll on the roster even for shinobi who never see a front
+         themselves — the war is a world event, not something that only happens to your own war. */
+      if (c.age >= 12 && roll(c.war ? 16 : greatWarAt(c.year) ? 12 : 6)) {
         const live = c.roster.filter((x) => !c.dead.includes(x));
-        if (live.length > 2) killNamed(c, pick(live), L, pick(c.war ? ["was killed on the front line", "died holding a pass", "fell in the fighting"] : ["was found dead outside their own village", "died of wounds taken years ago", "was assassinated", "died in an ambush"]));
+        if (live.length > 2) killNamed(c, pick(live), L, pick(c.war ? ["was killed on the front line", "died holding a pass", "fell in the fighting", "was killed in a night raid across the line", "was assassinated behind the lines"]
+          : greatWarAt(c.year) ? ["was killed on a front you were never posted to", "did not come back from the last call-up", "was assassinated on the way to a summit", "died carrying orders through contested ground"]
+          : ["was found dead outside their own village", "died of wounds taken years ago", "was assassinated", "died in an ambush"]));
       }
       /* what last war's terms are still costing, or still paying */
       if (c.tribute) {
@@ -7192,10 +7198,36 @@ export default function ShinobiLife() {
   const isLeader = (cc) => (cc.rank >= 6 || !!cc.founded) && !cc.retired;
   /* the same figure the promotion roll uses, so the panel can show it honestly */
   const joninOdds = (cc) => cl(26 + (power(cc) - 66) * 1.7 + cc.standing * 0.22 + (cc.jutsu.length - 10) * 0.6, 6, 88);
+  /* an ANBU operative doesn't have to announce it — most of the time the hat just
+     needs a new head by morning. the rest of the time the kage wakes up first. */
+  const shadowKillOdds = (cc) => cl(58 + (power(cc) - 70) * 0.8 + ((cc.stats.spd || 0) + (cc.stats.gen || 0) - 40) * 0.25, 20, 85);
   const buildList = (cc) => (eraOf(cc).hideVillages ? CLAN_BUILDS : BUILDS);
   function rule(kind, arg) {
     if (kind === "coup") { const K = c.kages[c.village]; startBattle(K.named || "kage", { type: "coup", seize: true }, 0, "You walked into the tower and told " + K.name + " why you were there.", K.named ? null : { name: K.name, title: K.title }); setModal(null); return; }
     if (kind === "kill") { const K = c.kages[c.village]; startBattle(K.named || "kage", { type: "coup", seize: false }, 0, K.name + " realised what you were the moment you came through the door.", K.named ? null : { name: K.name, title: K.title }); setModal(null); return; }
+    if (kind === "shadow") {
+      const K = c.kages[c.village];
+      if (!K || !c.anbu) return;
+      if (roll(shadowKillOdds(c))) {
+        commit((c2, L2) => {
+          spend(c2);
+          c2.kills += 1; c2.darkDeeds = (c2.darkDeeds || 0) + 2; c2.infamy = cl(c2.infamy + 15);
+          addTitle(c2, "The Knife Nobody Named");
+          const title2 = K.title;
+          if (K.named) killNamed(c2, K.named, L2, "was found dead in the tower with no sign anyone had been there", null);
+          else newsItem(c2, K.name + ", " + title2 + " of " + vName2(c2.village) + ", was found dead in the tower overnight. No sign of forced entry, and nobody has a name to put to it.", "OBITUARIES", true);
+          c2.kages[c2.village] = { named: null, name: randName(roll(50) ? "m" : "f"), title: title2 };
+          P(L2, "You were gone before anyone found the body. The mask means nobody will ever connect it to you.", "e");
+        });
+        setModal(null);
+        return;
+      }
+      startBattle(K.named || "kage", { type: "coup", seize: false }, -1,
+        K.name + " woke half a second before the blade landed, and you lost the one advantage you had.",
+        K.named ? null : { name: K.name, title: K.title });
+      setModal(null);
+      return;
+    }
     if (kind === "declareClan") { commit((c, L) => { spend(c); beginClanWar(c, L, arg); if (c.war && !c.war.declared) { c.war.momentum = cl(c.war.momentum + 8); c.war.declared = true; } const n = Array.isArray(arg) ? arg.length : 1; c.standing = cl(c.standing - 4 * n); if (n > 1) P(L, "You declared on " + n + " clans in one sitting. Your own captains asked you to say it again slowly.", "b"); }); setModal(null); return; }
     if (kind === "declare") { commit((c, L) => { spend(c); beginWar(c, L, arg); if (c.war && !c.war.declared) { c.war.momentum = cl(c.war.momentum + 8); c.war.declared = true; } const n = Array.isArray(arg) ? arg.length : 1; c.standing = cl(c.standing - 6 * n); P(L, n > 1 ? "You declared on " + n + " at once. Your own people are not behind it and neither is the daimyo." : "You declared it yourself. Your own people are not all behind it.", "b"); }); setModal(null); return; }
     commit((c, L) => {
@@ -10754,8 +10786,13 @@ export default function ShinobiLife() {
             <>
               <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">BETRAYAL</div>
               <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
-                {c.kages[c.village].name} holds the seat of {eraOf(c).kage || V.kage}. There are two ways to take it and only one of them leaves you welcome here.
+                {c.kages[c.village].name} holds the seat of {eraOf(c).kage || V.kage}. {c.anbu ? "There are three ways to take it and only one of them leaves nobody the wiser." : "There are two ways to take it and only one of them leaves you welcome here."}
               </div>
+              {c.anbu && (
+                <Row label={"Take " + c.kages[c.village].name + " in their sleep"}
+                  sub={"ANBU training means you do not have to be seen doing this. About " + Math.round(shadowKillOdds(c)) + "% you are gone before the body is found and nobody ever has a name for it — the rest, they wake up and it becomes exactly the fight the loud way would have been."}
+                  right={"~" + Math.round(shadowKillOdds(c)) + "% clean"} onClick={() => rule("shadow")} tone={T.epic} />
+              )}
               <Row label={"Assassinate " + c.kages[c.village].name} sub="Kill them and run. Infamy 100, every hunter alive on your trail, and their signature technique." right="Rogue" onClick={() => rule("kill")} tone={T.blood} />
               <Row label="Stage a coup" sub={c.rank >= 5 && c.standing >= 70 ? "Kill them and claim the seat as a succession. The village mostly goes along with it." : "Requires " + rankLabel(c, 5) + " and standing 70 — without that nobody would accept you"} right="Seize the hat" onClick={() => rule("coup")} disabled={c.rank < 5 || c.standing < 70} tone={c.rank >= 5 && c.standing >= 70 ? T.gold : null} />
             </>
