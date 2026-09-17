@@ -115,8 +115,8 @@ const BEAST_STAGES = [
 ];
 
 const CLANS = [
-  { n: "Otsutsuki", v: "any", kg: "Byakugan", celestial: true, b: { nin: 14, cha: 16, con: 10, int: 8 },
-    d: "Not from here. The clan the chakra came from, and the clan that came to collect it." },
+  { n: "Otsutsuki", v: "any", kg: "Byakugan", celestial: true, b: { nin: 26, tai: 18, gen: 14, cha: 32, con: 20, spd: 16, str: 14, int: 20 },
+    d: "Not from here. The clan the chakra came from, and the clan that came to collect it. A child of this blood outgrows an ordinary shinobi before it can walk." },
   { n: "Uchiha", v: "konoha", kg: "Sharingan", b: { gen: 8, nin: 6 }, d: "Fire and the Sharingan. Brilliant, and cursed with it." },
   { n: "Hyuga", v: "konoha", kg: "Byakugan", b: { tai: 9, con: 5 }, d: "The Byakugan and the Gentle Fist. Rigid house, perfect form." },
   { n: "Senju", v: "konoha", kg: "Wood Release", b: { cha: 8, con: 6 }, d: "Vast chakra. Wood Release, if you're one in a hundred." },
@@ -153,7 +153,7 @@ const NC = {
   "Ice Release": "#9fd8ea", "Lava Release": "#e2703a", "Magnet Release": "#c9a6d6", "Explosion Release": "#e0844a",
   "Storm Release": "#7fd0e0", "Wood Release": "#6ea84f", "Boil Release": "#d69cb8", "Scorch Release": "#e0a03a",
   "Dust Release": "#c9c2a8", Hydrification: "#7fc7d6", Shikotsumyaku: "#e0dcd0", Sharingan: "#c0392b",
-  Byakugan: "#cfd6e0", Corrosion: "#a8c46a", Chakra: "#e08a3a",
+  Byakugan: "#cfd6e0", Corrosion: "#a8c46a", Chakra: "#e08a3a", Rinnegan: "#a568c9",
 };
 const ADVANCED = ["Ice Release", "Lava Release", "Magnet Release", "Explosion Release", "Storm Release", "Boil Release", "Scorch Release", "Dust Release", "Wood Release"];
 
@@ -2734,6 +2734,7 @@ function power(c) {
   const s = c.stats;
   let p = s.nin * 0.17 + s.tai * 0.16 + s.gen * 0.09 + s.cha * 0.14 + s.con * 0.12 + s.spd * 0.14 + s.str * 0.08 + s.int * 0.1;
   if (c.kg) p *= 1.1;
+  if (c.clan === "Otsutsuki") p *= 1.5;
   if (c.beast) p *= 1 + (c.beast.stage || 0) * 0.07;
   if (c.sage) p *= 1.15;
   if (c.sixPaths) p *= 1.25;
@@ -2745,7 +2746,9 @@ function power(c) {
      stretch is years in the field, and nothing else substitutes for it. */
   const yrs = Math.max(0, (c.age || 0) - 12);
   const seasoning = Math.min(1, yrs / 26) * 0.55 + Math.min(1, (c.missions || 0) / 60) * 0.25 + Math.min(1, (c.wins || 0) / 40) * 0.20;
-  const ceiling = 42 + seasoning * 58;            /* 42 at twelve, ~100 after a full career */
+  /* an Otsutsuki does not grow into power the way a shinobi does — they are already most
+     of the way there at birth, and simply widen the gap with a career on top of it. */
+  const ceiling = (c.clan === "Otsutsuki" ? 72 : 42) + seasoning * 58;            /* 42 at twelve, ~100 after a full career; 72 for an Otsutsuki */
   if (p > ceiling) p = ceiling + (p - ceiling) * 0.28;
   return Math.round(p);
 }
@@ -2753,7 +2756,7 @@ const gearVal = (c, k) => (c.gear.weapon ? c.gear.weapon.v[k] || 0 : 0) + (c.gea
 const maxHP = (c) => Math.round(90 + c.stats.str * 1.4 + c.stats.cha * 1.0 + c.rank * 14 + gearVal(c, "hp"));
 const maxCK = (c) => Math.round(45 + c.stats.cha * 1.4 + c.stats.con * 0.5);
 
-function newChar(name, gender, vid, clanName, eraId) {
+function newChar(name, gender, vid, clanName, eraId, otsuEye) {
   const v = VILLAGES.find((x) => x.id === vid);
   let clan;
   if (clanName === "__random") {
@@ -2771,6 +2774,32 @@ function newChar(name, gender, vid, clanName, eraId) {
   let eye = null;
   if (kg === "Sharingan") eye = { t: "Sharingan", lv: 0, mangekyo: false, eternal: false, rinnegan: false, blind: 0 };
   if (kg === "Byakugan") eye = { t: "Byakugan", lv: 1, mangekyo: false, eternal: false, tenseigan: false, blind: 0 };
+  /* the Otsutsuki are not shinobi — they choose which eye opens rather than roll for one,
+     and whichever they choose, it opens fully matured rather than green. Byakugan is the
+     one every one of them carries by default. */
+  let otsuEyePaths = [], otsuBonusJutsu = [], otsuChakra = 0;
+  if (clan.n === "Otsutsuki") {
+    const choice = otsuEye === "sharingan" ? "sharingan" : otsuEye === "rinnegan" ? "rinnegan" : "byakugan";
+    otsuChakra = rr(15, 25);
+    if (choice === "sharingan") {
+      kg = "Sharingan";
+      eye = { t: "Sharingan", lv: 3, mangekyo: false, eternal: false, rinnegan: false, blind: 0 };
+      stats.gen = cl(stats.gen + 21);
+      otsuBonusJutsu = ["Copy Wheel Eye"];
+    } else if (choice === "rinnegan") {
+      kg = "Rinnegan";
+      eye = { t: "Rinnegan", lv: 3, mangekyo: true, rinnegan: true, paths: ["deva"], blind: 0 };
+      stats.nin = cl(stats.nin + 18); stats.cha = cl(stats.cha + 14); stats.int = cl(stats.int + 10);
+      otsuEyePaths = ["rinnegan"];
+      otsuBonusJutsu = ["Almighty Push", "Universal Pull", "Preta Path Absorption"];
+    } else {
+      kg = "Byakugan";
+      eye = { t: "Byakugan", lv: 3, mangekyo: false, eternal: false, tenseigan: false, blind: 0 };
+      stats.int = cl(stats.int + 8); stats.spd = cl(stats.spd + 6);
+      otsuEyePaths = ["byakugan"];
+      otsuBonusJutsu = ["Gentle Fist", "Eight Trigrams Palm Rotation", "Eight Trigrams Sixty-Four Palms", "Eight Trigrams Vacuum Palm"];
+    }
+  }
   if (clan.n !== "Civilian-born") members[clan.n] = buildClanMembers(clan.n);
   const local = BEASTS.filter((b) => b.v === vid);
   const eraStart = (TIMELINE.find((t) => t.id === (eraId || "naruto")) || { from: 890 }).from;
@@ -2781,7 +2810,8 @@ function newChar(name, gender, vid, clanName, eraId) {
     name: name || bornName(gender, clan.n), gender, village: vid, land: v.land, clan: clan.n, kg, eye, beast, era: eraId || "naruto",
     age: 0, rank: 0, rankName: (ERAS.find((e) => e.id === (eraId || "naruto")).ranks || RANKS)[0], specialty: null, natures: [], summon: null, sage: false, sageType: null,
     sixPaths: false, gates: 0, curse: 0, stats, health: 100, standing: 50, infamy: 0, ryo: rr(4000, 12000),
-    jutsu: [], titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
+    jutsu: otsuBonusJutsu.slice(), otsu: otsuChakra, eyePaths: otsuEyePaths,
+    titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
     sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
@@ -5249,7 +5279,7 @@ function Row({ label, sub, right, onClick, disabled, tone }) {
 /* ============================ MAIN ============================ */
 export default function ShinobiLife() {
   const [screen, setScreen] = useState("intro");
-  const [draft, setDraft] = useState({ name: "", gender: "m", village: "konoha", clan: "__random", era: "naruto", canon: "own" });
+  const [draft, setDraft] = useState({ name: "", gender: "m", village: "konoha", clan: "__random", era: "naruto", canon: "own", otsuEye: "byakugan" });
   const [preview, setPreview] = useState(null);
   const [c, setC] = useState(null);
   const [log, setLog] = useState([]);
@@ -5365,10 +5395,10 @@ export default function ShinobiLife() {
 
   /* ---------- creation ---------- */
   const clanOptions = [{ n: "__random", d: "Let fate decide." }, ...CLANS.filter((x) => x.v === draft.village || x.v === "any"), CLANS.find((x) => x.n === "Civilian-born")];
-  function rollPreview() { const p2 = newChar(draft.name.trim(), draft.gender, draft.village, draft.clan, draft.era); p2.clanChoice = draft.clan; setPreview(p2); }
+  function rollPreview() { const p2 = newChar(draft.name.trim(), draft.gender, draft.village, draft.clan, draft.era, draft.otsuEye); p2.clanChoice = draft.clan; p2.otsuEyeChoice = draft.otsuEye; setPreview(p2); }
   function begin() {
-    const ok = preview && preview.clanChoice === draft.clan && preview.village === draft.village && preview.era === draft.era;
-    const ch = ok ? clone(preview) : newChar(draft.name.trim(), draft.gender, draft.village, draft.clan, draft.era);
+    const ok = preview && preview.clanChoice === draft.clan && preview.village === draft.village && preview.era === draft.era && preview.otsuEyeChoice === draft.otsuEye;
+    const ch = ok ? clone(preview) : newChar(draft.name.trim(), draft.gender, draft.village, draft.clan, draft.era, draft.otsuEye);
     if (draft.name.trim()) ch.name = draft.name.trim();
     const v = VILLAGES.find((x) => x.id === ch.village);
     const era = ERAS.find((e) => e.id === ch.era);
@@ -9016,10 +9046,39 @@ export default function ShinobiLife() {
                 </div>
                 <div style={{ ...glass(dSkin.key) }} className="p-4 mb-3">
                   <p style={{ color: T.soft, fontFamily: SERIF, lineHeight: 1.55 }} className="text-sm">
-                    {selClan ? selClan.d + (selClan.kg ? " Bloodline: " + selClan.kg + (selClan.kg === "Wood Release" ? " — even choosing the Senju, it only awakens in about six of ten." : " — choose the clan and it is yours.") : "") + (selClan.n !== "Civilian-born" ? " You will carry the " + selClan.n + " name." : "")
+                    {selClan ? selClan.d + (selClan.n === "Otsutsuki"
+                        ? " Bloodline: " + ({ byakugan: "Byakugan", sharingan: "Sharingan", rinnegan: "Rinnegan" }[draft.otsuEye || "byakugan"]) + " — you choose which eye opens first."
+                        : selClan.kg ? " Bloodline: " + selClan.kg + (selClan.kg === "Wood Release" ? " — even choosing the Senju, it only awakens in about six of ten." : " — choose the clan and it is yours.") : "")
+                      + (selClan.n !== "Civilian-born" ? " You will carry the " + selClan.n + " name." : "")
                       : "Let fate decide. Most people are born to nothing."}
                   </p>
                 </div>
+                {draft.clan === "Otsutsuki" && (
+                  <div className="mb-3">
+                    <div style={{ color: T.dim, letterSpacing: ".24em", fontSize: 9.5 }} className="font-bold mb-2 px-1">WHICH EYE OPENS FIRST</div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        ["byakugan", "Byakugan", "The standard eye, and the one every one of them carries. Three hundred and sixty degrees, and the Gentle Fist to go with it."],
+                        ["sharingan", "Sharingan", "Copied straight into the blood rather than earned in one. You start at three tomoe, fully matured, with no clan and no Uchiha name behind it."],
+                        ["rinnegan", "Rinnegan", "The eye at the root of everything. You are born with a path already open, not waiting to earn one."],
+                      ].map(([id, n2, d2]) => {
+                        const on = (draft.otsuEye || "byakugan") === id;
+                        return (
+                          <button key={id} onClick={() => { setDraft({ ...draft, otsuEye: id }); setPreview(null); }} className="in-card"
+                            style={{
+                              background: on ? T.epic : "rgba(255,255,255,.05)", color: on ? "#06070c" : T.soft,
+                              border: "1px solid " + (on ? T.epic : "rgba(255,255,255,.1)"), borderRadius: 12,
+                              padding: "10px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left",
+                              maxWidth: 240, boxShadow: on ? "0 0 22px " + T.epic + "55" : "none",
+                            }}>
+                            <div>{n2}</div>
+                            <div style={{ fontWeight: 500, fontSize: 10.5, marginTop: 3, opacity: .85, lineHeight: 1.4 }}>{d2}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {preview && (
                   <div className="in-rise" style={{ ...glass(dSkin.key), borderLeft: "3px solid " + dSkin.key }}>
                     <div className="p-4 flex items-start justify-between gap-4 flex-wrap">
