@@ -2216,6 +2216,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.3", n: "Your Life, Saved", items: [
+    "The game saves itself now. Every single action — training, a fight, a year turning over — writes your whole life back to this browser automatically. Close the tab, come back next week, and you pick up exactly where you left off, no extra step, no save button to remember to press",
+    "Dying mid-session and reloading before choosing what happens next correctly brings you back to that same choice instead of quietly reviving you",
+    "Appearance settings save the same way — theme, background, layout, motion and Cinema Mode, and which track and volume you had going",
+    "New under Appearance: Start Over. Tap it twice to actually confirm — this is the only way to wipe your save and go back to character creation without dying first, and there's no undo",
+    "Everything lives in this browser's own storage. Nothing is sent anywhere, and clearing your browser data clears your save along with it",
+  ] },
   { v: "9.2", n: "Cinema Mode", items: [
     "New under Appearance: Cinema Mode. Every button in the game — every single one — gets a real 3D press when you tap it and a slow shine crossing its face while it waits. Cards tilt in three dimensions instead of just lifting. Modals open by turning toward you instead of sliding up",
     "Every fight opens on the face-off, not just the legendary ones — a level 15 academy spar gets the same VS screen a level 95 name does, it just calls itself THE ENGAGEMENT instead of lying about the tier. A pair of chakra rings spin in three dimensions behind the enemy card for the whole fight, and every hit throws a 3D shockwave ring on top of the existing burst",
@@ -5474,13 +5481,46 @@ function Row({ label, sub, right, onClick, disabled, tone }) {
   );
 }
 
+/* ============================ SAVE / LOAD ============================ */
+/* one save slot, in the browser's own storage, nothing sent anywhere. a missing or corrupt
+   save is just treated as no save — this must never be able to throw during boot. */
+const SAVE_KEY = "shinobiLife.save.v1";
+const PREFS_KEY = "shinobiLife.prefs.v1";
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.c || typeof parsed.c.name !== "string") return null;
+    return parsed;
+  } catch (e) { return null; }
+}
+function writeSave(c, log) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ c, log })); } catch (e) { /* full or blocked storage — play continues, it just won't resume next time */ }
+}
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* nothing to do about a blocked store */ }
+}
+function loadPrefs() {
+  try { const raw = localStorage.getItem(PREFS_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+function writePrefs(p) {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { /* same as above */ }
+}
+/* read once, at module load — every component instance in this tab starts from the same save */
+const INITIAL_SAVE = loadSave();
+const INITIAL_PREFS = loadPrefs() || {};
+
 /* ============================ MAIN ============================ */
 export default function ShinobiLife() {
-  const [screen, setScreen] = useState("intro");
+  const [screen, setScreen] = useState(() => {
+    if (!INITIAL_SAVE || !INITIAL_SAVE.c) return "intro";
+    return INITIAL_SAVE.c.alive === false ? "dead" : "play";
+  });
   const [draft, setDraft] = useState({ name: "", gender: "m", village: "konoha", clan: "__random", era: "naruto", canon: "own", otsuEye: "byakugan" });
   const [preview, setPreview] = useState(null);
-  const [c, setC] = useState(null);
-  const [log, setLog] = useState([]);
+  const [c, setC] = useState(() => (INITIAL_SAVE ? INITIAL_SAVE.c : null));
+  const [log, setLog] = useState(() => (INITIAL_SAVE ? INITIAL_SAVE.log || [] : []));
   const [modal, setModal] = useState(null);
   const [warPick, setWarPick] = useState([]);
   const [newsFilter, setNewsFilter] = useState("ALL");
@@ -5496,20 +5536,26 @@ export default function ShinobiLife() {
     setTimeout(() => { setArrival(null); setArrivalLeaving(false); }, 420);
   }
   const ripple = useRipple();
-  const [themeId, setThemeId] = useState("deep");
-  const [bgMode, setBgMode] = useState("village");
-  const [layout, setLayout] = useState("stacked");
-  const [motion, setMotion] = useState("full");
-  const [cinema, setCinema] = useState("off");
+  const [themeId, setThemeId] = useState(() => INITIAL_PREFS.themeId || "deep");
+  const [bgMode, setBgMode] = useState(() => INITIAL_PREFS.bgMode || "village");
+  const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
+  const [motion, setMotion] = useState(() => INITIAL_PREFS.motion || "full");
+  const [cinema, setCinema] = useState(() => INITIAL_PREFS.cinema || "off");
+  const [confirmWipe, setConfirmWipe] = useState(false);
   const theme = applyTheme(themeId);
   useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
   useEffect(() => { document.body.classList.toggle("sl-cinema", cinema === "max"); }, [cinema]);
+  /* the save slot: every action writes the whole character back out, and losing your character
+     (death screen's "start a brand new life") clears the slot the same way losing c does anything else */
+  useEffect(() => { if (c) writeSave(c, log); else clearSave(); }, [c, log]);
 
   /* ---------- background music (local audio files under ./audio/) ---------- */
-  const [musicTrackId, setMusicTrackId] = useState(null);
+  const [musicTrackId, setMusicTrackId] = useState(() => INITIAL_PREFS.musicTrackId || null);
   const [musicPlaying, setMusicPlaying] = useState(false);
-  const [musicVolume, setMusicVolume] = useState(45);
+  const [musicVolume, setMusicVolume] = useState(() => (typeof INITIAL_PREFS.musicVolume === "number" ? INITIAL_PREFS.musicVolume : 45));
   const [musicError, setMusicError] = useState(false);
+  useEffect(() => { writePrefs({ themeId, bgMode, layout, motion, cinema, musicTrackId, musicVolume }); },
+    [themeId, bgMode, layout, motion, cinema, musicTrackId, musicVolume]);
   const audioRef = useRef(null);
   function playMusicTrack(id) {
     const track = MUSIC_TRACKS.find((t) => t.id === id);
@@ -12341,6 +12387,19 @@ export default function ShinobiLife() {
               <span style={{ color: T.dim, fontSize: 11, width: 30, textAlign: "right" }}>{musicVolume}%</span>
             </div>
           )}
+
+          <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">START OVER</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            Every action in this game saves on its own — close the tab and {c.name} will be exactly where you left them. There is one save. This is the only way to start a different life without dying first, and it cannot be undone.
+          </div>
+          <Row label={confirmWipe ? "Tap again to actually delete it" : "Start a brand new life"}
+            sub={confirmWipe ? "This deletes " + c.name + " for good. No undo." : "Wipes this save completely and takes you back to character creation."}
+            right={confirmWipe ? "Confirm" : "Wipe save"}
+            onClick={() => {
+              if (confirmWipe) { clearSave(); setConfirmWipe(false); setScreen("intro"); setPreview(null); setC(null); setLog([]); setBt(null); setQuest(null); setModal(null); }
+              else { setConfirmWipe(true); setTimeout(() => setConfirmWipe(false), 4000); }
+            }}
+            tone={T.blood} />
         </Modal>
       )}
 
