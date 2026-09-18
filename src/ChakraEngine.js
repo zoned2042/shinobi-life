@@ -55,6 +55,39 @@ void main() {
   vec2 p = (vUv - 0.5) * asp * 2.4;
   float t = uTime * 0.06;
 
+  /* ---- the drop ----------------------------------------------------------
+     A real struck-water surface, not a expanding circle: each drop is a wave
+     packet riding an expanding front, with capillary ripples trailing behind
+     it at a shorter wavelength, amplitude falling off as 1/r for spreading
+     loss and exponentially in time for viscosity. We take the height field
+     AND its slope: the slope bends the coordinates we sample the field
+     through (refraction, which is what actually sells water) and the crests
+     get a specular kick on top. */
+  float wave = 0.0;
+  vec2 warp = vec2(0.0);
+  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
+    vec4 rp = uRipples[i];
+    if (rp.w <= 0.0) continue;
+    float age = uTime - rp.z;
+    if (age < 0.0 || age > 2.2) continue;
+    vec2 d = (vUv - rp.xy) * asp;
+    float dist = length(d);
+    float front = age * 0.62;
+    /* the packet: a gaussian window travelling outward */
+    float env = exp(-pow((dist - front) * 7.0, 2.0));
+    /* main wave plus a shorter capillary train behind the crest */
+    float osc = sin((dist - front) * 52.0 - age * 6.0)
+              + 0.45 * sin((dist - front) * 104.0 - age * 11.0);
+    float visc = exp(-age * 1.9);
+    float spread = 1.0 / (1.0 + dist * 3.4);
+    float amp = env * osc * visc * spread * rp.w;
+    wave += amp;
+    warp += (d / max(dist, 0.0015)) * amp * 0.052;
+  }
+
+  /* refraction: everything below is sampled through the disturbed surface */
+  p += warp;
+
   /* Domain warp: noise sampled through noise, which is what stops it reading as
      "a plasma screensaver" and starts it reading as chakra. Four fbm calls, not
      the textbook five — the second warp reuses the first's two components rather
@@ -81,21 +114,11 @@ void main() {
   float mid = 1.0 - length((vUv - 0.5) * asp) * 1.15;
   col += uTone2 * max(mid, 0.0) * uHeat * 0.75;
 
-  /* shockwaves — expanding rings, one per live ripple */
-  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
-    vec4 rp = uRipples[i];
-    if (rp.w <= 0.0) continue;
-    float age = uTime - rp.z;
-    if (age < 0.0 || age > 1.6) continue;
-    vec2 d = (vUv - rp.xy) * asp;
-    float dist = length(d);
-    float rad = age * 0.85;
-    float ring = exp(-pow((dist - rad) * 13.0, 2.0));
-    float decay = 1.0 - age / 1.6;
-    col += uTone2 * ring * decay * decay * rp.w * 2.4;
-    /* a softer disc inside the ring so a press lights the area, not just a line */
-    col += uTone * exp(-pow(dist * 3.4, 2.0)) * decay * decay * rp.w * 0.45;
-  }
+  /* the drop, shaded: crests catch the light, troughs fall into shadow, and a
+     thin rim of white sits right on the steepest part of the wavefront */
+  col += uTone2 * max(wave, 0.0) * 1.35;
+  col *= 1.0 + wave * 0.55;
+  col += vec3(1.0) * pow(max(wave, 0.0), 4.0) * 0.85;
 
   /* vignette, but never all the way to black — the corners are where this is
      most visible between the cards, so crushing them defeats the point */
@@ -340,4 +363,169 @@ export function createChakraEngine(canvas) {
   resize();
   raf = requestAnimationFrame(frame);
   return engine;
+}
+
+/* ============================================================
+   DROP LAYER — a transparent WebGL sheet that sits ON TOP of the
+   whole interface. The background field can only be seen in the gaps
+   between cards, so a click landing on a solid panel would never show
+   there. This one washes the wave straight across the buttons.
+
+   Same physics as the field's drops — a wave packet on an expanding
+   front, capillary train behind it, 1/r spreading, viscous decay —
+   but shaded as light on water rather than as a disturbance in the
+   chakra, and alpha-blended so the UI reads through it.
+
+   It costs nothing while nothing is happening: with no live drop the
+   frame loop clears once and then skips every draw until the next one.
+   ============================================================ */
+
+const DROP_FS = `
+precision highp float;
+varying vec2 vUv;
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec3  uTint;
+uniform vec4  uDrops[${MAX_RIPPLES}];
+
+void main() {
+  vec2 asp = vec2(uRes.x / max(uRes.y, 1.0), 1.0);
+  float h = 0.0;
+  float rim = 0.0;
+  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
+    vec4 dp = uDrops[i];
+    if (dp.w <= 0.0) continue;
+    float age = uTime - dp.z;
+    if (age < 0.0 || age > 1.2) continue;
+    vec2 d = (vUv - dp.xy) * asp;
+    float dist = length(d);
+    float front = age * 0.30;
+    /* a tight travelling band. Widen this envelope and the whole inside of the
+       ring fills in, which stops being a wave and starts being a disc sitting
+       on top of the interface. */
+    float env = exp(-pow((dist - front) * 13.0, 2.0));
+    float osc = sin((dist - front) * 62.0 - age * 7.0)
+              + 0.42 * sin((dist - front) * 124.0 - age * 13.0);
+    /* viscosity and spreading loss are both real, but tuned for the eye rather
+       than for physics — true to life and the whole thing is gone in a quarter
+       of a second and nobody ever sees it */
+    float visc = exp(-age * 2.0);
+    float spread = 1.0 / (1.0 + dist * 3.2);
+    h += env * osc * visc * spread * dp.w;
+    /* the bright meniscus sitting exactly on the front */
+    rim += exp(-pow((dist - front) * 30.0, 2.0)) * visc * spread * dp.w;
+  }
+
+  float crest = max(h, 0.0);
+  float trough = max(-h, 0.0);
+  vec3 col = uTint * crest * 2.2 + vec3(1.0) * pow(crest, 2.5) * 1.7 + vec3(1.0) * rim * 0.95;
+  /* Troughs get a little alpha for volume and almost none of the gain the crests
+     get. They carry hardly any colour, so letting them drive opacity the way the
+     crests do just paints an opaque black hole where the drop landed. */
+  float a = clamp(crest * 2.1 + rim * 1.5 + trough * 0.30, 0.0, 0.78);
+  col -= vec3(0.10, 0.11, 0.15) * trough;
+  gl_FragColor = vec4(max(col, 0.0), a);
+}`;
+
+export function createDropLayer(canvas) {
+  if (!canvas) return null;
+  let gl;
+  try {
+    const o = { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: false };
+    gl = canvas.getContext("webgl", o) || canvas.getContext("experimental-webgl", o);
+  } catch (e) { return null; }
+  if (!gl) return null;
+  const prog = link(gl, FIELD_VS, DROP_FS);
+  if (!prog) return null;
+
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+
+  const L = {
+    aPos: gl.getAttribLocation(prog, "aPos"),
+    uRes: gl.getUniformLocation(prog, "uRes"),
+    uTime: gl.getUniformLocation(prog, "uTime"),
+    uTint: gl.getUniformLocation(prog, "uTint"),
+    uDrops: gl.getUniformLocation(prog, "uDrops[0]"),
+  };
+
+  const drops = new Float32Array(MAX_RIPPLES * 4);
+  let head = 0, tint = [0.85, 0.66, 0.28];
+  let start = 0, raf = 0, dead = false, lost = false, cleared = false, now = 0;
+
+  function resize() {
+    const s = Math.min(window.devicePixelRatio || 1, 2) * 0.85;
+    const w = Math.max(1, Math.round(Math.max(1, canvas.clientWidth) * s));
+    const h = Math.max(1, Math.round(Math.max(1, canvas.clientHeight) * s));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+
+  function anyLive() {
+    for (let i = 0; i < MAX_RIPPLES; i++) {
+      if (drops[i * 4 + 3] > 0 && now - drops[i * 4 + 2] <= 1.2) return true;
+    }
+    return false;
+  }
+
+  function frame(ts) {
+    if (dead) return;
+    raf = requestAnimationFrame(frame);
+    if (lost) return;
+    if (!start) start = ts;
+    now = (ts - start) / 1000;
+    if (!anyLive()) {
+      /* idle: wipe once, then draw nothing at all until the next drop */
+      if (!cleared) { resize(); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); cleared = true; }
+      return;
+    }
+    cleared = false;
+    resize();
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.enableVertexAttribArray(L.aPos);
+    gl.vertexAttribPointer(L.aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(L.uRes, canvas.width, canvas.height);
+    gl.uniform1f(L.uTime, now);
+    gl.uniform3fv(L.uTint, tint);
+    gl.uniform4fv(L.uDrops, drops);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  function onLost(e) { e.preventDefault(); lost = true; }
+  function onRestored() { lost = false; }
+  canvas.addEventListener("webglcontextlost", onLost, false);
+  canvas.addEventListener("webglcontextrestored", onRestored, false);
+
+  const layer = {
+    tint(hex) { if (hex) tint = hexRgb(hex); },
+    drop(x, y, strength) {
+      const i = head % MAX_RIPPLES;
+      head++;
+      drops[i * 4] = Math.max(0, Math.min(1, x));
+      drops[i * 4 + 1] = 1 - Math.max(0, Math.min(1, y));
+      drops[i * 4 + 2] = now;
+      drops[i * 4 + 3] = strength == null ? 1 : strength;
+      cleared = false;
+    },
+    destroy() {
+      dead = true;
+      if (raf) cancelAnimationFrame(raf);
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
+      try {
+        gl.deleteProgram(prog); gl.deleteBuffer(quad);
+        const ext = gl.getExtension("WEBGL_lose_context");
+        if (ext) ext.loseContext();
+      } catch (e) { /* nothing worth throwing over */ }
+    },
+  };
+  resize();
+  raf = requestAnimationFrame(frame);
+  return layer;
 }

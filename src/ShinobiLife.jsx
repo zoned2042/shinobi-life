@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { createChakraEngine } from "./ChakraEngine.js";
+import { createChakraEngine, createDropLayer } from "./ChakraEngine.js";
 
 /* ============================ THEME ============================ */
 /* ---------- themes: the palette is swappable at runtime ---------- */
@@ -2217,6 +2217,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.5", n: "The Drop, and Cinema Mode That Actually Does Something", items: [
+    "Every click now lands like something struck water. A real wave: a packet riding an expanding front with a shorter capillary train chasing it, amplitude falling away as it spreads and damping out the way a viscous surface does, lit along the crests and shaded in the troughs. It is drawn in WebGL on its own sheet above the entire interface, so it washes across the buttons rather than hiding behind them — and it draws literally nothing between clicks",
+    "Cinema Mode has been rebuilt, because the old one genuinely did almost nothing and that was fair comment. The press was hung on :active, which only lasts as long as a finger is physically held down — about a tenth of a second — so nobody ever saw it. The press is now stamped on and left for a full beat: the button punches back in 3D, a ring snaps out from its edge, and the shine crossing every button is more than twice as strong",
+    "Every button in the game has been redesigned. Light now falls across each one from the top-left corner, the accent colour bleeds into the glass and runs down the leading edge, and they sit on a deeper shadow. Rows breathe very slightly at rest under Cinema Mode",
+    "The chakra field behind it all refracts now too — a drop passing over it bends what you see through the surface instead of just brightening it",
+  ] },
   { v: "9.4", n: "The Chakra Engine", items: [
     "A whole separate way for the game to look, under Appearance. Not more CSS on top of what was already there — this one throws the painted backdrops away and hands the entire background to your graphics card. Real WebGL, written from scratch, no libraries: a chakra field drawn live in shaders, hundreds of motes climbing through it, every frame generated rather than played back",
     "It is painted in whatever colours the life you are living is painted in — Konoha gold, Kiri blue, the red of a missing-nin — and it leans forward the moment a fight starts, hardest of all in a legendary bout",
@@ -5458,23 +5464,21 @@ function useRipple() {
 
 function Row({ label, sub, right, onClick, disabled, tone }) {
   const ripple = useRipple();
-  const [themeId, setThemeId] = useState("deep");
-  const [bgMode, setBgMode] = useState("village");
-  const [layout, setLayout] = useState("stacked");
-  const theme = applyTheme(themeId);
   const edge = tone || SKIN.key;
   return (
     <button onClick={(e) => { if (!disabled) { ripple(e); onClick && onClick(e); } }} disabled={disabled}
       style={{
         position: "relative", overflow: "hidden", color: disabled ? T.dim : edge,
+        /* glass: the accent bleeds in from the top-left corner and falls away to
+           near-black at the bottom right, so every row has a light source */
         background: disabled
-          ? "linear-gradient(180deg, rgba(255,255,255,.018), rgba(0,0,0,.25))"
-          : "linear-gradient(180deg," + T.s1 + " 0%," + T.s0 + " 40%, rgba(0,0,0,.30) 100%)",
-        border: "1px solid " + (disabled ? "rgba(255,255,255,.05)" : edge + "3a"),
+          ? "linear-gradient(180deg, rgba(255,255,255,.015), rgba(0,0,0,.28))"
+          : "linear-gradient(143deg," + edge + "1f 0%," + T.s1 + " 22%," + T.s0 + " 55%, rgba(0,0,0,.36) 100%)",
+        border: "1px solid " + (disabled ? "rgba(255,255,255,.05)" : edge + "44"),
         boxShadow: disabled ? "none"
-          : "inset 0 1px 0 " + T.edgeHi + ", inset 0 -1px 0 rgba(0,0,0,.5), 0 4px 14px " + T.shadow,
-        opacity: disabled ? 0.5 : 1, borderRadius: 12,
-        cursor: disabled ? "not-allowed" : "pointer", minHeight: 54,
+          : "inset 0 1px 0 " + T.edgeHi + ", inset 0 -1px 0 rgba(0,0,0,.55), inset 3px 0 0 -1px " + edge + "77, 0 6px 20px " + T.shadow + ", 0 0 22px -12px " + edge,
+        opacity: disabled ? 0.5 : 1, borderRadius: 13,
+        cursor: disabled ? "not-allowed" : "pointer", minHeight: 56,
       }}
       className={"sl-row w-full text-left px-3.5 py-3 mb-2 flex justify-between items-center gap-3" + (disabled ? "" : " sl-card3")}>
       <span className="min-w-0 flex items-center gap-2.5" style={{ position: "relative" }}>
@@ -5654,21 +5658,67 @@ export default function ShinobiLife() {
   useEffect(() => { if (engineRef.current && bt && bt.shakeP) engineRef.current.burst(bt.critP ? 1.9 : 1.2); }, [bt && bt.shakeP]);
   /* so does a year turning over */
   useEffect(() => { if (engineRef.current && yearFlash != null) engineRef.current.burst(1.8); }, [yearFlash]);
-  /* and every single press anywhere in the game, at the exact point of contact —
+  /* ---------- the drop layer: struck-water rings over the whole interface ----------
+     Separate from the field on purpose. The field lives behind the cards, so a press
+     landing on a solid panel would never show there — this sheet sits above everything
+     and washes the wave straight across the buttons. It is on unless motion is off,
+     whether or not the engine behind it is running, and it draws literally nothing
+     between drops. */
+  const dropCanvas = useRef(null);
+  const dropRef = useRef(null);
+  const dropOn = motion !== "reduced";
+  /* read inside the pointer handler, which is registered once and must not go
+     stale every time the setting changes */
+  const cinemaRef = useRef(false);
+  cinemaRef.current = cinema === "max" && motion !== "reduced";
+  useEffect(() => {
+    if (!dropOn) {
+      if (dropRef.current) { dropRef.current.destroy(); dropRef.current = null; }
+      return undefined;
+    }
+    const layer = createDropLayer(dropCanvas.current);
+    dropRef.current = layer;
+    if (layer) layer.tint(accent);
+    return () => { if (dropRef.current) { dropRef.current.destroy(); dropRef.current = null; } };
+  }, [dropOn, screen]);
+  useEffect(() => { if (dropRef.current) dropRef.current.tint(accent); }, [accent]);
+
+  /* every single press anywhere in the game, at the exact point of contact —
      one listener rather than a call on every button in the file */
   useEffect(() => {
-    if (!engineOn) return undefined;
+    if (!engineOn && !dropOn) return undefined;
     const onDown = (ev) => {
-      const eng = engineRef.current;
-      if (!eng) return;
       const w = window.innerWidth || 1, h = window.innerHeight || 1;
+      const x = ev.clientX / w, y = ev.clientY / h;
       const tgt = ev.target;
-      const hard = tgt && tgt.closest && tgt.closest("button");
-      eng.ripple(ev.clientX / w, ev.clientY / h, hard ? 1.15 : 0.5);
+      const hard = !!(tgt && tgt.closest && tgt.closest("button"));
+      if (engineRef.current) engineRef.current.ripple(x, y, hard ? 1.15 : 0.5);
+      if (dropRef.current) dropRef.current.drop(x, y, hard ? 1 : 0.6);
+      /* Cinema Mode's press has to outlive the press. :active only lasts while the
+         button is physically held, which is about a tenth of a second and is why
+         none of this was visible before — so stamp a class on and take it off on a
+         timer instead, and let the animation play out properly. */
+      if (hard && cinemaRef.current) {
+        const el = tgt.closest("button");
+        if (el) {
+          el.classList.remove("sl-punch");
+          /* reading offsetWidth forces the style recalc that restarts the animation
+             when the same button is hit twice in a row */
+          void el.offsetWidth;
+          el.classList.add("sl-punch");
+          setTimeout(() => { try { el.classList.remove("sl-punch"); } catch (e2) { /* gone from the DOM */ } }, 620);
+        }
+      }
     };
     window.addEventListener("pointerdown", onDown, { passive: true });
     return () => window.removeEventListener("pointerdown", onDown);
-  }, [engineOn]);
+  }, [engineOn, dropOn]);
+
+  /* z-index above every modal, battle screen and cinematic in the game, and
+     pointer-events none so it can never swallow the press that created it */
+  const dropSheet = dropOn ? (
+    <canvas ref={dropCanvas} aria-hidden style={{ position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: 200, pointerEvents: "none", display: "block" }} />
+  ) : null;
 
   const chakraCanvas = engineOn ? (
     <>
@@ -9283,6 +9333,7 @@ export default function ShinobiLife() {
 
         {/* cinematic backdrop */}
         {chakraCanvas}
+        {dropSheet}
         {!engineOn && (
           <div style={{ position: "fixed", inset: 0, zIndex: 0 }}>
             <div style={{ position: "absolute", inset: 0 }}><EraArt era={draft.era} height="100%" /></div>
@@ -9597,6 +9648,7 @@ export default function ShinobiLife() {
     return (
       <div style={{ background: "#04050a", color: T.text, minHeight: "100dvh", fontFamily: UI, position: "relative", overflow: "hidden" }} className="p-4 sm:p-8">
         {chakraCanvas}
+        {dropSheet}
         {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }}><EraArt era={c.era} height="100%" dim /></div>}
         {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.75), #04050a 70%)" }} />}
         <div className="sl-grain" style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }} />
@@ -9918,10 +9970,48 @@ export default function ShinobiLife() {
       }
       body.sl-cinema:not(.sl-motion-off) button:not(:disabled)::after {
         content: ""; position: absolute; inset: -20% -60%; pointer-events: none;
-        background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.16) 50%, transparent 58%);
+        background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.38) 50%, transparent 62%);
         transform: translateX(-160%) skewX(-10deg);
-        animation: cinemaSheen 3.6s ease-in-out infinite;
+        animation: cinemaSheen 2.8s ease-in-out infinite;
       }
+      /* The press, stamped on by JS and left there for 620ms. This is the whole
+         difference between Cinema Mode reading as "on" and reading as "nothing":
+         :active is gone before the eye registers it, this is not. */
+      @keyframes cinemaPunch {
+        0%   { transform: perspective(520px) rotateX(16deg) scale(.93) translateZ(0); filter: brightness(1.5) saturate(1.3); }
+        38%  { transform: perspective(520px) rotateX(-7deg) scale(1.035); filter: brightness(1.22) saturate(1.15); }
+        68%  { transform: perspective(520px) rotateX(3deg) scale(.988); filter: brightness(1.06); }
+        100% { transform: none; filter: none; }
+      }
+      @keyframes cinemaPunchRing {
+        0%   { opacity: .85; transform: scale(.72); }
+        100% { opacity: 0; transform: scale(1.5); }
+      }
+      /* :not(:disabled) is carried here purely for weight — the breathing rule below
+         is one class heavier than this one would otherwise be, and would win the
+         animation shorthand outright, leaving the press doing nothing at all. */
+      body.sl-cinema:not(.sl-motion-off) button.sl-punch:not(:disabled) {
+        animation: cinemaPunch .62s cubic-bezier(.22,.9,.28,1) both;
+        z-index: 1;
+      }
+      body.sl-cinema:not(.sl-motion-off) button.sl-punch::before {
+        content: ""; position: absolute; inset: -1px; pointer-events: none; border-radius: inherit;
+        border: 2px solid currentColor;
+        animation: cinemaPunchRing .62s cubic-bezier(.2,.8,.3,1) both;
+      }
+      /* A slow breathing edge, so the interface is alive at rest and not only at the
+         moment you touch it. Deliberately on filter and not on box-shadow: a CSS
+         animation outranks an inline style for as long as it runs, and animating the
+         shadow would flatten the depth every row is drawn with. */
+      @keyframes cinemaBreathe {
+        0%,100% { filter: brightness(1) saturate(1); }
+        50%     { filter: brightness(1.13) saturate(1.12); }
+      }
+      body.sl-cinema:not(.sl-motion-off) .sl-row:not(:disabled) {
+        animation: cinemaBreathe 4.2s ease-in-out infinite;
+      }
+      body.sl-cinema:not(.sl-motion-off) .sl-row:not(:disabled):nth-of-type(2n) { animation-delay: .9s; }
+      body.sl-cinema:not(.sl-motion-off) .sl-row:not(:disabled):nth-of-type(3n) { animation-delay: 1.9s; }
       body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(2n)::after { animation-delay: .7s; }
       body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(3n)::after { animation-delay: 1.5s; }
       body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(5n)::after { animation-delay: 2.3s; }
@@ -10215,6 +10305,7 @@ export default function ShinobiLife() {
         onError={() => { setMusicError(true); setMusicPlaying(false); }} />
       {ATMOS}
       {chakraCanvas}
+        {dropSheet}
       {bgMode !== "none" && !engineOn && (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
           <div style={{ position: "absolute", inset: 0, opacity: theme.light ? .5 : .92 }}>
