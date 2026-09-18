@@ -52,6 +52,7 @@ Battles are menu-driven and tactical, not real-time twitch combat:
   upkeep costs and turn limits.
 - **Chakra economy**: every jutsu costs chakra; Focus recovers it at the
   cost of a turn.
+  side note the added songs are the og naruto theme song and blue bird, just had to rename the files so Claude could add them.
 - Status effects (stunned, burning, guarding, evasion, genjutsu layers),
   elemental natures, items, and the option to withdraw from a losing fight.
 
