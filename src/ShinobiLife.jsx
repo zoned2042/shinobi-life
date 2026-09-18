@@ -2216,6 +2216,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.2", n: "Cinema Mode", items: [
+    "New under Appearance: Cinema Mode. Every button in the game — every single one — gets a real 3D press when you tap it and a slow shine crossing its face while it waits. Cards tilt in three dimensions instead of just lifting. Modals open by turning toward you instead of sliding up",
+    "Every fight opens on the face-off, not just the legendary ones — a level 15 academy spar gets the same VS screen a level 95 name does, it just calls itself THE ENGAGEMENT instead of lying about the tier. A pair of chakra rings spin in three dimensions behind the enemy card for the whole fight, and every hit throws a 3D shockwave ring on top of the existing burst",
+    "Off by default — this is a lot of motion on purpose, for people who want a lot. Fully respects Reduced motion and prefers-reduced-motion: turn either on and Cinema Mode's effects go quiet even if the setting itself is still on",
+  ] },
   { v: "9.1", n: "The Movie Screen", items: [
     "Fighting anyone worth calling legendary (level 70+ — S-rank missing-nin, Akatsuki, jinchuriki, any Kage, any boss) now opens on a face-off: your name against theirs, tinted to their chakra nature, a ring burning in behind you both, tier called out — NAMED BOUT, S-RANK BOUT or LEGENDARY BOUT — before the first hit lands. Tap through it or let it play out on its own",
     "The whole fight carries a faint coloured frame and a slow-drifting glow behind the cards for as long as it's a legendary bout, so it never stops reading as the big fight it is",
@@ -5495,8 +5500,10 @@ export default function ShinobiLife() {
   const [bgMode, setBgMode] = useState("village");
   const [layout, setLayout] = useState("stacked");
   const [motion, setMotion] = useState("full");
+  const [cinema, setCinema] = useState("off");
   const theme = applyTheme(themeId);
   useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
+  useEffect(() => { document.body.classList.toggle("sl-cinema", cinema === "max"); }, [cinema]);
 
   /* ---------- background music (local audio files under ./audio/) ---------- */
   const [musicTrackId, setMusicTrackId] = useState(null);
@@ -7706,10 +7713,14 @@ export default function ShinobiLife() {
     }
     lg.push({ t: "Anything past a basic technique means forming seals — a quick sequence, on the spot. Catch it clean and the technique lands harder.", k: "n" });
     setQuest(null);
-    /* a fight worth a movie moment — same tiers as a kill that matters, just before the first hit lands */
+    /* a fight worth a movie moment — same tiers as a kill that matters, just before the first hit lands.
+       Cinema Mode forces the same face-off and frame onto every fight, not just the legendary ones —
+       it just doesn't lie about the tier when there isn't one. */
     const legendTier = e.lvl >= 95 ? 3 : e.lvl >= 85 ? 2 : e.lvl >= 70 ? 1 : 0;
-    setBt({ p, e, log: lg, turn: 1, over: false, win: false, ctx, guard: c.guardBattles > 0, used: {}, cool: {}, legendTier, showIntro: legendTier > 0 });
-    if (legendTier > 0) setTimeout(() => setBt((prev) => (prev && prev.showIntro ? { ...prev, showIntro: false } : prev)), 2700);
+    const cinemaOn = cinema === "max";
+    const showIntro = legendTier > 0 || cinemaOn;
+    setBt({ p, e, log: lg, turn: 1, over: false, win: false, ctx, guard: c.guardBattles > 0, used: {}, cool: {}, legendTier, cinemaOn, showIntro });
+    if (showIntro) setTimeout(() => setBt((prev) => (prev && prev.showIntro ? { ...prev, showIntro: false } : prev)), 2700);
   }
   /* techniques that are rituals, not attacks — they never belonged on a battle screen */
   const NOT_IN_BATTLE = ["Creation Rebirth", "One's Own Life Reincarnation", "Impure World Reincarnation",
@@ -9767,6 +9778,64 @@ export default function ShinobiLife() {
       body.sl-motion-off .vs-clash, body.sl-motion-off .vs-tier, body.sl-motion-off .vs-sweep,
       body.sl-motion-off .legend-frame, body.sl-motion-off .legend-bg { animation: none !important; opacity: 1 !important; transform: none !important; }
       body.sl-motion-off .vs-spark { display: none !important; }
+
+      /* ================= CINEMA MODE: everything, always ================= */
+      /* perspective lives inside each transform value, never as a bare property on an ancestor —
+         a real perspective property up there would become the containing block for every
+         position:fixed descendant (every modal, every overlay) and break them all at once. */
+      @keyframes cinemaSheen { 0%, 55% { transform: translateX(-160%) skewX(-10deg); } 100% { transform: translateX(160%) skewX(-10deg); } }
+      @keyframes cinemaRingSpin { 0% { transform: perspective(600px) rotateY(0deg) rotateX(58deg); } 100% { transform: perspective(600px) rotateY(360deg) rotateX(58deg); } }
+      @keyframes cinemaRingSpinRev { 0% { transform: perspective(600px) rotateY(360deg) rotateX(62deg); } 100% { transform: perspective(600px) rotateY(0deg) rotateX(62deg); } }
+      @keyframes cinemaModalIn { 0% { opacity: 0; transform: perspective(1000px) rotateX(-20deg) translateY(36px) scale(.95); } 60% { opacity: 1; } 100% { opacity: 1; transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1); } }
+      @keyframes cinemaShock { 0% { transform: perspective(400px) rotateX(64deg) scale(.2); opacity: .8; } 100% { transform: perspective(400px) rotateX(64deg) scale(2.4); opacity: 0; } }
+      @keyframes cinemaFloat { 0%,100% { transform: translateY(0) rotateZ(0deg); } 50% { transform: translateY(-5px) rotateZ(.6deg); } }
+
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled) {
+        position: relative; overflow: hidden; transform-style: preserve-3d;
+        transition: transform .15s cubic-bezier(.2,.8,.3,1), filter .15s ease, box-shadow .15s ease;
+      }
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled):active {
+        transform: perspective(480px) rotateX(11deg) scale(.955) translateZ(2px);
+        filter: brightness(1.18) saturate(1.12);
+      }
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled)::after {
+        content: ""; position: absolute; inset: -20% -60%; pointer-events: none;
+        background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.16) 50%, transparent 58%);
+        transform: translateX(-160%) skewX(-10deg);
+        animation: cinemaSheen 3.6s ease-in-out infinite;
+      }
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(2n)::after { animation-delay: .7s; }
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(3n)::after { animation-delay: 1.5s; }
+      body.sl-cinema:not(.sl-motion-off) button:not(:disabled):nth-of-type(5n)::after { animation-delay: 2.3s; }
+      @media (hover: hover) {
+        body.sl-cinema:not(.sl-motion-off) button:not(:disabled):hover { filter: brightness(1.08); }
+      }
+
+      /* the existing tilt cards get more of the same treatment, and it survives on touch too */
+      body.sl-cinema:not(.sl-motion-off) .sl-card3:not(:disabled):active {
+        transform: translateY(2px) perspective(700px) rotateX(-12deg) rotateY(4deg) scale(.96) translateZ(-4px) !important;
+        transition-duration: .12s;
+      }
+      @media (hover: hover) {
+        body.sl-cinema:not(.sl-motion-off) .sl-card3:not(:disabled):hover {
+          transform: translateY(-6px) perspective(700px) rotateX(9deg) rotateY(-4deg) scale(1.035) translateZ(8px) !important;
+          box-shadow: 0 20px 38px -12px rgba(0,0,0,.6) !important;
+        }
+      }
+      body.sl-cinema:not(.sl-motion-off) .sl-modal-sheet { animation: cinemaModalIn .48s cubic-bezier(.2,.8,.3,1) both !important; }
+      body.sl-cinema:not(.sl-motion-off) .cinema-idle { animation: cinemaFloat 3.4s ease-in-out infinite; }
+      .cinema-ring { animation: cinemaRingSpin 6s linear infinite; transform-style: preserve-3d; }
+      .cinema-ring2 { animation: cinemaRingSpinRev 8s linear infinite; transform-style: preserve-3d; }
+      .cinema-shock { animation: cinemaShock .7s cubic-bezier(.2,.7,.3,1) both; }
+      @media (prefers-reduced-motion: reduce) {
+        button::after, .sl-card3:active, .sl-card3:hover, .sl-modal-sheet, .cinema-idle, .cinema-ring, .cinema-ring2, .cinema-shock { animation: none !important; }
+      }
+      body.sl-motion-off button::after, body.sl-cinema.sl-motion-off .sl-card3:not(:disabled):active, body.sl-cinema.sl-motion-off .sl-card3:not(:disabled):hover,
+      body.sl-motion-off .sl-modal-sheet, body.sl-motion-off .cinema-idle, body.sl-motion-off .cinema-ring, body.sl-motion-off .cinema-ring2, body.sl-motion-off .cinema-shock {
+        animation: none !important; transform: none !important;
+      }
+      body.sl-motion-off .cinema-ring, body.sl-motion-off .cinema-ring2 { display: none !important; }
+
       @keyframes slCount { from { opacity: .35; transform: translateY(-4px) scale(1.16); } to { opacity: 1; transform: none; } }
       .sl-count { animation: slCount .45s cubic-bezier(.2,.8,.3,1) both; }
       @keyframes slPanelIn { from { opacity: 0; transform: translateY(10px) scale(.995); } to { opacity: 1; transform: none; } }
@@ -10613,16 +10682,26 @@ export default function ShinobiLife() {
       {/* ---------- BATTLE ---------- */}
       {bt && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(4,5,8,.94)",
-          "--lc": bt.legendTier > 0 ? (bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood) : "transparent" }}>
-          {bt.legendTier > 0 && (
+          "--lc": bt.legendTier > 0 ? (bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood) : bt.cinemaOn ? accent : "transparent" }}>
+          {(bt.legendTier > 0 || bt.cinemaOn) && (
             <div aria-hidden className="legend-bg" style={{ position: "absolute", inset: "-10%", pointerEvents: "none",
               background: "radial-gradient(60% 50% at 50% 0%, " + natureFx(bt.e.nature) + "22, transparent 70%)" }} />
           )}
-          {bt.legendTier > 0 && <div aria-hidden className="legend-frame" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }} />}
+          {(bt.legendTier > 0 || bt.cinemaOn) && <div aria-hidden className="legend-frame" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }} />}
+          {bt.cinemaOn && (
+            <div aria-hidden style={{ position: "absolute", left: "50%", top: "14%", width: 0, height: 0, pointerEvents: "none", zIndex: 1 }}>
+              <svg className="cinema-ring" width="220" height="220" viewBox="0 0 200 200" style={{ position: "absolute", left: -110, top: -110, opacity: .28 }}>
+                <circle cx="100" cy="100" r="90" fill="none" stroke={natureFx(bt.e.nature)} strokeWidth="1.5" strokeDasharray="3 9" />
+              </svg>
+              <svg className="cinema-ring2" width="170" height="170" viewBox="0 0 200 200" style={{ position: "absolute", left: -85, top: -85, opacity: .22 }}>
+                <circle cx="100" cy="100" r="88" fill="none" stroke={bt.legendTier > 0 ? (bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood) : accent} strokeWidth="1" />
+              </svg>
+            </div>
+          )}
           {bt.showIntro && (() => {
             const nCol = natureFx(bt.e.nature);
-            const tierLabel = bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : "NAMED BOUT";
-            const tierCol = bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood;
+            const tierLabel = bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : bt.legendTier >= 1 ? "NAMED BOUT" : "THE ENGAGEMENT";
+            const tierCol = bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : bt.legendTier >= 1 ? T.blood : accent;
             return (
               <div className="vs-wrap" onClick={() => setBt((prev) => (prev ? { ...prev, showIntro: false } : prev))}
                 style={{ position: "fixed", inset: 0, zIndex: 62, overflow: "hidden", cursor: "pointer" }}>
@@ -10672,6 +10751,7 @@ export default function ShinobiLife() {
                   {Array.from({ length: bt.crit ? 12 : 7 }).map((_, i2) => (
                     <span key={i2} className="hit-ray" style={{ "--ang": (i2 * (360 / (bt.crit ? 12 : 7))) + "deg", background: bt.flash || T.blood }} />
                   ))}
+                  {bt.cinemaOn && <div className="cinema-shock" style={{ position: "absolute", left: 0, top: 0, width: 44, height: 44, marginLeft: -22, marginTop: -22, borderRadius: "50%", border: "2px solid " + (bt.flash || T.blood) }} />}
                 </div>
               ) : null}
               {bt.pop ? (
@@ -10710,6 +10790,7 @@ export default function ShinobiLife() {
                   {Array.from({ length: bt.critP ? 12 : 7 }).map((_, i2) => (
                     <span key={i2} className="hit-ray" style={{ "--ang": (i2 * (360 / (bt.critP ? 12 : 7))) + "deg", background: bt.flashP || T.bad }} />
                   ))}
+                  {bt.cinemaOn && <div className="cinema-shock" style={{ position: "absolute", left: 0, top: 0, width: 44, height: 44, marginLeft: -22, marginTop: -22, borderRadius: "50%", border: "2px solid " + (bt.flashP || T.bad) }} />}
                 </div>
               ) : null}
               <div className="flex justify-between text-xs mb-1" style={{ position: "relative" }}>
@@ -10743,25 +10824,30 @@ export default function ShinobiLife() {
               </div>
             </div>
 
-            {bt.over ? (
-              <div className="sl-rise" style={{ position: "relative", textAlign: "center", padding: bt.legendTier > 0 ? "18px 0 4px" : "10px 0 4px" }}>
-                <div aria-hidden style={{ position: "absolute", left: "50%", top: "38%", width: bt.legendTier > 0 ? 320 : 220, height: bt.legendTier > 0 ? 320 : 220, transform: "translate(-50%,-50%)",
-                  background: "radial-gradient(circle, " + (bt.win ? T.good : T.bad) + (bt.legendTier > 0 ? "44" : "33") + ", transparent 68%)", pointerEvents: "none" }} className={bt.win ? "sl-hero" : ""} />
-                {bt.legendTier > 0 && (
-                  <div className="vs-tier" style={{ color: bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood, fontSize: FS(9.5, 11), letterSpacing: ".5em", fontWeight: 800, position: "relative", marginBottom: 6 }}>
-                    {bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : "NAMED BOUT"}
-                  </div>
-                )}
-                <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".35em", position: "relative", textShadow: "0 0 " + (bt.legendTier > 0 ? "44px" : "30px") + " " + (bt.win ? T.good : T.bad) + "77" }}
-                  className={(bt.legendTier > 0 ? "vs-clash " : "") + "font-bold mb-2 " + (bt.legendTier > 0 ? "text-4xl" : "text-2xl")}>{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
-                {bt.legendTier > 0 && (
-                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: FS(12, 13.5), position: "relative", marginBottom: 8 }}>
-                    {bt.win ? "You against " + bt.e.name + ", and it is decided." : "You against " + bt.e.name + ". Not this time."}
-                  </div>
-                )}
-                <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10, position: "relative" }} className="w-full py-3 font-bold">Continue</button>
-              </div>
-            ) : sealQTE ? (
+            {bt.over ? (() => {
+              const big = bt.legendTier > 0 || bt.cinemaOn;
+              const tierLabel = bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : bt.legendTier >= 1 ? "NAMED BOUT" : "THE ENGAGEMENT";
+              const tierCol = bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : bt.legendTier >= 1 ? T.blood : accent;
+              return (
+                <div className="sl-rise" style={{ position: "relative", textAlign: "center", padding: big ? "18px 0 4px" : "10px 0 4px" }}>
+                  <div aria-hidden style={{ position: "absolute", left: "50%", top: "38%", width: big ? 320 : 220, height: big ? 320 : 220, transform: "translate(-50%,-50%)",
+                    background: "radial-gradient(circle, " + (bt.win ? T.good : T.bad) + (big ? "44" : "33") + ", transparent 68%)", pointerEvents: "none" }} className={bt.win ? "sl-hero" : ""} />
+                  {big && (
+                    <div className="vs-tier" style={{ color: tierCol, fontSize: FS(9.5, 11), letterSpacing: ".5em", fontWeight: 800, position: "relative", marginBottom: 6 }}>
+                      {tierLabel}
+                    </div>
+                  )}
+                  <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".35em", position: "relative", textShadow: "0 0 " + (big ? "44px" : "30px") + " " + (bt.win ? T.good : T.bad) + "77" }}
+                    className={(big ? "vs-clash " : "") + "font-bold mb-2 " + (big ? "text-4xl" : "text-2xl")}>{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
+                  {big && (
+                    <div style={{ color: T.dim, fontFamily: SERIF, fontSize: FS(12, 13.5), position: "relative", marginBottom: 8 }}>
+                      {bt.win ? "You against " + bt.e.name + ", and it is decided." : "You against " + bt.e.name + ". Not this time."}
+                    </div>
+                  )}
+                  <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10, position: "relative" }} className="w-full py-3 font-bold">Continue</button>
+                </div>
+              );
+            })() : sealQTE ? (
               <SealQTEPanel qte={sealQTE} answer={answerSealQTE} cancel={closeSealQTE} accent={accent} stepMs={sealStepMs(sealQTE.sequence.length)} />
             ) : (
               <div style={{ maxHeight: "34vh" }} className="overflow-auto">
@@ -12218,6 +12304,16 @@ export default function ShinobiLife() {
           {[["full", "Full motion", "Every animation on — drifting clouds and rain over the village art, the arrival scene when you're born, hit-shake and jutsu effects in battle, all of it."],
             ["reduced", "Reduced motion", "Ambient animation off — backgrounds hold still, cinematics cut straight to the point. Battle feedback stays, just calmer."]].map(([id, n2, d2]) => (
             <Row key={id} label={n2} sub={d2} right={motion === id ? "In use" : "Use"} onClick={() => setMotion(id)} disabled={motion === id} tone={motion === id ? accent : null} />
+          ))}
+
+          <div style={{ color: T.epic, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">CINEMA MODE</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            Everything, always on. Every button gets weight, shine and a 3D press. Every fight opens like a movie and keeps a chakra ring turning behind it, not just the legendary ones. Screens turn open instead of sliding. It is a lot — this is the version for people who want a lot.
+            {motion === "reduced" && <span style={{ color: T.bad }}> Needs Full motion above to actually show — Reduced motion overrides it.</span>}
+          </div>
+          {[["off", "Normal", "The usual amount of motion. This is the version everyone else gets."],
+            ["max", "Cinema Mode", "3D buttons, 3D cards, a face-off and a turning ring on every fight, modals that open in three dimensions instead of sliding up. Maximum, on purpose."]].map(([id, n2, d2]) => (
+            <Row key={id} label={n2} sub={d2} right={cinema === id ? "In use" : "Use"} onClick={() => setCinema(id)} disabled={cinema === id} tone={cinema === id ? T.epic : null} />
           ))}
 
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MUSIC</div>
