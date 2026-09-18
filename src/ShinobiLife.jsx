@@ -623,7 +623,7 @@ function killClanFolk(c, clan, n) {
   return out;
 }
 function killNamed(c, id, L, how, claimVid) {
-  if (!id || !NAMED[id] || c.dead.includes(id)) return;
+  if (!id || !NAMED[id] || c.dead.includes(id) || isPlayerNamed(c, id)) return;
   c.dead.push(id);
   c.roster = c.roster.filter((x) => x !== id);
   c.reanimated = (c.reanimated || []).filter((x) => x !== id);
@@ -648,7 +648,7 @@ function killNamed(c, id, L, how, claimVid) {
       c.kages[v.id] = { named: null, name: randName(Math.random() < 0.5 ? "m" : "f"), title: c.kages[v.id].title };
     }
   });
-  const res = (ERA_RESERVE[c.era] || []).filter((x) => !c.dead.includes(x) && !c.roster.includes(x));
+  const res = (ERA_RESERVE[c.era] || []).filter((x) => !c.dead.includes(x) && !c.roster.includes(x) && !isPlayerNamed(c, x));
   if (res.length) {
     const r = pick(res);
     c.roster.push(r);
@@ -682,6 +682,7 @@ const news = (c, txt) => newsItem(c, txt);
 /* ============================ TERROR STRIKES & ORGS ============================ */
 const DESTRUCTIVE = ["Fire", "Lava Release", "Explosion Release", "Scorch Release", "Boil Release", "Dust Release", "Storm Release"];
 const hasDestructive = (c) => c.natures.some((n) => DESTRUCTIVE.includes(n));
+const canBurnVillage = (c) => hasDestructive(c) || c.jutsu.includes("Fury");
 
 const TERROR = [
   { id: "faces", n: "Destroy the carved faces", d: "Every Kage they ever had, cut into the cliff above the village. Take their heads off.", dmg: 16, inf: 14, def: "hunter", pay: [0, 0], t: "Defaced the monument" },
@@ -2188,6 +2189,10 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "8.9", n: "Playing a Kage Is Playing a Kage, and Fury", items: [
+    "Fixed a real one: playing as a canon Kage (Hashirama, Tobirama, Hiruzen, Minato, Tsunade, Kakashi, Naruto) left a duplicate of that same person walking around in the world as an ordinary Bingo Book entry — one that could be killed off by the ambient world-death roll and then dragged back out of the ground with Impure World Reincarnation, while you were standing right there playing them. The duplicate could get re-seeded into your roster on every era change and every time the Bingo Book replaced a fallen name. All of those paths, plus the reincarnation and reanimation pools, now recognize that you can't hunt or raise the person you already are",
+    "New forbidden technique: Fury, the last technique of the Tsuchigumo clan. Locked behind two other forbidden techniques and real strength, and even then the odds of surviving the attempt to learn it top out far below any other kinjutsu in the game. Learn it and you gain the same power to level a defenceless village that a destructive chakra nature grants elsewhere",
+  ] },
   { v: "8.8", n: "The Tobirama Cell Bug, and Full Arsenals", items: [
     "Fixed a real one: a canon sensei's cell (the Tobirama Cell — Hiruzen, Danzo, Homura, Koharu — and the same pattern under Hashirama) reassigned itself the moment it dissolved, because nothing marked it as already given out. That is what put the same four names in both 'already taught' and 'your students' at once, with contradictory ranks in each list",
     "Deeper cause of the fate text making no sense: Hiruzen and Danzo are tracked historical figures with a real death year recorded elsewhere in the game, but the cell-dissolution code didn't know that and was rolling them a random genin fate — 'killed on a mission you were not on' — same as it would for a made-up student. Any tracked figure now gets a fate that doesn't contradict their real history, and can no longer be killed off early on a field trip that was never meant to touch them",
@@ -2362,7 +2367,7 @@ const CHANGELOG = [
     "TWENTY-FIVE MORE LIFE DECISIONS — forty-seven in total. The instructor asking what a shinobi is for, the kid who cannot make the clone the night before the last attempt, a client who lied about the job, the gambling house on the east road, the medic telling you to sit the season out, a body on the road four days from the village it belongs to, one room left at an inn and a foreign shinobi in the doorway, a squadmate turning up to briefings smelling of last night, a recruiter from another village with a specific and polite offer, the letter you have to write to a family, and the question of who should have your position when you are done with it",
     "RELATIONSHIPS REVAMPED. Bonds are states now, not numbers — estranged, cool, steady, close, would die for you — and the panel says what each one means. People drift when you do not see them, which is not personal and is exactly the problem",
     "And they act on their own: somebody turns up at your door with food and does not explain why, somebody asks you to stand at their wedding, somebody starts requesting the same missions you take and neither of you mentions it. Let it go far enough and a marriage ends in a series of weeks rather than a scene, or a child old enough to choose stops coming by",
-    "TWELVE FORBIDDEN TECHNIQUES with prices that are charged whether they work or not: the Reaper Death Seal and Impure World Reincarnation, the Eight Trigrams Sealing Style, Izanami at the cost of the eye that cast it, Living Corpse Rebirth and the permanent Mind Body Switch at the cost of who you are, and the Dead Demon Consuming Seal with no exchange at all",
+    "THIRTEEN FORBIDDEN TECHNIQUES with prices that are charged whether they work or not: the Reaper Death Seal and Impure World Reincarnation, the Eight Trigrams Sealing Style, Izanami at the cost of the eye that cast it, Living Corpse Rebirth and the permanent Mind Body Switch at the cost of who you are, the Dead Demon Consuming Seal with no exchange at all, and Fury, the last technique of the Tsuchigumo clan, powerful enough to take a village whole and locked behind the other twelve",
     "Kinjutsu that cost you years actually shorten the life — take enough of them and you die younger than you should have, 'of a body that had been spent on techniques nobody should know'",
   ] },
   { v: "6.0", n: "The Publish Build", items: [
@@ -3413,6 +3418,10 @@ const FORBIDDEN = [
     d: "Get up from wounds that finished you. Every use takes years off the end." },
   { n: "Mind Body Switch: Permanent", t: 6, k: "gen", p: 126, c: 50, e: "stun", cost: "self",
     d: "Go into a mind and do not come back out. Whoever is left in your body is not you." },
+  { n: "Fury", t: 6, k: "nin", p: 235, c: 78, e: "burn", cost: "life", rare: true,
+    req: (c) => (c.forbidden || []).length >= 2 && power(c) >= 88,
+    reqTxt: "Two other forbidden techniques already learned, and real strength besides",
+    d: "The last technique of the Tsuchigumo clan, sealed inside a scroll they buried their own dead defending rather than let it be read twice. It does not stop at a person. Cast to completion, it takes the village." },
 ];
 const KIN_COST = {
   life: { n: "Costs you years", d: "Every use takes measurable time off the end of your life." },
@@ -5685,7 +5694,7 @@ export default function ShinobiLife() {
         const from = ERAS.find((e) => e.id === c.era), to = ERAS.find((e) => e.id === nowEra);
         c.era = nowEra;
         c.rankName = c.rogue ? "Missing-nin" : c.rank === 6 ? c.rankName : rankLabel(c, c.rank);
-        c.roster = (to.roster || []).filter((id) => !c.dead.includes(id));
+        c.roster = (to.roster || []).filter((id) => !c.dead.includes(id) && !isPlayerNamed(c, id));
         P(L, "\u2014\u2014\u2014", "n");
         P(L, from.n + " is over. This is " + to.n + ", " + AH(c.year) + ". " + to.d, "e");
         newsItem(c, from.n + " has ended. The histories are already calling what comes next " + to.n + ".", "THE COURTS", true);
@@ -6425,7 +6434,10 @@ export default function ShinobiLife() {
       spend(c2);
       const f = FORBIDDEN.find((x) => x.n === name); if (!f) return;
       if (c2.jutsu.includes(name)) return;
-      const odds = cl(24 + (power(c2) - 72) * 1.5 + c2.stats.int * 0.3 - (c2.forbidden || []).length * 6, 5, 82);
+      if (f.req && !f.req(c2)) { P(L2, "You are not ready for this one. Not yet.", "b"); return; }
+      const odds = f.rare
+        ? cl(9 + (power(c2) - 88) * 0.6 + c2.stats.int * 0.15 - (c2.forbidden || []).length * 2, 2, 35)
+        : cl(24 + (power(c2) - 72) * 1.5 + c2.stats.int * 0.3 - (c2.forbidden || []).length * 6, 5, 82);
       if (roll(odds)) {
         learn(c2, L2, name, "You learned something that is on a list with a line through it. " + name + ".");
         c2.forbidden = (c2.forbidden || []).concat([name]);
@@ -6438,6 +6450,9 @@ export default function ShinobiLife() {
           addTitle(c2, "Student of the Forbidden");
           newsItem(c2, c2.name + " is being investigated for what they are known to have read. The archive has been re-sealed and two people have been removed.", "THE VILLAGES", true);
         }
+      } else if (f.rare) {
+        c2.health = cl(c2.health - rr(25, 45));
+        P(L2, "The scroll fought you for it and won. You are lucky to still have a face. It stays sealed.", "b");
       } else {
         c2.health = cl(c2.health - rr(12, 28));
         P(L2, "You attempted it and it very nearly took you apart. The scroll is back in its box.", "b");
@@ -7257,6 +7272,7 @@ export default function ShinobiLife() {
     return Object.keys(NAMED).filter((id) =>
       !cc.reanimated.includes(id) &&
       !(cc.roster || []).includes(id) &&
+      !isPlayerNamed(cc, id) &&
       isGone(cc, id)
     ).sort((a, b) => NAMED[b].lvl - NAMED[a].lvl);
   }
@@ -7736,7 +7752,7 @@ export default function ShinobiLife() {
         return;
       }
       if (id === "edo") {
-        const pool = Object.keys(NAMED).filter((k) => isGone(c2, k) && !(c2.reanimated || []).includes(k) && NAMED[k].lvl >= 70)
+        const pool = Object.keys(NAMED).filter((k) => isGone(c2, k) && !(c2.reanimated || []).includes(k) && NAMED[k].lvl >= 70 && !isPlayerNamed(c2, k))
           .sort((x, y) => NAMED[y].lvl - NAMED[x].lvl);
         if (!pool.length) { P(L2, "There is nobody in the ground worth the sacrifice.", "n"); return; }
         const id2 = pool[0];
@@ -8568,7 +8584,7 @@ export default function ShinobiLife() {
             const loot = rr(150000, 600000); c.ryo += loot;
             P(L, "You killed " + K.name + " and left through a window. There is no village in the world that will take you now. +" + money(loot), "e");
             if (!c.canRaze.includes(c.village)) c.canRaze.push(c.village);
-            if (hasDestructive(c)) P(L, "The village is leaderless and the wind is up. With your nature you could finish it tonight — the option is under Ninja Path.", "b");
+            if (canBurnVillage(c)) P(L, "The village is leaderless and the wind is up. With " + (hasDestructive(c) ? "your nature" : "Fury") + " you could finish it tonight — the option is under Ninja Path.", "b");
           }
           if (K.named && NAMED[K.named]) { if (NAMED[K.named].sig) learn(c, L, NAMED[K.named].sig); killNamed(c, K.named, L, ctx.seize ? "was killed in a succession nobody is calling a coup" : "was assassinated in the tower", ctx.seize ? c.village : null); }
           else newsItem(c, K.name + ", " + K.title + ", " + (ctx.seize ? "died and was succeeded the same night" : "was assassinated in the tower") + ".");
@@ -8597,7 +8613,7 @@ export default function ShinobiLife() {
             if (kn && NAMED[kn]) { if (!c.defeated.includes(NAMED[kn].name)) c.defeated.push(NAMED[kn].name); if (NAMED[kn].sig) learn(c, L, NAMED[kn].sig); killNamed(c, kn, L, "was killed by " + c.name + " defending " + v.name); }
             else c.defeated.push(c.kages[ctx.vid].name);
             if (!c.canRaze.includes(ctx.vid)) c.canRaze.push(ctx.vid);
-            if (hasDestructive(c)) P(L, "Nothing is defending it now. With your nature you could burn what is left.", "b");
+            if (canBurnVillage(c)) P(L, "Nothing is defending it now. With " + (hasDestructive(c) ? "your nature" : "Fury") + " you could burn what is left.", "b");
             c.raid = null;
           } else P(L, b.e.name + " falls. You are further into " + v.name + " than anyone has ever got.", "g");
         } else {
@@ -10816,9 +10832,10 @@ export default function ShinobiLife() {
               {FORBIDDEN.map((f) => {
                 const got = c.jutsu.includes(f.n);
                 const kc = KIN_COST[f.cost] || {};
-                return <Row key={f.n} label={f.n} sub={f.d + " " + kc.n + " — " + kc.d}
-                  right={got ? "Learned" : "Tier " + f.t} onClick={() => learnForbidden(f.n)}
-                  disabled={got || c.actions < 1} tone={got ? null : T.blood} />;
+                const locked = !got && f.req && !f.req(c);
+                return <Row key={f.n} label={f.n} sub={(locked ? "Locked — " + f.reqTxt + ". " : "") + f.d + " " + kc.n + " — " + kc.d}
+                  right={got ? "Learned" : locked ? "Locked" : "Tier " + f.t} onClick={() => learnForbidden(f.n)}
+                  disabled={got || locked || c.actions < 1} tone={got ? null : T.blood} />;
               })}
             </>
           )}
@@ -10997,13 +11014,13 @@ export default function ShinobiLife() {
             <>
               <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">BURN IT DOWN</div>
               <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
-                {hasDestructive(c)
-                  ? "Their leader is dead and nothing is holding the line. With " + c.natures.filter((n) => DESTRUCTIVE.includes(n)).join(" or ") + " you can finish it in a night."
-                  : "You could level it if you had a nature that burns. Fire, Lava, Explosion, Scorch, Boil, Dust or Storm."}
+                {canBurnVillage(c)
+                  ? "Their leader is dead and nothing is holding the line. With " + (hasDestructive(c) ? c.natures.filter((n) => DESTRUCTIVE.includes(n)).join(" or ") : "Fury") + " you can finish it in a night."
+                  : "You could level it if you had a nature that burns — Fire, Lava, Explosion, Scorch, Boil, Dust or Storm — or the forbidden technique Fury."}
               </div>
               {c.canRaze.map((vid) => {
                 const v = VILLAGES.find((x) => x.id === vid);
-                return <Row key={vid} label={"Raze " + v.name + " to the ground"} sub={hasDestructive(c) ? "Nothing rebuilt, nobody left, and every surviving village united against you." : "Requires a destructive chakra nature"} right="Burn" onClick={() => razeVillage(vid)} disabled={!hasDestructive(c)} tone={hasDestructive(c) ? T.blood : null} />;
+                return <Row key={vid} label={"Raze " + v.name + " to the ground"} sub={canBurnVillage(c) ? "Nothing rebuilt, nobody left, and every surviving village united against you." : "Requires a destructive chakra nature, or Fury"} right="Burn" onClick={() => razeVillage(vid)} disabled={!canBurnVillage(c)} tone={canBurnVillage(c) ? T.blood : null} />;
               })}
             </>
           )}
