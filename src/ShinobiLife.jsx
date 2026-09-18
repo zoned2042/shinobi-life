@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createChakraEngine } from "./ChakraEngine.js";
 
 /* ============================ THEME ============================ */
 /* ---------- themes: the palette is swappable at runtime ---------- */
@@ -2216,6 +2217,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.4", n: "The Chakra Engine", items: [
+    "A whole separate way for the game to look, under Appearance. Not more CSS on top of what was already there — this one throws the painted backdrops away and hands the entire background to your graphics card. Real WebGL, written from scratch, no libraries: a chakra field drawn live in shaders, hundreds of motes climbing through it, every frame generated rather than played back",
+    "It is painted in whatever colours the life you are living is painted in — Konoha gold, Kiri blue, the red of a missing-nin — and it leans forward the moment a fight starts, hardest of all in a legendary bout",
+    "Every press anywhere in the game throws a shockwave from the exact point your finger landed. So does every hit in a fight, either direction, and every year that turns over",
+    "It watches its own frame rate. A machine with no real GPU quietly gets a lower-resolution version of the same thing instead of eight frames a second, and a browser that won't give the game a WebGL surface at all just falls back to the painted backdrops with a note saying so",
+    "Off by default, saved with the rest of your settings, and switched off entirely by Reduced motion",
+  ] },
   { v: "9.3", n: "Your Life, Saved", items: [
     "The game saves itself now. Every single action — training, a fight, a year turning over — writes your whole life back to this browser automatically. Close the tab, come back next week, and you pick up exactly where you left off, no extra step, no save button to remember to press",
     "Dying mid-session and reloading before choosing what happens next correctly brings you back to that same choice instead of quietly reviving you",
@@ -5541,6 +5549,8 @@ export default function ShinobiLife() {
   const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
   const [motion, setMotion] = useState(() => INITIAL_PREFS.motion || "full");
   const [cinema, setCinema] = useState(() => INITIAL_PREFS.cinema || "off");
+  const [engineMode, setEngineMode] = useState(() => INITIAL_PREFS.engineMode || "off");
+  const [engineFailed, setEngineFailed] = useState(false);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const theme = applyTheme(themeId);
   useEffect(() => { document.body.classList.toggle("sl-motion-off", motion === "reduced"); }, [motion]);
@@ -5554,8 +5564,8 @@ export default function ShinobiLife() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(() => (typeof INITIAL_PREFS.musicVolume === "number" ? INITIAL_PREFS.musicVolume : 45));
   const [musicError, setMusicError] = useState(false);
-  useEffect(() => { writePrefs({ themeId, bgMode, layout, motion, cinema, musicTrackId, musicVolume }); },
-    [themeId, bgMode, layout, motion, cinema, musicTrackId, musicVolume]);
+  useEffect(() => { writePrefs({ themeId, bgMode, layout, motion, cinema, engineMode, musicTrackId, musicVolume }); },
+    [themeId, bgMode, layout, motion, cinema, engineMode, musicTrackId, musicVolume]);
   const audioRef = useRef(null);
   function playMusicTrack(id) {
     const track = MUSIC_TRACKS.find((t) => t.id === id);
@@ -5611,6 +5621,64 @@ export default function ShinobiLife() {
   const V = c ? VILLAGES.find((v) => v.id === c.village) : VILLAGES.find((v) => v.id === draft.village);
   const skin = setSkin(c);
   const accent = c ? (c.rogue ? T.blood : c.founded ? T.gold : skin.key) : ERA_SKIN.naruto.key;
+
+  /* ---------- the chakra engine: a real WebGL surface under the whole game ---------- */
+  const glCanvas = useRef(null);
+  const engineRef = useRef(null);
+  const engineOn = engineMode === "on" && motion !== "reduced";
+  /* `screen` is in here on purpose: intro, play and the death screen are three separate
+     returns, so changing screen unmounts one canvas and mounts a brand new one. Without
+     rebinding, the engine keeps drawing into the old detached node and the visible one
+     stays blank. Screens change twice a lifetime, so rebuilding the context is free. */
+  useEffect(() => {
+    if (!engineOn) {
+      if (engineRef.current) { engineRef.current.destroy(); engineRef.current = null; }
+      return undefined;
+    }
+    const eng = createChakraEngine(glCanvas.current);
+    engineRef.current = eng;
+    /* no WebGL on this machine is not an error — the game just looks like it always did */
+    if (!eng) setEngineFailed(true);
+    else eng.tone(skin.key, accent);
+    return () => { if (engineRef.current) { engineRef.current.destroy(); engineRef.current = null; } };
+  }, [engineOn, screen]);
+  /* it is painted in whatever colours the life you are living is painted in */
+  useEffect(() => { if (engineRef.current) engineRef.current.tone(skin.key, accent); }, [skin.key, accent]);
+  /* and it leans forward when you are in a fight */
+  useEffect(() => {
+    if (!engineRef.current) return;
+    engineRef.current.heat(bt ? (bt.legendTier >= 3 ? 1 : bt.legendTier >= 1 ? 0.8 : 0.55) : 0);
+  }, [bt && bt.legendTier, !!bt]);
+  /* every hit landed, either way, throws a ring out of the middle */
+  useEffect(() => { if (engineRef.current && bt && bt.shake) engineRef.current.burst(bt.crit ? 2.2 : 1.4); }, [bt && bt.shake]);
+  useEffect(() => { if (engineRef.current && bt && bt.shakeP) engineRef.current.burst(bt.critP ? 1.9 : 1.2); }, [bt && bt.shakeP]);
+  /* so does a year turning over */
+  useEffect(() => { if (engineRef.current && yearFlash != null) engineRef.current.burst(1.8); }, [yearFlash]);
+  /* and every single press anywhere in the game, at the exact point of contact —
+     one listener rather than a call on every button in the file */
+  useEffect(() => {
+    if (!engineOn) return undefined;
+    const onDown = (ev) => {
+      const eng = engineRef.current;
+      if (!eng) return;
+      const w = window.innerWidth || 1, h = window.innerHeight || 1;
+      const tgt = ev.target;
+      const hard = tgt && tgt.closest && tgt.closest("button");
+      eng.ripple(ev.clientX / w, ev.clientY / h, hard ? 1.15 : 0.5);
+    };
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [engineOn]);
+
+  const chakraCanvas = engineOn ? (
+    <>
+      <canvas ref={glCanvas} aria-hidden style={{ position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "none", display: "block" }} />
+      <div aria-hidden style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
+        background: THEME.light
+          ? "linear-gradient(180deg, rgba(221,210,182,.50), rgba(221,210,182,.68))"
+          : "linear-gradient(180deg, rgba(4,5,10,.30) 0%, rgba(4,5,10,.42) 58%, rgba(4,5,10,.56) 100%)" }} />
+    </>
+  ) : null;
 
   const push = (L, age) => { if (L.length) setLog((p) => [...p, ...L.map((e) => ({ ...e, age }))]); };
   /* A commit must clone the character as it is *now*. Using the closure meant a commit
@@ -9214,10 +9282,13 @@ export default function ShinobiLife() {
         `}</style>
 
         {/* cinematic backdrop */}
-        <div style={{ position: "fixed", inset: 0, zIndex: 0 }}>
-          <div style={{ position: "absolute", inset: 0 }}><EraArt era={draft.era} height="100%" /></div>
-        </div>
-        <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.55) 0%, rgba(4,5,10,.86) 46%, #04050a 88%)" }} />
+        {chakraCanvas}
+        {!engineOn && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 0 }}>
+            <div style={{ position: "absolute", inset: 0 }}><EraArt era={draft.era} height="100%" /></div>
+          </div>
+        )}
+        {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.55) 0%, rgba(4,5,10,.86) 46%, #04050a 88%)" }} />}
         <div className="sl-grain" style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .6 }} />
         <div style={{ position: "fixed", inset: 0, zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
           {Array.from({ length: 14 }).map((_, i) => (
@@ -9525,8 +9596,9 @@ export default function ShinobiLife() {
   if (screen === "dead" && c) {
     return (
       <div style={{ background: "#04050a", color: T.text, minHeight: "100dvh", fontFamily: UI, position: "relative", overflow: "hidden" }} className="p-4 sm:p-8">
-        <div style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }}><EraArt era={c.era} height="100%" dim /></div>
-        <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.75), #04050a 70%)" }} />
+        {chakraCanvas}
+        {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }}><EraArt era={c.era} height="100%" dim /></div>}
+        {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.75), #04050a 70%)" }} />}
         <div className="sl-grain" style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }} />
         <div className="max-w-2xl mx-auto sl-rise" style={{ position: "relative", zIndex: 1 }}>
           <div className="flex items-center gap-4 mb-6">
@@ -10142,7 +10214,8 @@ export default function ShinobiLife() {
         onPause={() => setMusicPlaying(false)}
         onError={() => { setMusicError(true); setMusicPlaying(false); }} />
       {ATMOS}
-      {bgMode !== "none" && (
+      {chakraCanvas}
+      {bgMode !== "none" && !engineOn && (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
           <div style={{ position: "absolute", inset: 0, opacity: theme.light ? .5 : .92 }}>
             {bgMode === "village" && villageExists(c, c.village)
@@ -12360,6 +12433,17 @@ export default function ShinobiLife() {
           {[["off", "Normal", "The usual amount of motion. This is the version everyone else gets."],
             ["max", "Cinema Mode", "3D buttons, 3D cards, a face-off and a turning ring on every fight, modals that open in three dimensions instead of sliding up. Maximum, on purpose."]].map(([id, n2, d2]) => (
             <Row key={id} label={n2} sub={d2} right={cinema === id ? "In use" : "Use"} onClick={() => setCinema(id)} disabled={cinema === id} tone={cinema === id ? T.epic : null} />
+          ))}
+
+          <div style={{ color: T.ck, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE CHAKRA ENGINE</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            A different thing entirely from Cinema Mode. This throws the painted backdrops away and runs the whole background on your graphics card instead — a live chakra field drawn in real shaders, hundreds of motes rising through it, and a shockwave thrown from the exact point of every single press anywhere in the game. It takes its colour from whichever village and age you are in, and it leans forward the moment a fight starts.
+            {motion === "reduced" && <span style={{ color: T.bad }}> Needs Full motion above — Reduced motion switches it off.</span>}
+            {engineFailed && <span style={{ color: T.bad }}> This browser would not give the game a WebGL surface, so it has fallen back to the painted backdrops.</span>}
+          </div>
+          {[["off", "Painted", "The hand-drawn village and era backdrops. No graphics card required."],
+            ["on", "The Chakra Engine", "Real-time WebGL: a shader-drawn chakra field, GPU motes, and a ring off every tap, every hit and every year that turns."]].map(([id, n2, d2]) => (
+            <Row key={id} label={n2} sub={d2} right={engineMode === id ? "In use" : "Use"} onClick={() => { setEngineFailed(false); setEngineMode(id); }} disabled={engineMode === id} tone={engineMode === id ? T.ck : null} />
           ))}
 
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MUSIC</div>
