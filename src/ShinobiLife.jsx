@@ -2216,6 +2216,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.1", n: "The Movie Screen", items: [
+    "Fighting anyone worth calling legendary (level 70+ — S-rank missing-nin, Akatsuki, jinchuriki, any Kage, any boss) now opens on a face-off: your name against theirs, tinted to their chakra nature, a ring burning in behind you both, tier called out — NAMED BOUT, S-RANK BOUT or LEGENDARY BOUT — before the first hit lands. Tap through it or let it play out on its own",
+    "The whole fight carries a faint coloured frame and a slow-drifting glow behind the cards for as long as it's a legendary bout, so it never stops reading as the big fight it is",
+    "Winning or losing one of these now gets its own reveal — bigger VICTORY or DEFEAT text, the tier called out again, and a line naming exactly who you just went through, instead of the same small banner every ordinary scrap gets",
+    "All of it respects the motion toggle and prefers-reduced-motion, same as everything else in Appearance",
+  ] },
   { v: "9.0", n: "Kills That Matter, and the Otsutsuki Path", items: [
     "Killing a name off the Bingo Book is a real moment now instead of a stat tick. Every named kill — bounty, duel, coup, raid, war, an ANBU shadow-kill on your own Kage — pays a bonus scaled to how strong they were, on top of whatever the mission itself paid, always earns a 'Killed <name>' title, and posts a louder obituary the higher their level. A full-screen callout marks the moment (NAMED KILL / S-RANK KILL / LEGENDARY KILL depending on who it was), and a running count of every legendary kill you've taken earns its own titles at 1, 5, 10 and 20 — First Kill of Note, Executioner, Death Incarnate, The Reaper Made Flesh",
     "Any shinobi can now walk the same road Boruto did. A rare encounter ('Something in the sky is looking for you') can mark you as an Otsutsuki vessel regardless of clan — accept it and celestial chakra starts building in you every year, the Jogan opens once it's high enough, and the full dojutsu ladder (Tenseigan, Rinnegan, Rinne Sharingan) is reachable the same way it always was for Otsutsuki blood",
@@ -3035,6 +3041,16 @@ function enemyFighter(tpl, scale, weakened, forced, preVillage) {
   };
 }
 
+/* colour + glow for whatever nature is standing across from you — used to tint the pre-fight
+   face-off and the ambient frame around a fight worth remembering. unmatched natures fall back
+   to blood red rather than grey, so nothing renders as a colourless nobody. */
+const NATURE_FX = {
+  Fire: "#e2683f", "Lava Release": "#e2683f", "Scorch Release": "#e2683f", "Explosion Release": "#e2b24a",
+  Water: "#4f97c9", "Storm Release": "#4f97c9", "Boil Release": "#7fb8c9",
+  Wind: "#8fd6b0", Earth: "#b8874a", "Dust Release": "#b8874a", "Wood Release": "#7fa85a",
+  Lightning: "#c9a8f0", Chakra: "#cf4232", Ice: "#9fd8e8",
+};
+const natureFx = (nature) => NATURE_FX[nature] || "#cf4232";
 function natMult(atkNat, defNat) {
   if (!atkNat || !defNat) return 1;
   if (BEATS[atkNat] === defNat) return 1.42;
@@ -7690,7 +7706,10 @@ export default function ShinobiLife() {
     }
     lg.push({ t: "Anything past a basic technique means forming seals — a quick sequence, on the spot. Catch it clean and the technique lands harder.", k: "n" });
     setQuest(null);
-    setBt({ p, e, log: lg, turn: 1, over: false, win: false, ctx, guard: c.guardBattles > 0, used: {}, cool: {} });
+    /* a fight worth a movie moment — same tiers as a kill that matters, just before the first hit lands */
+    const legendTier = e.lvl >= 95 ? 3 : e.lvl >= 85 ? 2 : e.lvl >= 70 ? 1 : 0;
+    setBt({ p, e, log: lg, turn: 1, over: false, win: false, ctx, guard: c.guardBattles > 0, used: {}, cool: {}, legendTier, showIntro: legendTier > 0 });
+    if (legendTier > 0) setTimeout(() => setBt((prev) => (prev && prev.showIntro ? { ...prev, showIntro: false } : prev)), 2700);
   }
   /* techniques that are rituals, not attacks — they never belonged on a battle screen */
   const NOT_IN_BATTLE = ["Creation Rebirth", "One's Own Life Reincarnation", "Impure World Reincarnation",
@@ -9719,6 +9738,35 @@ export default function ShinobiLife() {
       }
       body.sl-motion-off .hit-burst, body.sl-motion-off .hit-core, body.sl-motion-off .hit-ray { display: none !important; }
       body.sl-motion-off .hit-crit { animation: slFloat 1.2s ease-out forwards; }
+      /* the face-off before a fight worth remembering, and the frame that keeps reminding you of it */
+      @keyframes vsVeil { 0% { opacity: 0; } 14% { opacity: 1; } 84% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes vsRing { 0% { transform: scale(.2) rotate(-30deg); opacity: 0; } 25% { opacity: .8; } 100% { transform: scale(2.3) rotate(65deg); opacity: 0; } }
+      @keyframes vsSlideL { 0% { transform: translateX(-46px); opacity: 0; } 45% { opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes vsSlideR { 0% { transform: translateX(46px); opacity: 0; } 45% { opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes vsClash { 0% { transform: scale(.3) rotate(-14deg); opacity: 0; } 55% { transform: scale(1.3) rotate(5deg); opacity: 1; } 74% { transform: scale(.92) rotate(-2deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+      @keyframes vsTier { 0% { opacity: 0; letter-spacing: .7em; } 35% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; letter-spacing: .4em; } }
+      @keyframes vsSweep { 0% { transform: translateX(-140%); } 100% { transform: translateX(340%); } }
+      @keyframes vsSpark { 0% { transform: translate(0,0) scale(1); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(var(--sx,0), -62vh) scale(.3); opacity: 0; } }
+      @keyframes legendPulse { 0%,100% { box-shadow: inset 0 0 0 1px var(--lc), inset 0 0 50px -22px var(--lc); } 50% { box-shadow: inset 0 0 0 1px var(--lc), inset 0 0 80px -14px var(--lc); } }
+      @keyframes legendDrift { 0% { transform: translate(-3%,-2%) scale(1.06); } 50% { transform: translate(3%,2%) scale(1.12); } 100% { transform: translate(-3%,-2%) scale(1.06); } }
+      .vs-veil { animation: vsVeil 2.5s ease both; }
+      .vs-ring { animation: vsRing 2.2s cubic-bezier(.2,.7,.3,1) both; }
+      .vs-name-p { animation: vsSlideL .55s ease-out .2s both; }
+      .vs-name-e { animation: vsSlideR .55s ease-out .2s both; }
+      .vs-clash { animation: vsClash .6s cubic-bezier(.2,.8,.3,1) .5s both; }
+      .vs-tier { animation: vsTier 2.5s ease both; }
+      .vs-sweep { animation: vsSweep 1.5s ease-out .75s both; }
+      .vs-spark { animation: vsSpark 1.9s ease-out infinite; }
+      .legend-frame { animation: legendPulse 2.8s ease-in-out infinite; }
+      .legend-bg { animation: legendDrift 15s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .vs-veil, .vs-ring, .vs-name-p, .vs-name-e, .vs-clash, .vs-tier, .vs-sweep, .legend-frame, .legend-bg { animation: none !important; opacity: 1 !important; transform: none !important; }
+        .vs-spark { display: none !important; }
+      }
+      body.sl-motion-off .vs-veil, body.sl-motion-off .vs-ring, body.sl-motion-off .vs-name-p, body.sl-motion-off .vs-name-e,
+      body.sl-motion-off .vs-clash, body.sl-motion-off .vs-tier, body.sl-motion-off .vs-sweep,
+      body.sl-motion-off .legend-frame, body.sl-motion-off .legend-bg { animation: none !important; opacity: 1 !important; transform: none !important; }
+      body.sl-motion-off .vs-spark { display: none !important; }
       @keyframes slCount { from { opacity: .35; transform: translateY(-4px) scale(1.16); } to { opacity: 1; transform: none; } }
       .sl-count { animation: slCount .45s cubic-bezier(.2,.8,.3,1) both; }
       @keyframes slPanelIn { from { opacity: 0; transform: translateY(10px) scale(.995); } to { opacity: 1; transform: none; } }
@@ -10564,8 +10612,57 @@ export default function ShinobiLife() {
 
       {/* ---------- BATTLE ---------- */}
       {bt && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(4,5,8,.94)" }}>
-          <div className="max-w-2xl w-full mx-auto flex flex-col h-full p-3">
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(4,5,8,.94)",
+          "--lc": bt.legendTier > 0 ? (bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood) : "transparent" }}>
+          {bt.legendTier > 0 && (
+            <div aria-hidden className="legend-bg" style={{ position: "absolute", inset: "-10%", pointerEvents: "none",
+              background: "radial-gradient(60% 50% at 50% 0%, " + natureFx(bt.e.nature) + "22, transparent 70%)" }} />
+          )}
+          {bt.legendTier > 0 && <div aria-hidden className="legend-frame" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }} />}
+          {bt.showIntro && (() => {
+            const nCol = natureFx(bt.e.nature);
+            const tierLabel = bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : "NAMED BOUT";
+            const tierCol = bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood;
+            return (
+              <div className="vs-wrap" onClick={() => setBt((prev) => (prev ? { ...prev, showIntro: false } : prev))}
+                style={{ position: "fixed", inset: 0, zIndex: 62, overflow: "hidden", cursor: "pointer" }}>
+                <div aria-hidden className="vs-veil" style={{ position: "absolute", inset: 0,
+                  background: "radial-gradient(120% 90% at 50% 42%, rgba(8,10,16,.90), rgba(2,3,6,.98) 72%), radial-gradient(70% 50% at 50% 30%, " + nCol + "33, transparent 70%)" }} />
+                <div aria-hidden style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg className="vs-ring" width="min(70vmin,480px)" height="min(70vmin,480px)" viewBox="0 0 200 200">
+                    <circle cx="100" cy="100" r="94" fill="none" stroke={nCol} strokeWidth=".6" opacity=".4" />
+                    <circle cx="100" cy="100" r="76" fill="none" stroke={nCol} strokeWidth="1" strokeDasharray="2 11" opacity=".6" />
+                  </svg>
+                </div>
+                {Array.from({ length: 14 }).map((_, i2) => (
+                  <span key={i2} aria-hidden className="vs-spark" style={{ position: "absolute", left: (6 + i2 * 6.8) + "%", bottom: "8%",
+                    width: 2, height: 2, borderRadius: 99, background: nCol, opacity: .6,
+                    "--sx": ((i2 % 5) - 2) * 18 + "px", animationDelay: (i2 * 0.11) + "s" }} />
+                ))}
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+                  <div className="vs-tier" style={{ color: tierCol, fontSize: FS(10, 12), letterSpacing: ".5em", fontWeight: 800, textAlign: "center" }}>{tierLabel}</div>
+                  <div className="flex items-center justify-center gap-3 sm:gap-6 mt-4" style={{ width: "100%", maxWidth: 640 }}>
+                    <div className="vs-name-p" style={{ flex: 1, textAlign: "right", minWidth: 0 }}>
+                      <div style={{ fontFamily: SERIF, fontSize: FS(19, 28), fontWeight: 700, color: "#f4f2ea", lineHeight: 1.1, textShadow: "0 2px 18px rgba(0,0,0,.7)" }} className="truncate">{c.name}</div>
+                      <div style={{ color: T.dim, fontSize: FS(10, 11.5), marginTop: 2 }}>{c.rankName}</div>
+                    </div>
+                    <div className="vs-clash" style={{ fontFamily: SERIF, fontSize: FS(22, 32), fontWeight: 800, color: tierCol, textShadow: "0 0 30px " + tierCol + "99", flexShrink: 0 }}>VS</div>
+                    <div className="vs-name-e" style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
+                      <div style={{ fontFamily: SERIF, fontSize: FS(19, 28), fontWeight: 700, color: nCol, lineHeight: 1.1, textShadow: "0 0 24px " + nCol + "88, 0 2px 18px rgba(0,0,0,.7)" }} className="truncate">{bt.e.name}</div>
+                      <div style={{ color: T.dim, fontSize: FS(10, 11.5), marginTop: 2 }}>{bt.e.title}</div>
+                    </div>
+                  </div>
+                  <div style={{ position: "relative", width: "min(60vmin,340px)", height: 1, marginTop: 20, overflow: "hidden" }}>
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent, " + tierCol + ", transparent)" }} />
+                    <div className="vs-sweep" aria-hidden style={{ position: "absolute", top: -6, bottom: -6, width: "30%",
+                      background: "linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent)" }} />
+                  </div>
+                  <div style={{ color: "#8b8f9a", fontSize: FS(9.5, 11), marginTop: 18, letterSpacing: ".1em" }}>tap anywhere to begin</div>
+                </div>
+              </div>
+            );
+          })()}
+          <div className="max-w-2xl w-full mx-auto flex flex-col h-full p-3" style={{ position: "relative", zIndex: 2 }}>
             <div key={"e" + (bt.shake || 0)} style={{ ...card, borderLeft: "3px solid " + T.blood, position: "relative", overflow: "hidden" }}
               className={"p-3 mb-2" + (bt.shake ? " sl-hit" : "")}>
               {bt.flash && <div key={"f" + bt.shake} className="sl-flash" style={{ position: "absolute", inset: 0, background: bt.flash, pointerEvents: "none", opacity: 0 }} />}
@@ -10647,11 +10744,21 @@ export default function ShinobiLife() {
             </div>
 
             {bt.over ? (
-              <div className="sl-rise" style={{ position: "relative", textAlign: "center", padding: "10px 0 4px" }}>
-                <div aria-hidden style={{ position: "absolute", left: "50%", top: "38%", width: 220, height: 220, transform: "translate(-50%,-50%)",
-                  background: "radial-gradient(circle, " + (bt.win ? T.good : T.bad) + "33, transparent 68%)", pointerEvents: "none" }} className={bt.win ? "sl-hero" : ""} />
-                <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".35em", position: "relative", textShadow: "0 0 30px " + (bt.win ? T.good : T.bad) + "77" }}
-                  className="font-bold mb-3 text-2xl">{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
+              <div className="sl-rise" style={{ position: "relative", textAlign: "center", padding: bt.legendTier > 0 ? "18px 0 4px" : "10px 0 4px" }}>
+                <div aria-hidden style={{ position: "absolute", left: "50%", top: "38%", width: bt.legendTier > 0 ? 320 : 220, height: bt.legendTier > 0 ? 320 : 220, transform: "translate(-50%,-50%)",
+                  background: "radial-gradient(circle, " + (bt.win ? T.good : T.bad) + (bt.legendTier > 0 ? "44" : "33") + ", transparent 68%)", pointerEvents: "none" }} className={bt.win ? "sl-hero" : ""} />
+                {bt.legendTier > 0 && (
+                  <div className="vs-tier" style={{ color: bt.legendTier >= 3 ? T.gold : bt.legendTier >= 2 ? T.epic : T.blood, fontSize: FS(9.5, 11), letterSpacing: ".5em", fontWeight: 800, position: "relative", marginBottom: 6 }}>
+                    {bt.legendTier >= 3 ? "LEGENDARY BOUT" : bt.legendTier >= 2 ? "S-RANK BOUT" : "NAMED BOUT"}
+                  </div>
+                )}
+                <div style={{ color: bt.win ? T.good : T.bad, letterSpacing: ".35em", position: "relative", textShadow: "0 0 " + (bt.legendTier > 0 ? "44px" : "30px") + " " + (bt.win ? T.good : T.bad) + "77" }}
+                  className={(bt.legendTier > 0 ? "vs-clash " : "") + "font-bold mb-2 " + (bt.legendTier > 0 ? "text-4xl" : "text-2xl")}>{bt.win ? "VICTORY" : bt.fled ? "WITHDREW" : "DEFEAT"}</div>
+                {bt.legendTier > 0 && (
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: FS(12, 13.5), position: "relative", marginBottom: 8 }}>
+                    {bt.win ? "You against " + bt.e.name + ", and it is decided." : "You against " + bt.e.name + ". Not this time."}
+                  </div>
+                )}
                 <button onClick={finishBattle} style={{ background: accent, color: ON(), borderRadius: 10, position: "relative" }} className="w-full py-3 font-bold">Continue</button>
               </div>
             ) : sealQTE ? (
