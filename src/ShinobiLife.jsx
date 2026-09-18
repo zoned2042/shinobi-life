@@ -93,6 +93,8 @@ const VILLAGES = [
   { id: "uzu", hidden: "the Village Hidden in the Whirlpools", name: "Uzushiogakure", short: "Whirlpool", land: "Land of Whirlpools", kage: "Uzukage", accent: "#c9603f", bias: "Water" },
   { id: "yu", hidden: "the Village Hidden in the Hot Water", name: "Yugakure", short: "Hot Water", land: "Land of Hot Water", kage: "Village Head", accent: "#c07d92", bias: "Fire" },
 ];
+/* the five with a Kage and a seat on the Summit — everyone else is a minor village */
+const GREAT_VILLAGES = ["konoha", "suna", "kiri", "kumo", "iwa"];
 
 const BEASTS = [
   { id: 1, name: "Shukaku", tails: 1, v: "suna", nat: "Magnet Release", j: ["Sand Shield", "Wind Style: Drilling Air Bullet", "Magnet Style: Sand Binding Coffin"], t: "a one-tailed tanuki made of sand and insomnia" },
@@ -654,6 +656,31 @@ function killNamed(c, id, L, how, claimVid) {
     c.roster.push(r);
     newsItem(c, NAMED[r].name + ", " + namedTitle(c, r) + ", has been entered into the Bingo Book among the strongest alive.", "BINGO BOOK");
   }
+}
+/* the difference between a kill and a kill that MATTERS. call right after killNamed(), only for a
+   kill the player actually delivered — never for ambient/background deaths. id must still resolve
+   in NAMED (killNamed does not delete the entry, only marks it dead, so this is always safe after it). */
+function killFeat(c, L, id) {
+  if (!id || !NAMED[id]) return;
+  const n = NAMED[id];
+  const tier = n.lvl >= 95 ? 4 : n.lvl >= 85 ? 3 : n.lvl >= 70 ? 2 : 1;
+  const bonusRyo = Math.round(n.lvl * n.lvl * 35);
+  c.ryo += bonusRyo;
+  const rep = Math.round(6 + n.lvl * 0.4);
+  if (c.rogue) c.infamy = cl(c.infamy + rep); else c.standing = cl(c.standing + Math.round(rep * 0.7));
+  addTitle(c, "Killed " + n.name);
+  c.legendaryKills = (c.legendaryKills || []).concat([id]);
+  const count = c.legendaryKills.length;
+  const tierLine = tier === 4
+    ? n.name + " is dead. There has not been a kill like this in a generation, and every history from here treats it as a hinge point."
+    : tier === 3 ? n.name + " is dead by your hand. The Bingo Book is already being reprinted."
+    : tier === 2 ? n.name + " is dead. That name meant something, and you are the reason it is past tense now."
+    : n.name + " is dead. One more name off the list that matters.";
+  P(L, tierLine + " +" + money(bonusRyo) + ".", "e");
+  newsItem(c, c.name + " has killed " + n.name + ", " + namedTitle(c, id) + ".", "OBITUARIES", n.lvl >= 80);
+  const milestone = count === 1 ? "First Kill of Note" : count === 5 ? "Executioner" : count === 10 ? "Death Incarnate" : count === 20 ? "The Reaper Made Flesh" : null;
+  if (milestone) { addTitle(c, milestone); newsItem(c, c.name + " has now killed " + count + " names the Bingo Book tracked. " + milestone + ".", "BINGO BOOK", count >= 10); }
+  c.killFlash = { name: n.name, title: namedTitle(c, id), tier, count, ryo: bonusRyo };
 }
 
 /* every named shinobi's signature must be a real, usable technique */
@@ -2189,6 +2216,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.0", n: "Kills That Matter, and the Otsutsuki Path", items: [
+    "Killing a name off the Bingo Book is a real moment now instead of a stat tick. Every named kill — bounty, duel, coup, raid, war, an ANBU shadow-kill on your own Kage — pays a bonus scaled to how strong they were, on top of whatever the mission itself paid, always earns a 'Killed <name>' title, and posts a louder obituary the higher their level. A full-screen callout marks the moment (NAMED KILL / S-RANK KILL / LEGENDARY KILL depending on who it was), and a running count of every legendary kill you've taken earns its own titles at 1, 5, 10 and 20 — First Kill of Note, Executioner, Death Incarnate, The Reaper Made Flesh",
+    "Any shinobi can now walk the same road Boruto did. A rare encounter ('Something in the sky is looking for you') can mark you as an Otsutsuki vessel regardless of clan — accept it and celestial chakra starts building in you every year, the Jogan opens once it's high enough, and the full dojutsu ladder (Tenseigan, Rinnegan, Rinne Sharingan) is reachable the same way it always was for Otsutsuki blood",
+    "New, under The Celestial once you've eaten the god tree's fruit and hit power 85: Declare War on the Five Great Nations. One declaration, no council, no Kage seat required — it works exactly as well as a missing-nin as it does for anyone else. Fight through gate, jonin and Kage at each of the five in turn; win all five and the age of the hidden villages is over",
+  ] },
   { v: "8.9", n: "Playing a Kage Is Playing a Kage, and Fury", items: [
     "Fixed a real one: playing as a canon Kage (Hashirama, Tobirama, Hiruzen, Minato, Tsunade, Kakashi, Naruto) left a duplicate of that same person walking around in the world as an ordinary Bingo Book entry — one that could be killed off by the ambient world-death roll and then dragged back out of the ground with Impure World Reincarnation, while you were standing right there playing them. The duplicate could get re-seeded into your roster on every era change and every time the Bingo Book replaced a fallen name. All of those paths, plus the reincarnation and reanimation pools, now recognize that you can't hunt or raise the person you already are",
     "New forbidden technique: Fury, the last technique of the Tsuchigumo clan. Locked behind two other forbidden techniques and real strength, and even then the odds of surviving the attempt to learn it top out far below any other kinjutsu in the game. Learn it and you gain the same power to level a defenceless village that a destructive chakra nature grants elsewhere",
@@ -3305,7 +3337,7 @@ function otsutsukiTick(c, L) {
   if (c.otsu === 45) P(L, "You can feel the tree in the ground somewhere under all this, waiting to be planted.", "e");
   if (c.karma && !c.karmaBack && !c.alive) { /* handled at death */ }
 }
-const otsuAvailable = (c) => c.clan === "Otsutsuki" || (c.otsu || 0) >= 20 || c.karma;
+const otsuAvailable = (c) => c.clan === "Otsutsuki" || c.karmaHost || (c.otsu || 0) >= 20 || c.karma;
 
 /* ============================ FORMS, ULTIMATES AND RITUALS ============================ */
 /* Three problems this fixes:
@@ -7383,11 +7415,12 @@ export default function ShinobiLife() {
           c2.kills += 1; c2.darkDeeds = (c2.darkDeeds || 0) + 2; c2.infamy = cl(c2.infamy + 15);
           addTitle(c2, "The Knife Nobody Named");
           const title2 = K.title;
-          if (K.named) killNamed(c2, K.named, L2, "was found dead in the tower with no sign anyone had been there", null);
+          if (K.named) { killNamed(c2, K.named, L2, "was found dead in the tower with no sign anyone had been there", null); killFeat(c2, L2, K.named); }
           else newsItem(c2, K.name + ", " + title2 + " of " + vName2(c2.village) + ", was found dead in the tower overnight. No sign of forced entry, and nobody has a name to put to it.", "OBITUARIES", true);
           c2.kages[c2.village] = { named: null, name: randName(roll(50) ? "m" : "f"), title: title2 };
           P(L2, "You were gone before anyone found the body. The mask means nobody will ever connect it to you.", "e");
         });
+        setTimeout(() => setC((prev) => (prev && prev.killFlash ? { ...prev, killFlash: null } : prev)), 3400);
         setModal(null);
         return;
       }
@@ -7677,6 +7710,23 @@ export default function ShinobiLife() {
       });
       setTimeout(() => startBattle("chunin", { type: "descent", vid, stage: 0 }, 1,
         "The gate guard and everybody who came running when the gate guard shouted."), 120);
+      setModal(null);
+      return;
+    }
+    if (kind === "warpath") {
+      const targets = GREAT_VILLAGES.filter((vid2) => villageExists(c, vid2) && !c.razed.includes((VILLAGES.find((v) => v.id === vid2) || {}).name));
+      if (!targets.length) { setModal(null); return; }
+      const first = targets[0];
+      const v = VILLAGES.find((x) => x.id === first);
+      commit((c2, L2) => {
+        spend(c2);
+        c2.warpath = { vid: first, stage: 0, name: v.name, queue: targets.slice(1) };
+        addTitle(c2, "Declared war on the Five Great Nations");
+        P(L2, "You said it out loud to nobody in particular, and it was true the moment you said it: every hidden village left standing is a target now, starting with " + v.name + ". There is no council to declare it to. There is only you, and where you land next.", "e");
+        newsItem(c2, "WAR HAS BEEN DECLARED ON EVERY HIDDEN VILLAGE AT ONCE, BY ONE NAME. No treaty covers this and no alliance was built for it. " + v.name + " is first.", "WAR", true);
+      });
+      setTimeout(() => startBattle("chunin", { type: "warpath", vid: first, stage: 0, queue: targets.slice(1) }, 1,
+        "The gate detail at " + v.name + ", and everyone who came running when they shouted."), 120);
       setModal(null);
       return;
     }
@@ -8243,7 +8293,7 @@ export default function ShinobiLife() {
         if (b.win) {
           c.kills += 1; c.wins += 1;
           addTitle(c, (ctx.decap ? "Killed " : "Beat ") + b.e.name);
-          if (ctx.id) killNamed(c, ctx.id, L, ctx.decap ? "was found dead at their own command post during " + w3.name : "was killed in single combat by " + c.name + " in front of both armies");
+          if (ctx.id) { killNamed(c, ctx.id, L, ctx.decap ? "was found dead at their own command post during " + w3.name : "was killed in single combat by " + c.name + " in front of both armies"); killFeat(c, L, ctx.id); }
           if (f3) {
             f3.strength -= ctx.kagevkage ? 55 : 40;
             f3.pressure = cl(f3.pressure - 6, 2, 30);
@@ -8299,14 +8349,16 @@ export default function ShinobiLife() {
           P(L, b.e.name + " falls on the front line. Momentum " + c.war.momentum + "%.", "g");
           if (ctx.boss) {
             c.defeated.push(b.e.name);
-            killNamed(c, ctx.id || eraOf(c).bosses[c.war.stage], L, "was cut down by " + c.name + " in " + c.war.name);
+            const bossId = ctx.id || eraOf(c).bosses[c.war.stage];
+            killNamed(c, bossId, L, "was cut down by " + c.name + " in " + c.war.name);
+            killFeat(c, L, bossId);
             const sig = NAMED[eraOf(c).bosses[c.war.stage]] ? NAMED[eraOf(c).bosses[c.war.stage]].sig : null;
             if (sig) learn(c, L, sig, "You took " + sig + " off them mid-fight.");
             c.war.stage += 1;
             if (c.war.stage >= eraOf(c).bosses.length) { c.war.momentum = 100; c.war.contribution += 10; addTitle(c, "Ended " + c.war.name); P(L, "There is nothing left standing on their side. The war is over because you ended it.", "e"); endWar(c, L); }
             else P(L, "Their command falls back. One more stands between you and the end of this.", "e");
           }
-          if (ctx.champion) { c.defeated.push(b.e.name); addTitle(c, "Beat " + b.e.name); killNamed(c, ctx.id, L, "was killed in single combat with " + c.name + " on the front line"); }
+          if (ctx.champion) { c.defeated.push(b.e.name); addTitle(c, "Beat " + b.e.name); killNamed(c, ctx.id, L, "was killed in single combat with " + c.name + " on the front line"); killFeat(c, L, ctx.id); }
         } else {
           c.war.momentum = cl(c.war.momentum - (ctx.boss ? 20 : 10));
           const d = rr(18, 40); c.health = cl(c.health - d);
@@ -8323,6 +8375,7 @@ export default function ShinobiLife() {
           c.ryo += rr(120000, 420000);
           addTitle(c, "Answered " + (b2 ? b2.targetName : "the attack"));
           killNamed(c, ctx.id, L, "was killed by " + c.name + " leaving " + (b2 ? b2.targetName : "an attack") + ", on a day the whole country was watching");
+          killFeat(c, L, ctx.id);
           if (NAMED[ctx.id] && NAMED[ctx.id].sig) learn(c, L, NAMED[ctx.id].sig, "You took " + NAMED[ctx.id].sig + " off them in front of everyone.");
           P(L, "You put " + b.e.name + " down where the correspondents could see it. That footage will outlive you.", "e");
           newsItem(c, c.name + " intercepted " + b.e.name + " leaving " + (b2 ? b2.targetName : "the attack") + " and killed them on the road. It was broadcast live.", "WAR", true);
@@ -8357,6 +8410,7 @@ export default function ShinobiLife() {
           const k = pick(STAT_KEYS)[0]; c.stats[k] = cl(c.stats[k] + rr(2, 5));
           if (ctx.named) {
             killNamed(c, ctx.named, L, "was killed by " + c.name + " during " + m.t);
+            killFeat(c, L, ctx.named);
             if (NAMED[ctx.named] && NAMED[ctx.named].sig) learn(c, L, NAMED[ctx.named].sig, "You took " + NAMED[ctx.named].sig + " off them.");
             c.defeated.push(NAMED[ctx.named].name);
           }
@@ -8422,6 +8476,58 @@ export default function ShinobiLife() {
             newsItem(c, cap(v.name) + " HAS FALLEN TO ONE PERSON. There is no precedent for that in any archive in any country, and the four remaining Kage are meeting inside the week.", "WAR", true);
             if (c.news[0]) c.news[0].kage = true;
             newsItem(c, "Every village has recalled its people. Whatever came down on " + v.name + " is being described in the same words by every witness and none of those words are shinobi.", "THE COURTS", true);
+          }
+        }
+      }
+      if (ctx.type === "warpath") {
+        spend(c);
+        const v = VILLAGES.find((x) => x.id === ctx.vid) || {};
+        const stage = ctx.stage || 0;
+        const queue = ctx.queue || [];
+        if (!b.win) {
+          const d2 = rr(30, 60); c.health = cl(c.health - d2);
+          c.warpath = null;
+          P(L, v.name + " held. Whatever the remaining Kage are calling each other about tonight, it is not surrender. -" + d2 + " health.", "b");
+          newsItem(c, v.name + " has held against the declaration. The war is not over — it is just not over here.", "WAR", true);
+          if (c.health <= 0) die(c, L, "was brought down over " + v.name + " during the war on the five nations");
+        } else {
+          const STAGES = [
+            { n: "the gate", next: "jonin", line: "The gate at " + v.name + " is finished. The jonin are coming now." },
+            { n: "the jonin", next: "kage", line: v.name + "'s jonin corps is spent. There is one person left worth the walk." },
+            { n: "the Kage", next: null, line: "The hat is on the ground." },
+          ];
+          const st = STAGES[stage] || STAGES[2];
+          c.kills += rr(8, 34);
+          c.infamy = cl(c.infamy + 26);
+          c.bingo = "S";
+          if (st.next) {
+            c.warpath = { vid: ctx.vid, stage: stage + 1, name: v.name, queue };
+            P(L, st.line, "e");
+            setTimeout(() => startBattle(st.next === "kage" ? "kage" : "hunter",
+              { type: "warpath", vid: ctx.vid, stage: stage + 1, queue }, 0,
+              st.next === "kage" ? (c.kages[ctx.vid] && c.kages[ctx.vid].name ? c.kages[ctx.vid].name + " came off the tower to meet you." : "The Kage came down to meet you.")
+                : "The rooftops are full of them."), 140);
+          } else {
+            const kn = c.kages[ctx.vid] ? c.kages[ctx.vid].named : null;
+            if (kn && NAMED[kn]) { if (NAMED[kn].sig) learn(c, L, NAMED[kn].sig); killNamed(c, kn, L, "was killed by " + c.name + " when " + v.name + " fell in the war on the five nations"); killFeat(c, L, kn); }
+            if (!c.razed.includes(v.name)) c.razed.push(v.name);
+            if (!c.destroyed.includes(v.name)) c.destroyed.push(v.name);
+            c.ryo += rr(500000, 1500000);
+            addTitle(c, "Ended " + v.name);
+            P(L, st.line + " " + v.name + " is finished. " + (queue.length ? "There are " + queue.length + " left." : "There is nothing left standing that still calls itself a hidden village."), "e");
+            newsItem(c, cap(v.name) + " HAS FALLEN IN THE WAR ON THE FIVE NATIONS. " + (queue.length ? "The remaining Kage are calling for a summit that may not happen in time." : "Every hidden village that has ever stood is gone. There is no precedent for what happens now."), "WAR", true);
+            if (queue.length) {
+              const nextVid = queue[0];
+              const nv = VILLAGES.find((x) => x.id === nextVid) || {};
+              c.warpath = { vid: nextVid, stage: 0, name: nv.name, queue: queue.slice(1) };
+              setTimeout(() => startBattle("chunin", { type: "warpath", vid: nextVid, stage: 0, queue: queue.slice(1) }, 1,
+                "The gate detail at " + nv.name + "."), 160);
+            } else {
+              c.warpath = null;
+              addTitle(c, "Ended the Age of Shinobi");
+              c.wonWarpath = true;
+              newsItem(c, "THE FIVE GREAT NATIONS ARE GONE. There is no council left to convene, no Kage left to summon it, and no army left to send. History does not have a next chapter written for this.", "THE COURTS", true);
+            }
           }
         }
       }
@@ -8562,7 +8668,7 @@ export default function ShinobiLife() {
         const K = c.kages[c.village]; const kt = eraOf(c).kage || V.kage;
         if (b.win) {
           c.kills += 1; c.wins += 1; c.health = cl(c.health - rr(10, 25));
-          if (K.named) killNamed(c, K.named, L, "was assassinated in their own tower by " + c.name, ctx.seize ? c.village : null);
+          if (K.named) { killNamed(c, K.named, L, "was assassinated in their own tower by " + c.name, ctx.seize ? c.village : null); killFeat(c, L, K.named); }
           else { c.defeated.push(K.name); news(c, K.name + ", " + K.title + " of " + V.name + ", was assassinated in the tower."); }
           addTitle(c, "Killed " + K.name);
           if (ctx.seize) {
@@ -8586,7 +8692,7 @@ export default function ShinobiLife() {
             if (!c.canRaze.includes(c.village)) c.canRaze.push(c.village);
             if (canBurnVillage(c)) P(L, "The village is leaderless and the wind is up. With " + (hasDestructive(c) ? "your nature" : "Fury") + " you could finish it tonight — the option is under Ninja Path.", "b");
           }
-          if (K.named && NAMED[K.named]) { if (NAMED[K.named].sig) learn(c, L, NAMED[K.named].sig); killNamed(c, K.named, L, ctx.seize ? "was killed in a succession nobody is calling a coup" : "was assassinated in the tower", ctx.seize ? c.village : null); }
+          if (K.named && NAMED[K.named]) { if (NAMED[K.named].sig) learn(c, L, NAMED[K.named].sig); }
           else newsItem(c, K.name + ", " + K.title + ", " + (ctx.seize ? "died and was succeeded the same night" : "was assassinated in the tower") + ".");
         } else {
           const d = rr(30, 55); c.health = cl(c.health - d);
@@ -8598,7 +8704,7 @@ export default function ShinobiLife() {
       }
       if (ctx.type === "raid") {
         spend(c);
-        if (b.win && ctx.id) killNamed(c, ctx.id, L, "was killed by " + c.name + " defending the village");
+        if (b.win && ctx.id) { killNamed(c, ctx.id, L, "was killed by " + c.name + " defending the village"); killFeat(c, L, ctx.id); }
         const v = VILLAGES.find((x) => x.id === ctx.vid);
         if (b.win) {
           c.kills += rr(3, 9); c.wins += 1; c.health = cl(c.health - rr(6, 18));
@@ -8610,7 +8716,7 @@ export default function ShinobiLife() {
             c.infamy = 100; c.standing = 0;
             P(L, v.name + " has fallen. The Kage is dead, the tower is burning, and the other four villages now have a shared enemy. +" + money(loot), "e");
             const kn = c.kages[ctx.vid] ? c.kages[ctx.vid].named : null;
-            if (kn && NAMED[kn]) { if (!c.defeated.includes(NAMED[kn].name)) c.defeated.push(NAMED[kn].name); if (NAMED[kn].sig) learn(c, L, NAMED[kn].sig); killNamed(c, kn, L, "was killed by " + c.name + " defending " + v.name); }
+            if (kn && NAMED[kn]) { if (!c.defeated.includes(NAMED[kn].name)) c.defeated.push(NAMED[kn].name); if (NAMED[kn].sig) learn(c, L, NAMED[kn].sig); killNamed(c, kn, L, "was killed by " + c.name + " defending " + v.name); killFeat(c, L, kn); }
             else c.defeated.push(c.kages[ctx.vid].name);
             if (!c.canRaze.includes(ctx.vid)) c.canRaze.push(ctx.vid);
             if (canBurnVillage(c)) P(L, "Nothing is defending it now. With " + (hasDestructive(c) ? "your nature" : "Fury") + " you could burn what is left.", "b");
@@ -8637,7 +8743,8 @@ export default function ShinobiLife() {
             newsItem(c, killedBy(c) + " fought " + namedName(c, ctx.id) + " to a standstill and walked away without finishing it. Nobody can agree on why.", "BINGO BOOK", true);
             return;
           }
-          killNamed(c, ctx.id, L, "was killed in a duel with " + killedBy(c));
+          killNamed(c, ctx.id, L, ctx.ambush ? "was killed trying to collect a bounty" : "was killed in a duel with " + killedBy(c));
+          killFeat(c, L, ctx.id);
           c.kills += 1; c.wins += 1;
           const pay = rr(200000, 900000); c.ryo += pay;
           addTitle(c, "Beat " + nm.name);
@@ -8646,7 +8753,6 @@ export default function ShinobiLife() {
           c.health = cl(c.health - rr(5, 18));
           P(L, nm.name + " is down. The Bingo Book will need a new page. +" + money(pay), "e");
           if (nm.sig) learn(c, L, nm.sig, "You watched " + nm.name + " use " + nm.sig + " one time too many. It is yours now.");
-          killNamed(c, ctx.id, L, ctx.ambush ? "was killed trying to collect a bounty" : "was killed by " + c.name);
         } else {
           const d = rr(25, 50); c.health = cl(c.health - d);
           P(L, nm.name + " left you alive. That was the insult." + " -" + d + " health.", "b");
@@ -8661,6 +8767,7 @@ export default function ShinobiLife() {
         else setTimeout(() => setQuest({ ...q, step: q.step + 1, passes }), 60);
       }
     });
+    setTimeout(() => setC((prev) => (prev && prev.killFlash ? { ...prev, killFlash: null } : prev)), 3400);
     setBt(null);
   }
 
@@ -9944,6 +10051,23 @@ export default function ShinobiLife() {
           <div className="sl-pop" style={{ position: "relative", textAlign: "center" }}>
             <div style={{ color: T.blood, fontSize: 10, letterSpacing: ".38em", fontWeight: 800 }}>MANGEKYO SHARINGAN</div>
             <div style={{ fontFamily: SERIF, fontSize: 40, lineHeight: 1.05, textShadow: "0 0 40px " + T.blood + "88" }} className="font-bold">{c.eyeFlash}</div>
+          </div>
+        </div>
+      )}
+      {c.killFlash && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 66, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="sl-pop" style={{ position: "relative", textAlign: "center", padding: "0 24px" }}>
+            <div style={{ color: c.killFlash.tier >= 4 ? T.gold : c.killFlash.tier >= 3 ? T.epic : T.blood, fontSize: 10, letterSpacing: ".38em", fontWeight: 800 }}>
+              {c.killFlash.tier >= 4 ? "LEGENDARY KILL" : c.killFlash.tier >= 3 ? "S-RANK KILL" : c.killFlash.tier >= 2 ? "NAMED KILL" : "BINGO BOOK ENTRY CLOSED"}
+            </div>
+            <div style={{ fontFamily: SERIF, fontSize: "clamp(26px,5vw,44px)", lineHeight: 1.1, marginTop: 4,
+              textShadow: "0 0 40px " + (c.killFlash.tier >= 3 ? T.gold : T.blood) + "88" }} className="font-bold">
+              {c.killFlash.name}
+            </div>
+            <div style={{ color: T.dim, fontSize: 12, marginTop: 6, fontFamily: SERIF }}>{c.killFlash.title}</div>
+            <div style={{ color: T.good, fontSize: 13, marginTop: 10, fontWeight: 700 }}>
+              +{money(c.killFlash.ryo)}{c.killFlash.count > 1 ? " · Kill No. " + c.killFlash.count : ""}
+            </div>
           </div>
         </div>
       )}
@@ -11885,6 +12009,27 @@ export default function ShinobiLife() {
               tone={T.blood} />
           ))}
           {power(c) < 70 && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-1">You need power 70 to come down on anybody. You are {pw}.</div>}
+
+          {(() => {
+            const remaining = GREAT_VILLAGES.filter((vid2) => villageExists(c, vid2) && !c.razed.includes((VILLAGES.find((v) => v.id === vid2) || {}).name));
+            const ready = c.fruit && power(c) >= 85 && !c.warpath;
+            return (
+              <>
+                <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-1">DECLARE WAR ON THE FIVE GREAT NATIONS</div>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  Not one village — every hidden village with a Kage and a seat on the Summit, one after another, gate to jonin to Kage, until none of them are standing or you are. There is no council to ask, and being a missing-nin does not stop this — nothing does.
+                </div>
+                {c.warpath && <div style={{ color: T.blood, fontFamily: SERIF }} className="text-xs mb-2">The war is already declared. {c.warpath.name} is the front, with {(c.warpath.queue || []).length} left after it.</div>}
+                {!remaining.length && !c.warpath && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">There is nothing left standing to declare it against. You have already ended this.</div>}
+                {remaining.length > 0 && (
+                  <Row label={"Declare it — " + remaining.length + " nation" + (remaining.length === 1 ? "" : "s") + " left standing"}
+                    sub={!c.fruit ? "Requires the fruit off the god tree." : power(c) < 85 ? "Requires power 85. You are " + pw + "." : "There is no version of this you walk back from."}
+                    right={ready ? "Declare War" : "Locked"} onClick={() => otsuAct("warpath")}
+                    disabled={!ready || c.actions < 1} tone={ready ? T.blood : null} />
+                )}
+              </>
+            );
+          })()}
         </Modal>
       )}
 
