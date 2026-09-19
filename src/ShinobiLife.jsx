@@ -2306,6 +2306,15 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.10", n: "The Year Turn Stops Shouting, and a Sweep", items: [
+    "Fixed the big one: every single age-up threw a full-strength shockwave from the dead centre of the screen. It was the loudest effect in the game and it fired once a turn, for the whole game. It is gone \u2014 the band and the odometer already mark the year, and they do it without washing the page",
+    "The background ripple a press makes is local now instead of crossing the screen. It used to travel most of the way across in two and a bit seconds, which meant one press sent a wave over every word on the page and the next press started another before the first had finished. Half the travel, a band three times tighter, and done in one second",
+    "New, under Appearance: TOUCH \u2014 Subtle, Full or Off. The size of the press effect has been guesswork across three rounds of 'still too big', so it is a setting now. Off removes the ripple, the drop and the drag trail entirely and leaves the Chakra Engine's field and motes exactly as they were",
+    "Fixed: you could die of old age at eighteen. A body under 25 health fell through to the same line as a body of ninety, so anyone bleeding out young was reported as having died of old age. Wounds that were never given time to close are now their own cause of death",
+    "Fixed, in the same line: being old made a frail character less likely to die than a young one in the same state \u2014 7% against 8%, because age was tested first and stopped the check. Age and frailty are separate risks now and whichever is worse applies",
+    "Fixed a performance mistake: widening the click drop so a drag could lay a trail also widened the loop in the background field's shader, which is the expensive one \u2014 four noise passes on every pixel of every frame. The two have their own budgets now, and the background is back to what it cost before",
+    "Smaller things: reduced motion never reached The Scroll's seals, one of its rules was written with a selector that browsers silently drop, and its wire story had a full-strength text-coloured bar where a hairline belonged",
+  ] },
   { v: "9.9", n: "A Second Interface, and a Drop You Drag", items: [
     "New, under Appearance: INTERFACE. Two builds of the game's screen, and this time it is the screen and not the paint. The Chakra Engine and Cinema Mode only ever changed the background and the buttons \u2014 the header, the tiles, the dock and the columns were the same in every mode. They are not any more",
     "The Scroll throws the whole dossier out. No sticky header: your health, standing and power are three rings drawn around your age. No labelled tiles two across: every action is a square seal you read by its mark, packed five and six to a row. No four-slot dock: the year is turned from a disc that floats over the page wherever you have scrolled to. The life runs underneath it unboxed, with no card around it at all, and the paper is one wire story rather than a whole front page",
@@ -5665,6 +5674,11 @@ export default function ShinobiLife() {
   const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
   /* which interface the game wears, not which colours it wears */
   const [ui, setUi] = useState(() => INITIAL_PREFS.ui || "dossier");
+  /* How loud the touch effects are. This has been tuned by guesswork across
+     three rounds of "still too big", so it is a setting now rather than a
+     number I keep picking for somebody else's screen. */
+  const [touchFx, setTouchFx] = useState(() => INITIAL_PREFS.touchFx || "subtle");
+  const fxMul = touchFx === "off" ? 0 : touchFx === "full" ? 2 : 1;
   const [motion, setMotion] = useState(() => INITIAL_PREFS.motion || "full");
   const [cinema, setCinema] = useState(() => INITIAL_PREFS.cinema || "off");
   const [engineMode, setEngineMode] = useState(() => INITIAL_PREFS.engineMode || "off");
@@ -5682,8 +5696,8 @@ export default function ShinobiLife() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(() => (typeof INITIAL_PREFS.musicVolume === "number" ? INITIAL_PREFS.musicVolume : 45));
   const [musicError, setMusicError] = useState(false);
-  useEffect(() => { writePrefs({ themeId, bgMode, layout, ui, motion, cinema, engineMode, musicTrackId, musicVolume }); },
-    [themeId, bgMode, layout, ui, motion, cinema, engineMode, musicTrackId, musicVolume]);
+  useEffect(() => { writePrefs({ themeId, bgMode, layout, ui, touchFx, motion, cinema, engineMode, musicTrackId, musicVolume }); },
+    [themeId, bgMode, layout, ui, touchFx, motion, cinema, engineMode, musicTrackId, musicVolume]);
   const audioRef = useRef(null);
   function playMusicTrack(id) {
     const track = MUSIC_TRACKS.find((t) => t.id === id);
@@ -5768,10 +5782,12 @@ export default function ShinobiLife() {
     engineRef.current.heat(bt ? (bt.legendTier >= 3 ? 1 : bt.legendTier >= 1 ? 0.8 : 0.55) : 0);
   }, [bt && bt.legendTier, !!bt]);
   /* every hit landed, either way, throws a ring out of the middle */
-  useEffect(() => { if (engineRef.current && bt && bt.shake) engineRef.current.burst(bt.crit ? 2.2 : 1.4); }, [bt && bt.shake]);
-  useEffect(() => { if (engineRef.current && bt && bt.shakeP) engineRef.current.burst(bt.critP ? 1.9 : 1.2); }, [bt && bt.shakeP]);
+  useEffect(() => { if (fxMul > 0 && engineRef.current && bt && bt.shake) engineRef.current.burst((bt.crit ? 1.15 : 0.7) * fxMul); }, [bt && bt.shake]);
+  useEffect(() => { if (fxMul > 0 && engineRef.current && bt && bt.shakeP) engineRef.current.burst((bt.critP ? 1 : 0.6) * fxMul); }, [bt && bt.shakeP]);
   /* so does a year turning over */
-  useEffect(() => { if (engineRef.current && yearFlash != null) engineRef.current.burst(1.8); }, [yearFlash]);
+  /* No burst on the year turn. It fired at full strength from dead centre and
+     washed the whole page every single time you aged up, which is once a turn
+     for the entire game. The band and the odometer already mark the moment. */
   /* ---------- the drop layer: struck-water rings over the whole interface ----------
      Separate from the field on purpose. The field lives behind the cards, so a press
      landing on a solid panel would never show there — this sheet sits above everything
@@ -5781,7 +5797,7 @@ export default function ShinobiLife() {
   const dropCanvas = useRef(null);
   const dropRef = useRef(null);
   /* the drop belongs to the engine — switching the engine off takes it with it */
-  const dropOn = engineOn;
+  const dropOn = engineOn && touchFx !== "off";
   /* read inside the pointer handler, which is registered once and must not go
      stale every time the setting changes */
   const cinemaRef = useRef(false);
@@ -5807,8 +5823,8 @@ export default function ShinobiLife() {
       const x = ev.clientX / w, y = ev.clientY / h;
       const tgt = ev.target;
       const hard = !!(tgt && tgt.closest && tgt.closest("button"));
-      if (engineRef.current) engineRef.current.ripple(x, y, hard ? 1.15 : 0.5);
-      if (dropRef.current) dropRef.current.drop(x, y, hard ? 0.75 : 0.45);
+      if (fxMul > 0 && engineRef.current) engineRef.current.ripple(x, y, (hard ? 0.5 : 0.26) * fxMul);
+      if (dropRef.current) dropRef.current.drop(x, y, (hard ? 0.75 : 0.45) * fxMul);
       /* Cinema Mode's press has to outlive the press. :active only lasts while the
          button is physically held, which is about a tenth of a second and is why
          none of this was visible before — so stamp a class on and take it off on a
@@ -5842,7 +5858,7 @@ export default function ShinobiLife() {
       /* speed in px/ms, mapped to a gentle range — the trail is never as loud
          as the press that started it */
       const spd = Math.min(1, (dist / dt) / 1.6);
-      if (dropRef.current) dropRef.current.drop(ev.clientX / w, ev.clientY / h, 0.24 + spd * 0.3);
+      if (dropRef.current) dropRef.current.drop(ev.clientX / w, ev.clientY / h, (0.24 + spd * 0.3) * fxMul);
     };
     const onUp = () => { held = false; };
     const startDrag = (ev) => { held = true; lx = ev.clientX; ly = ev.clientY; lt = ev.timeStamp; };
@@ -5859,7 +5875,7 @@ export default function ShinobiLife() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [engineOn, dropOn]);
+  }, [engineOn, dropOn, fxMul]);
 
   /* z-index above every modal, battle screen and cinematic in the game, and
      pointer-events none so it can never swallow the press that created it */
@@ -6276,12 +6292,26 @@ export default function ShinobiLife() {
 
       if (!c.cheats) c.cheats = { god: false, infActions: false, oneShot: false };
       if (c.cheats.god) c.health = 100;
-      let dc = c.cheats.god ? 0 : c.health <= 0 ? 100 : c.age > 85 ? 45 : c.age > 70 ? 18 : c.age > 58 ? 7 : c.health < 25 ? 8 : 0;
+      /* Two things were wrong with the single chain this replaces. A body on
+         under 25 health fell through to the same line as a body of ninety, so
+         an eighteen-year-old bleeding out in a ditch "died of old age". And
+         because age was tested first, being old made a frail character *less*
+         likely to die than a young one in the same state — 7% against 8%.
+         Age and frailty are separate risks now, and whichever is worse wins. */
+      const ageRisk = c.age > 85 ? 45 : c.age > 70 ? 18 : c.age > 58 ? 7 : 0;
+      const frailRisk = c.health > 0 && c.health < 25 ? 8 : 0;
+      let dc = 0, cause = "died of old age";
+      if (c.cheats.god) dc = 0;
+      else if (c.health <= 0) { dc = 100; cause = "succumbed to untreated wounds"; }
+      else {
+        dc = Math.max(ageRisk, frailRisk);
+        if (frailRisk > ageRisk) cause = "died of wounds that were never given time to close";
+      }
       if (c.lifespan && c.lifespan < 0 && c.age >= 30 && roll(Math.min(30, -c.lifespan))) {
         die(c, L, "died younger than they should have, of a body that had been spent on techniques nobody should know");
         return;
       }
-      if (roll(dc)) die(c, L, c.health <= 0 ? "succumbed to untreated wounds" : "died of old age");
+      if (roll(dc)) die(c, L, cause);
     });
   }
   function die(c, L, cause) { c.alive = false; c.cause = cause; P(L, c.name + " " + cause + " at " + c.age + ".", "b"); setTimeout(() => setScreen("dead"), 500); }
@@ -10376,9 +10406,8 @@ export default function ShinobiLife() {
       /* a hairline with the section name sitting on it, instead of a card header */
       .sc-rule { display: flex; align-items: center; gap: 10px; margin: 20px 0 11px; }
       .sc-rule > span { font-size: 9px; letter-spacing: .3em; font-weight: 800; opacity: .62; white-space: nowrap; }
-      .sc-rule::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, currentColor, transparent); opacity: .18; }
+      .sc-hr { flex: 1; height: 1px; background: linear-gradient(90deg, currentColor, transparent); opacity: .18; }
       .sc-rule > button { font-size: 10.5px; font-weight: 700; background: none; border: 0; cursor: pointer; white-space: nowrap; }
-      .sc-rule > button + ::after { display: none; }
 
       .sc-seals { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
       .sc-seal { position: relative; aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
@@ -10397,7 +10426,7 @@ export default function ShinobiLife() {
       .sc-log { max-height: 46vh; overflow-y: auto; padding-left: 13px; position: relative; }
       .sc-log::before { content: ""; position: absolute; left: 2px; top: 4px; bottom: 4px; width: 1px;
         background: linear-gradient(180deg, transparent, currentColor 14%, currentColor 86%, transparent); opacity: .16; }
-      .sc-wire { padding-left: 13px; border-left: 2px solid currentColor; }
+      .sc-wire { padding-left: 13px; border-left: 2px solid currentColor; border-left-color: rgba(127,127,127,.42); }
 
       .sc-body { display: flex; align-items: flex-end; gap: 6px; }
       .sc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
@@ -10425,6 +10454,9 @@ export default function ShinobiLife() {
       .sc-age-l { font-size: 8.5px; font-weight: 800; letter-spacing: .22em; opacity: .8; }
       .sc-age-p { display: flex; gap: 3px; margin-top: 3px; }
       .sc-age-p i { width: 5px; height: 5px; border-radius: 99px; border: 1px solid; opacity: .85; }
+
+      body.sl-motion-off .sc-seal, body.sl-motion-off .sc-col-f { transition: none !important; }
+      body.sl-motion-off .sc-seal:not(.is-off):hover { transform: none; }
 
       @media (max-width: 560px) {
         .sc-root { padding: 12px 13px 240px; }
@@ -11249,7 +11281,7 @@ export default function ShinobiLife() {
             </div>
 
             {/* the seals */}
-            <div className="sc-rule"><span>THE SEALS</span></div>
+            <div className="sc-rule"><span>THE SEALS</span><span className="sc-hr" /></div>
             <div className="sc-seals">
               {acts.map((a) => {
                 const key = a.tone || accent;
@@ -11269,7 +11301,7 @@ export default function ShinobiLife() {
 
             {/* the record — no card, just the life */}
             <div className="sc-rule">
-              <span>THE RECORD</span>
+              <span>THE RECORD</span><span className="sc-hr" />
               <button onClick={() => setModal("history")} style={{ color: accent }}>all of it →</button>
             </div>
             <div ref={feedRef} className="sc-log sl-scroll">{feed(recent)}</div>
@@ -11277,7 +11309,7 @@ export default function ShinobiLife() {
             {/* one wire story, the rest behind the link */}
             {lead && (
               <>
-                <div className="sc-rule"><span>THE WIRE</span><button onClick={() => setModal("news")} style={{ color: accent }}>{c.news.length} stories →</button></div>
+                <div className="sc-rule"><span>THE WIRE</span><span className="sc-hr" /><button onClick={() => setModal("news")} style={{ color: accent }}>{c.news.length} stories →</button></div>
                 <div className="sc-wire">
                   <div style={{ color: CAT_COL[lead.cat] || T.dim, fontSize: 8, letterSpacing: ".22em" }} className="font-bold mb-1">{lead.cat}</div>
                   <div style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.25 }}>{lead.txt}</div>
@@ -11286,7 +11318,7 @@ export default function ShinobiLife() {
             )}
 
             {/* the body, as columns rather than a stack of bars */}
-            <div className="sc-rule"><span>THE BODY</span><button onClick={() => setModal("profile")} style={{ color: accent }}>the whole record →</button></div>
+            <div className="sc-rule"><span>THE BODY</span><span className="sc-hr" /><button onClick={() => setModal("profile")} style={{ color: accent }}>the whole record →</button></div>
             <div className="sc-body">
               {STAT_KEYS.map(([k, l]) => (
                 <div key={k} className="sc-col" title={l + " " + c.stats[k]}>
@@ -13013,6 +13045,17 @@ export default function ShinobiLife() {
           {[["off", "Painted", "The hand-drawn village and era backdrops. No graphics card required."],
             ["on", "The Chakra Engine", "Real-time WebGL: a shader-drawn chakra field, GPU motes, and a ring off every tap, every hit and every year that turns."]].map(([id, n2, d2]) => (
             <Row key={id} label={n2} sub={d2} right={engineMode === id ? "In use" : "Use"} onClick={() => { setEngineFailed(false); setEngineMode(id); }} disabled={engineMode === id} tone={engineMode === id ? T.ck : null} />
+          ))}
+
+          <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">TOUCH</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            How hard the surface answers a press, and the trail it leaves when you hold and drag. Needs the Chakra Engine above.
+            {engineMode !== "on" && <span style={{ color: T.bad }}> The engine is off, so there is nothing to disturb.</span>}
+          </div>
+          {[["subtle", "Subtle", "A small halo where your finger lands and a fine trail behind a drag. The default."],
+            ["full", "Full", "Twice the size and twice the brightness. Closer to a struck pool than a touched one."],
+            ["off", "Off", "No ripple, no drop, no trail. The engine keeps its field and its motes."]].map(([id, n2, d2]) => (
+            <Row key={id} label={n2} sub={d2} right={touchFx === id ? "In use" : "Use"} onClick={() => setTouchFx(id)} disabled={touchFx === id} tone={touchFx === id ? T.ck : null} />
           ))}
 
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">MUSIC</div>

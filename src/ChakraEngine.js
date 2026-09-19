@@ -14,7 +14,15 @@
    returns null and the caller just carries on without it.
    ============================================================ */
 
-const MAX_RIPPLES = 16;
+/* The field and the drop layer do not need the same number of slots, and they
+   must not share one. The field only ever gets a ripple from a press or a hit,
+   and its fragment shader is the expensive one — four fbm calls a pixel — so
+   every unused slot in its loop is paid for on every pixel of every frame. The
+   drop layer is cheap and needs the headroom, because a single drag lays down a
+   train of them. Sharing one constant meant widening the drop trail silently
+   made the background shader 60% more expensive for nothing. */
+const MAX_RIPPLES = 10;
+const MAX_DROPS = 16;
 
 const FIELD_VS = `
 attribute vec2 aPos;
@@ -69,20 +77,24 @@ void main() {
     vec4 rp = uRipples[i];
     if (rp.w <= 0.0) continue;
     float age = uTime - rp.z;
-    if (age < 0.0 || age > 2.2) continue;
+    if (age < 0.0 || age > 1.05) continue;
     vec2 d = (vUv - rp.xy) * asp;
     float dist = length(d);
-    float front = age * 0.62;
+    /* Local, not screen-crossing. This used to travel 0.62 of the screen a
+       second for over two seconds, which meant one press sent a wave over
+       every word on the page and the next press started another before the
+       first had gone. It is a disturbance where you touched it now. */
+    float front = age * 0.26;
     /* the packet: a gaussian window travelling outward */
-    float env = exp(-pow((dist - front) * 7.0, 2.0));
+    float env = exp(-pow((dist - front) * 17.0, 2.0));
     /* main wave plus a shorter capillary train behind the crest */
-    float osc = sin((dist - front) * 52.0 - age * 6.0)
-              + 0.45 * sin((dist - front) * 104.0 - age * 11.0);
-    float visc = exp(-age * 1.9);
-    float spread = 1.0 / (1.0 + dist * 3.4);
+    float osc = sin((dist - front) * 96.0 - age * 8.0)
+              + 0.42 * sin((dist - front) * 192.0 - age * 15.0);
+    float visc = exp(-age * 3.4);
+    float spread = 1.0 / (1.0 + dist * 8.5);
     float amp = env * osc * visc * spread * rp.w;
     wave += amp;
-    warp += (d / max(dist, 0.0015)) * amp * 0.052;
+    warp += (d / max(dist, 0.0015)) * amp * 0.030;
   }
 
   /* refraction: everything below is sampled through the disturbed surface */
@@ -344,7 +356,7 @@ export function createChakraEngine(canvas) {
       ripples[i * 4 + 3] = strength == null ? 1 : strength;
     },
     /* one big one from the middle */
-    burst(strength) { engine.ripple(0.5, 0.5, strength == null ? 1.6 : strength); },
+    burst(strength) { engine.ripple(0.5, 0.5, strength == null ? 0.9 : strength); },
     resize,
     destroy() {
       dead = true;
@@ -386,13 +398,13 @@ varying vec2 vUv;
 uniform vec2  uRes;
 uniform float uTime;
 uniform vec3  uTint;
-uniform vec4  uDrops[${MAX_RIPPLES}];
+uniform vec4  uDrops[${MAX_DROPS}];
 
 void main() {
   vec2 asp = vec2(uRes.x / max(uRes.y, 1.0), 1.0);
   float h = 0.0;
   float rim = 0.0;
-  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
+  for (int i = 0; i < ${MAX_DROPS}; i++) {
     vec4 dp = uDrops[i];
     if (dp.w <= 0.0) continue;
     float age = uTime - dp.z;
@@ -454,7 +466,7 @@ export function createDropLayer(canvas) {
     uDrops: gl.getUniformLocation(prog, "uDrops[0]"),
   };
 
-  const drops = new Float32Array(MAX_RIPPLES * 4);
+  const drops = new Float32Array(MAX_DROPS * 4);
   let head = 0, tint = [0.85, 0.66, 0.28];
   let start = 0, raf = 0, dead = false, lost = false, cleared = false, now = 0;
 
@@ -467,7 +479,7 @@ export function createDropLayer(canvas) {
   }
 
   function anyLive() {
-    for (let i = 0; i < MAX_RIPPLES; i++) {
+    for (let i = 0; i < MAX_DROPS; i++) {
       if (drops[i * 4 + 3] > 0 && now - drops[i * 4 + 2] <= 0.62) return true;
     }
     return false;
@@ -509,7 +521,7 @@ export function createDropLayer(canvas) {
   const layer = {
     tint(hex) { if (hex) tint = hexRgb(hex); },
     drop(x, y, strength) {
-      const i = head % MAX_RIPPLES;
+      const i = head % MAX_DROPS;
       head++;
       drops[i * 4] = Math.max(0, Math.min(1, x));
       drops[i * 4 + 1] = 1 - Math.max(0, Math.min(1, y));
