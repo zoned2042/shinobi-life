@@ -153,6 +153,8 @@ const MUSIC_TRACKS = [
   { id: "go", name: "GO!!!", by: "FLOW", src: "audio/go.mp3" },
   { id: "hotaru", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
   { id: "utakata", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
+  { id: "toumei", name: "Toumei Datta Sekai", by: "Motohiro Hata", src: "audio/toumei.mp3" },
+  { id: "wind", name: "Wind", by: "Akeboshi", src: "audio/wind.mp3" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -2301,6 +2303,9 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.8", n: "Two More Songs", items: [
+    "Toumei Datta Sekai by Motohiro Hata and Wind by Akeboshi added to the music list. Seven tracks now, all playing out of the game's own audio folder with nothing streaming",
+  ] },
   { v: "9.7", n: "Three More Songs", items: [
     "Three tracks added to the music list under Appearance, pulled off the videos and encoded straight into the game's own audio folder: GO!!! by FLOW, Hotaru no Hikari by Ikimono-gakari, and Utakata Hanabi by supercell. Five tracks now, all of them local \u2014 nothing streams, nothing needs an internet connection",
     "The music list names the artist under each title now, because a list of five was starting to need it",
