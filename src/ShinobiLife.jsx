@@ -147,14 +147,17 @@ const CLANS = [
 const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
 /* background music — audio files served alongside the game from ./audio/ */
+/* Listed in series order and tagged with where each one actually comes from.
+   Three of these are not Shippuden: Wind and GO!!! are from the original run,
+   and the Masuda piece is an OST cue rather than an opening or an ending. */
 const MUSIC_TRACKS = [
-  { id: "song1", name: "Naruto Theme", by: "Toshio Masuda", src: "audio/song1.mp3" },
-  { id: "parajo", name: "Blue Bird", by: "Ikimono-gakari", src: "audio/parajo.mp3" },
-  { id: "go", name: "GO!!!", by: "FLOW", src: "audio/go.mp3" },
-  { id: "hotaru", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
-  { id: "utakata", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
-  { id: "toumei", name: "Toumei Datta Sekai", by: "Motohiro Hata", src: "audio/toumei.mp3" },
-  { id: "wind", name: "Wind", by: "Akeboshi", src: "audio/wind.mp3" },
+  { id: "song1", tag: "Naruto OST", name: "Main Theme", by: "Toshio Masuda", src: "audio/song1.mp3" },
+  { id: "go", tag: "Naruto OP 4", name: "GO!!!", by: "FLOW", src: "audio/go.mp3" },
+  { id: "wind", tag: "Naruto ED 1", name: "Wind", by: "Akeboshi", src: "audio/wind.mp3" },
+  { id: "parajo", tag: "Shippuden OP 3", name: "Blue Bird", by: "Ikimono-gakari", src: "audio/parajo.mp3" },
+  { id: "hotaru", tag: "Shippuden OP 5", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
+  { id: "toumei", tag: "Shippuden OP 7", name: "Toumei Datta Sekai", by: "Motohiro Hata", src: "audio/toumei.mp3" },
+  { id: "utakata", tag: "Shippuden ED 14", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -2303,8 +2306,9 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
-  { v: "9.8", n: "Two More Songs", items: [
+  { v: "9.8", n: "Two More Songs, and the Music List Says Where They Come From", items: [
     "Toumei Datta Sekai by Motohiro Hata and Wind by Akeboshi added to the music list. Seven tracks now, all playing out of the game's own audio folder with nothing streaming",
+    "Every track is named for the opening or ending it is, and the list runs in series order \u2014 Naruto OP 4 \u00b7 GO!!!, Shippuden OP 3 \u00b7 Blue Bird, Shippuden ED 14 \u00b7 Utakata Hanabi, and so on. Not all of them are Shippuden: Wind is the first ending of the original run and GO!!! its fourth opening, and the Toshio Masuda piece is an OST cue rather than an opening at all, so those are labelled for what they actually are",
   ] },
   { v: "9.7", n: "Three More Songs", items: [
     "Three tracks added to the music list under Appearance, pulled off the videos and encoded straight into the game's own audio folder: GO!!! by FLOW, Hotaru no Hikari by Ikimono-gakari, and Utakata Hanabi by supercell. Five tracks now, all of them local \u2014 nothing streams, nothing needs an internet connection",
@@ -12735,7 +12739,7 @@ export default function ShinobiLife() {
             Plays from the game's own audio folder — no internet needed. A track loops until you pause it or pick another.
           </div>
           {MUSIC_TRACKS.map((t) => (
-            <Row key={t.id} label={t.name} sub={(t.by ? t.by + " \u00b7 " : "") + (musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Paused") : "Tap to play")}
+            <Row key={t.id} label={(t.tag ? t.tag + " \u00b7 " : "") + t.name} sub={(t.by ? t.by + " \u00b7 " : "") + (musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Paused") : "Tap to play")}
               right={musicTrackId === t.id ? (musicPlaying ? "⏸" : "▶") : "▶"}
               onClick={() => (musicTrackId === t.id ? toggleMusic() : playMusicTrack(t.id))}
               tone={musicTrackId === t.id ? accent : null} />
