@@ -148,8 +148,11 @@ const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
 /* background music — audio files served alongside the game from ./audio/ */
 const MUSIC_TRACKS = [
-  { id: "song1", name: "Naruto Theme", src: "audio/song1.mp3" },
-  { id: "parajo", name: "Blue Bird", src: "audio/parajo.mp3" },
+  { id: "song1", name: "Naruto Theme", by: "Toshio Masuda", src: "audio/song1.mp3" },
+  { id: "parajo", name: "Blue Bird", by: "Ikimono-gakari", src: "audio/parajo.mp3" },
+  { id: "go", name: "GO!!!", by: "FLOW", src: "audio/go.mp3" },
+  { id: "hotaru", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
+  { id: "utakata", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
 ];
 const NC = {
   Fire: "#e0603a", Wind: "#6fc7a8", Lightning: "#e2c94f", Earth: "#b0824f", Water: "#59a2d6",
@@ -2298,6 +2301,10 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.7", n: "Three More Songs", items: [
+    "Three tracks added to the music list under Appearance, pulled off the videos and encoded straight into the game's own audio folder: GO!!! by FLOW, Hotaru no Hikari by Ikimono-gakari, and Utakata Hanabi by supercell. Five tracks now, all of them local \u2014 nothing streams, nothing needs an internet connection",
+    "The music list names the artist under each title now, because a list of five was starting to need it",
+  ] },
   { v: "9.6", n: "Duties of the Rank, a Smaller Drop, and a New Year Turn", items: [
     "The drop is much smaller. It was rolling most of the way across the screen and taking over a second to clear, which is fine once and distracting by the third tap \u2014 never mind the thousandth. The wave front travels less than half as far, the band is tighter, it damps out faster, it is dimmer, and the whole thing is gone in under a second. It still reads as something striking water; it just stops being the loudest thing on the screen",
     "Turning the Chakra Engine off now takes the click drop with it. It was tied to the motion setting instead of the engine, so switching the engine off left the ripple firing on every tap with nothing to belong to. The drop is part of the engine now \u2014 engine off, no drop",
@@ -12723,7 +12730,7 @@ export default function ShinobiLife() {
             Plays from the game's own audio folder — no internet needed. A track loops until you pause it or pick another.
           </div>
           {MUSIC_TRACKS.map((t) => (
-            <Row key={t.id} label={t.name} sub={musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Paused") : "Tap to play"}
+            <Row key={t.id} label={t.name} sub={(t.by ? t.by + " \u00b7 " : "") + (musicTrackId === t.id ? (musicPlaying ? "Playing now" : "Paused") : "Tap to play")}
               right={musicTrackId === t.id ? (musicPlaying ? "⏸" : "▶") : "▶"}
               onClick={() => (musicTrackId === t.id ? toggleMusic() : playMusicTrack(t.id))}
               tone={musicTrackId === t.id ? accent : null} />
