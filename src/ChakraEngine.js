@@ -396,33 +396,37 @@ void main() {
     vec4 dp = uDrops[i];
     if (dp.w <= 0.0) continue;
     float age = uTime - dp.z;
-    if (age < 0.0 || age > 1.2) continue;
+    if (age < 0.0 || age > 0.85) continue;
     vec2 d = (vUv - dp.xy) * asp;
     float dist = length(d);
-    float front = age * 0.30;
+    /* Kept deliberately small. This fires on every press anywhere in the game,
+       so it has to read as a touch on the surface and then get out of the way —
+       a big slow wave rolling over the whole screen is distracting by the third
+       click, never mind the thousandth. */
+    float front = age * 0.145;
     /* a tight travelling band. Widen this envelope and the whole inside of the
        ring fills in, which stops being a wave and starts being a disc sitting
        on top of the interface. */
-    float env = exp(-pow((dist - front) * 13.0, 2.0));
-    float osc = sin((dist - front) * 62.0 - age * 7.0)
-              + 0.42 * sin((dist - front) * 124.0 - age * 13.0);
+    float env = exp(-pow((dist - front) * 30.0, 2.0));
+    float osc = sin((dist - front) * 130.0 - age * 9.0)
+              + 0.40 * sin((dist - front) * 260.0 - age * 16.0);
     /* viscosity and spreading loss are both real, but tuned for the eye rather
        than for physics — true to life and the whole thing is gone in a quarter
        of a second and nobody ever sees it */
-    float visc = exp(-age * 2.0);
-    float spread = 1.0 / (1.0 + dist * 3.2);
+    float visc = exp(-age * 3.1);
+    float spread = 1.0 / (1.0 + dist * 9.0);
     h += env * osc * visc * spread * dp.w;
     /* the bright meniscus sitting exactly on the front */
-    rim += exp(-pow((dist - front) * 30.0, 2.0)) * visc * spread * dp.w;
+    rim += exp(-pow((dist - front) * 64.0, 2.0)) * visc * spread * dp.w;
   }
 
   float crest = max(h, 0.0);
   float trough = max(-h, 0.0);
-  vec3 col = uTint * crest * 2.2 + vec3(1.0) * pow(crest, 2.5) * 1.7 + vec3(1.0) * rim * 0.95;
+  vec3 col = uTint * crest * 2.0 + vec3(1.0) * pow(crest, 2.5) * 1.5 + vec3(1.0) * rim * 0.85;
   /* Troughs get a little alpha for volume and almost none of the gain the crests
      get. They carry hardly any colour, so letting them drive opacity the way the
      crests do just paints an opaque black hole where the drop landed. */
-  float a = clamp(crest * 2.1 + rim * 1.5 + trough * 0.30, 0.0, 0.78);
+  float a = clamp(crest * 1.7 + rim * 1.2 + trough * 0.22, 0.0, 0.62);
   col -= vec3(0.10, 0.11, 0.15) * trough;
   gl_FragColor = vec4(max(col, 0.0), a);
 }`;
@@ -464,7 +468,7 @@ export function createDropLayer(canvas) {
 
   function anyLive() {
     for (let i = 0; i < MAX_RIPPLES; i++) {
-      if (drops[i * 4 + 3] > 0 && now - drops[i * 4 + 2] <= 1.2) return true;
+      if (drops[i * 4 + 3] > 0 && now - drops[i * 4 + 2] <= 0.85) return true;
     }
     return false;
   }

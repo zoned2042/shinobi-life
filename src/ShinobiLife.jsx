@@ -357,6 +357,87 @@ function trainGain(c, reg, k) {
   return Math.max(1, Math.round(reg.s[k] * trainMult(c, reg) * iron * (1 - c.stats[k] / 150)));
 }
 
+/* ============================ DUTIES ============================ */
+/* The rank you hold is supposed to mean something between missions. A chunin is
+   trusted with other people's lives and a jonin is trusted with the village's;
+   both used to have nothing to do but train and take the same mission list as a
+   twelve-year-old. These are the jobs that come with the rank — repeatable, each
+   worth an action, each with its own way of going well or badly. */
+const DUTIES = [
+  { id: "border", n: "Take the border watch", min: 3, max: 5, s: { con: 2, spd: 1 },
+    pay: [6000, 18000], stand: 3,
+    d: "A fortnight on the wire at the edge of the country. Long, cold, and occasionally not boring.",
+    out: [
+      { t: "Fourteen days of nothing but weather. You came back with a cough and a complete picture of who crosses where.", k: "n" },
+      { t: "You turned back two smugglers and one man who would not say which village he was from. The tower has his description now.", k: "g" },
+      { t: "Something moved on the far ridge for three nights and stopped the night you doubled the watch. Nobody has explained it since.", k: "n" },
+      { t: "You caught a courier going the wrong way with the wrong seal on his scroll. That is somebody's very bad month.", k: "g", intel: true },
+    ] },
+  { vill: true, id: "desk", n: "Rotation on the mission desk", min: 3, max: 6, s: { int: 3 },
+    pay: [4000, 11000], stand: 2,
+    d: "Grading requests, matching cells to jobs, and telling people older than you that they are not taking that one.",
+    out: [
+      { t: "A week of paperwork and you now know exactly which cells get the good work and why. That is worth more than the pay.", k: "n" },
+      { t: "You downgraded a request that smelled wrong. The cell that would have taken it is still alive, and one of them worked out why.", k: "g" },
+      { t: "You put a name to a client who has now commissioned four separate jobs that all point at the same compound.", k: "g", intel: true },
+      { t: "You argued a B-rank up to an A and were right. The desk has stopped talking over you.", k: "g" },
+    ] },
+  { id: "escort", n: "Shepherd a genin cell", min: 3, max: 5, s: { int: 1, gen: 1 },
+    pay: [7000, 16000], stand: 4,
+    d: "Three children and a D-rank that should not be able to go wrong. You are there in case it does.",
+    out: [
+      { t: "It went exactly the way it was supposed to, which is the entire point, and they will never know how close you stood.", k: "n" },
+      { t: "One of them froze. You put yourself between it and them and it was over in a second, and they have not stopped watching you since.", k: "g" },
+      { t: "They finished it without you having to move, and you let them believe that was always how it went.", k: "g" },
+      { t: "It turned. You got all three home and the report is one paragraph long because the rest is not for writing down.", k: "b", hurt: true },
+    ] },
+  { vill: true, id: "proctor", n: "Proctor the chunin exams", min: 3, max: 6, s: { int: 2, gen: 2 },
+    pay: [5000, 12000], stand: 5,
+    d: "Stand in the arena, read the rules out, and decide which of them is ready and which is about to die proving they are not.",
+    out: [
+      { t: "You stopped two matches early. Both of them will hate you for a year and be alive to do it.", k: "g" },
+      { t: "Nobody died, which is not always how this goes, and three of them are going to be a problem for somebody else's village one day.", k: "n" },
+      { t: "You watched one of them lose and take it better than the winner took winning. You wrote that down.", k: "g", scout: true },
+      { t: "One of them came out of the forest alone and would not say what happened to the other two. The tower is handling it.", k: "b" },
+    ] },
+  { id: "council", n: "Sit the jonin council", min: 4, max: 6, s: { int: 3, cha: 2 },
+    pay: [12000, 30000], stand: 6,
+    d: "The room where the village argues about itself. Your voice counts here now, whether or not you want it to.",
+    out: [
+      { t: "Four hours on a border clause and you carried the room on the last line of it. People took note of which way you went.", k: "g" },
+      { t: "You said nothing for the whole session and learned more about who actually decides things than a year on missions taught you.", k: "n" },
+      { t: "You were asked your opinion first, which has not happened before, and the room went quiet to hear it.", k: "g" },
+      { t: "You lost the vote and made an enemy of somebody with a long memory and a seat two along from the hat.", k: "b" },
+    ] },
+  { id: "command", n: "Take field command of a platoon", min: 4, max: 6, s: { tai: 2, int: 2, cha: 1 },
+    pay: [18000, 44000], stand: 7,
+    d: "Forty shinobi and a map. Whatever happens out there is yours on the way back.",
+    out: [
+      { t: "You brought all forty home. That is the only number in the report anybody reads.", k: "g" },
+      { t: "The objective held and the cost was two stretchers and no graves. Command has started using your name in the planning room.", k: "g", war: true },
+      { t: "It went badly in the second hour and you got them out through ground nobody had mapped. They will follow you anywhere now.", k: "n", war: true },
+      { t: "You made the right call and it cost somebody anyway. You wrote the letter yourself rather than let the desk do it.", k: "b" },
+    ] },
+  { vill: true, id: "teach", n: "Run a season at the academy", min: 4, max: 6, s: { int: 3, cha: 2 },
+    pay: [6000, 14000], stand: 4,
+    d: "Thirty children, wooden kunai, and the part of this job that decides what the village looks like in fifteen years.",
+    out: [
+      { t: "Thirty of them can hold a seal properly now. Two of them are going to be genuinely dangerous and you know which two.", k: "g", scout: true },
+      { t: "You taught the thing nobody teaches — when to walk away — and watched it not land at all. It will later.", k: "n" },
+      { t: "One of them asked a question you could not answer and you went and found out rather than bluff it.", k: "g" },
+      { t: "A parent came to complain about how hard you push them. You listened, and then did not change anything.", k: "n" },
+    ] },
+  { vill: true, id: "tandi", n: "A rotation in the interrogation wing", min: 4, max: 6, s: { int: 4, gen: 2 },
+    pay: [10000, 26000], stand: 2, dark: true,
+    d: "The rooms under the tower, and the part of the work the village does not put in the newsletter.",
+    out: [
+      { t: "He talked on the third day. You have not decided yet whether the part of you that found that satisfying is a problem.", k: "n", intel: true },
+      { t: "She gave up a route, two names and a date. All three checked out, which means somebody's plan died this week.", k: "g", intel: true },
+      { t: "Nothing. Four days, nothing, and then he died of something the medics say was already in him when he arrived.", k: "b" },
+      { t: "You got it out of him without touching him once, which the wing considers a technique and you consider worse.", k: "n", intel: true },
+    ] },
+];
+
 /* ============================ SHOP ============================ */
 const SHOP = [
   { id: "kunai", n: "Kunai & Wire Set", d: "+5 attack in every battle.", cost: 12000, kind: "gear", slot: "weapon", v: { atk: 5 } },
@@ -2217,6 +2298,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.6", n: "Duties of the Rank, a Smaller Drop, and a New Year Turn", items: [
+    "The drop is much smaller. It was rolling most of the way across the screen and taking over a second to clear, which is fine once and distracting by the third tap \u2014 never mind the thousandth. The wave front travels less than half as far, the band is tighter, it damps out faster, it is dimmer, and the whole thing is gone in under a second. It still reads as something striking water; it just stops being the loudest thing on the screen",
+    "Turning the Chakra Engine off now takes the click drop with it. It was tied to the motion setting instead of the engine, so switching the engine off left the ripple firing on every tap with nothing to belong to. The drop is part of the engine now \u2014 engine off, no drop",
+    "The year turn has been redone. It was a full-screen blackout that hid the entire game for a second and a half. Now it is a band across the middle: the page stays visible above and below it, the old year rolls up and out while the new one rolls in underneath like an odometer, a line of light races across, and it is finished in 1.2 seconds",
+    "Chunin and jonin have actual jobs now, under Ninja Path. Eight rank-gated rotations, repeatable, one action each, each paying and each with four ways it can go. Chunin take the border watch, the mission desk, a genin cell to shepherd and the chunin exams to proctor. Jonin sit the council, take field command of a platoon, run a season at the academy, or do a rotation in the interrogation wing \u2014 and still take the chunin rotations, because jonin do",
+    "They are wired into the rest of the game rather than being flavour with a payout: intel from the border or the interrogation wing hands the front your enemy's order of battle if there is a war on, field command moves the line, and a child you notice proctoring or teaching is a child you ask for by name \u2014 the genin cell you are handed later is stronger for it. Eight rotations served earns a title",
+  ] },
   { v: "9.5", n: "The Drop, and Cinema Mode That Actually Does Something", items: [
     "Every click now lands like something struck water. A real wave: a packet riding an expanding front with a shorter capillary train chasing it, amplitude falling away as it spreads and damping out the way a viscous surface does, lit along the crests and shaded in the troughs. It is drawn in WebGL on its own sheet above the entire interface, so it washes across the buttons rather than hiding behind them — and it draws literally nothing between clicks",
     "Cinema Mode has been rebuilt, because the old one genuinely did almost nothing and that was fair comment. The press was hung on :active, which only lasts as long as a finger is physically held down — about a tenth of a second — so nobody ever saw it. The press is now stamped on and left for a full beat: the button punches back in 3D, a ring snaps out from its edge, and the shine crossing every button is more than twice as strong",
@@ -2917,6 +3005,7 @@ function newChar(name, gender, vid, clanName, eraId, otsuEye) {
     sixPaths: false, gates: 0, curse: 0, stats, health: 100, standing: 50, infamy: 0, ryo: rr(4000, 12000),
     jutsu: otsuBonusJutsu.slice(), otsu: otsuChakra, eyePaths: otsuEyePaths,
     titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
+    dutyLog: {}, scouted: 0,
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
     sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
@@ -5666,7 +5755,8 @@ export default function ShinobiLife() {
      between drops. */
   const dropCanvas = useRef(null);
   const dropRef = useRef(null);
-  const dropOn = motion !== "reduced";
+  /* the drop belongs to the engine — switching the engine off takes it with it */
+  const dropOn = engineOn;
   /* read inside the pointer handler, which is registered once and must not go
      stale every time the setting changes */
   const cinemaRef = useRef(false);
@@ -5868,7 +5958,7 @@ export default function ShinobiLife() {
   function ageUp() {
     if (c.myClan) registerClanKG(c);
     setYearFlash((c.birthYear || 0) + c.age + 1);
-    setTimeout(() => setYearFlash(null), 1550);
+    setTimeout(() => setYearFlash(null), 1230);
     setTimeout(() => setC((prev) => (prev && prev.eyeFlash ? { ...prev, eyeFlash: null } : prev)), 2600);
     commit((c, L) => {
       c.age += 1; c.actions = 4;
@@ -6155,6 +6245,66 @@ export default function ShinobiLife() {
       const onPath = reg.spec && reg.spec === c.specialty;
       P(L, reg.n + ": " + parts.join(", ") + (breakthrough ? " \u2014 a breakthrough year." : onPath ? " Your path, your pace." : ""), breakthrough ? "e" : "g");
       if (reg.risky && roll(8)) { const d = rr(5, 12); c.health = cl(c.health - d); P(L, "A live blade got through your guard. -" + d + " health.", "b"); }
+    });
+    setModal(null);
+  }
+
+  /* ---------- the jobs that come with the rank ---------- */
+  function doDuty(d) {
+    commit((c, L) => {
+      spend(c);
+      /* whether it goes well is the stats the job actually leans on, plus how
+         much the village already trusts you with it. A bad draw is always on
+         the table, but it stops being the likely one once you are good. */
+      const keys = Object.keys(d.s);
+      const skill = keys.reduce((a, k) => a + c.stats[k], 0) / keys.length;
+      const well = roll(cl(38 + skill * 0.42 + c.standing * 0.12, 15, 88));
+      const pool = well ? d.out.filter((o) => o.k !== "b") : d.out;
+      const o = pick(pool.length ? pool : d.out);
+
+      const parts = [];
+      keys.forEach((k) => {
+        const g = Math.max(1, Math.round(d.s[k] * 1.6 * (1 - c.stats[k] / 150)));
+        c.stats[k] = cl(c.stats[k] + g);
+        parts.push("+" + g + " " + STAT_KEYS.find((x) => x[0] === k)[1]);
+      });
+
+      const pay = rr(d.pay[0], d.pay[1]);
+      c.ryo += pay;
+      const st = o.k === "b" ? -Math.round(d.stand / 2) : o.k === "g" ? d.stand : Math.round(d.stand * 0.6);
+      c.standing = cl(c.standing + st);
+      if (d.dark) c.infamy = cl(c.infamy + rr(1, 3));
+
+      let tail = "";
+      if (o.hurt) { const h = rr(6, 18); c.health = cl(c.health - h); tail += " −" + h + " health."; }
+      if (o.intel) {
+        /* knowing where the enemy actually is only has somewhere to go if
+           there is a war on; otherwise it is filed, and filed is standing */
+        if (c.war && !c.war.intel) { c.war.intel = true; tail += " The front has their order of battle because of you."; }
+        else { c.standing = cl(c.standing + 2); tail += " It went up the chain and somebody remembered the name on it."; }
+      }
+      if (o.war && c.war) {
+        c.war.momentum = cl(c.war.momentum + rr(3, 8));
+        c.war.contribution += 1;
+        tail += " The line moved. Momentum " + c.war.momentum + "%.";
+      }
+      if (o.scout) {
+        /* you saw something in one of them. If you already hold a cell it goes
+           into them now; if you do not, it waits for the cell you are given. */
+        const live = (c.students || []).filter((x) => x.alive);
+        if (live.length) { const st2 = pick(live); st2.pw = Math.min(99, st2.pw + rr(6, 12)); tail += " You started working on " + st2.name + " privately."; }
+        else { c.scouted = (c.scouted || 0) + 1; tail += " You wrote the name down for when you are given a cell."; }
+      }
+
+      if (!c.dutyLog) c.dutyLog = {};
+      c.dutyLog[d.id] = (c.dutyLog[d.id] || 0) + 1;
+      const served = Object.values(c.dutyLog).reduce((a, b) => a + b, 0);
+      if (served === 8) { addTitle(c, "Carried the Rank"); P(L, "Eight rotations now, on top of the missions. The tower has stopped asking whether you will take them.", "e"); }
+
+      c.health = cl(c.health - rr(0, 2));
+      P(L, d.n + ": " + parts.join(", ") + ", +" + pay.toLocaleString() + " ryo" + (st ? ", " + (st > 0 ? "+" : "") + st + " standing" : "") + ".", "n");
+      P(L, o.t + tail, o.k);
+      if (o.k === "g" && d.stand >= 5 && roll(30)) newsItem(c, c.name + " is being spoken about well in the tower — " + d.n.toLowerCase() + " went the way it should have.", "THE VILLAGES");
     });
     setModal(null);
   }
@@ -7196,9 +7346,13 @@ export default function ShinobiLife() {
       if (kind === "take") {
         if (c.students) return;
         const n = rr(3, 3);
-        c.students = Array.from({ length: n }).map(() => ({ name: freshName(c, null), alive: true, pw: rr(16, 30) }));
+        /* every name you wrote down proctoring or teaching is a child you
+           asked for by name, so the cell you are handed is not a random three */
+        const picked = Math.min(n, c.scouted || 0);
+        c.students = Array.from({ length: n }).map((_, i) => ({ name: freshName(c, null), alive: true, pw: rr(16, 30) + (i < picked ? rr(8, 16) : 0) }));
+        if (picked) c.scouted = 0;
         c.studentSquad = "Team " + c.name.split(" ")[0];
-        P(L, "The Academy has given you three of theirs. " + joinList(c.students.map((x) => x.name)) + ". They are twelve and they think they are ready.", "e");
+        P(L, "The Academy has given you three of theirs. " + joinList(c.students.map((x) => x.name)) + ". They are twelve and they think they are ready." + (picked ? " " + picked + " of them you asked for by name." : ""), "e");
         newsItem(c, c.name + " has been given a genin cell: " + joinList(c.students.map((x) => x.name)) + ".", "THE VILLAGES");
         return;
       }
@@ -9765,14 +9919,23 @@ export default function ShinobiLife() {
       @keyframes yrEmber { 0% { transform: translate(0,0) scale(1); opacity: 0; } 15% { opacity: .95; } 100% { transform: translate(var(--dx), -62vh) scale(.3); opacity: 0; } }
       @keyframes yrTick { 0% { opacity: 0; transform: translateY(8px); } 30% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
       @keyframes yrLine { 0% { transform: scaleX(0); opacity: 0; } 25% { opacity: 1; } 70% { transform: scaleX(1); opacity: 1; } 100% { opacity: 0; } }
-      .yr-veil { animation: yrVeil 1.6s ease-in-out both; }
+      /* the year turning over: the old number leaves, the new one arrives */
+      @keyframes yrOut { 0% { transform: translateY(0); opacity: .75; } 55%,100% { transform: translateY(-115%); opacity: 0; } }
+      @keyframes yrIn  { 0%,14% { transform: translateY(115%); opacity: 0; } 62% { transform: translateY(0); opacity: 1; } 84% { opacity: 1; } 100% { opacity: 0; transform: translateY(-9%); } }
+      @keyframes yrBand { 0% { transform: scaleX(0); opacity: 0; } 22% { opacity: 1; } 76% { transform: scaleX(1); opacity: 1; } 100% { opacity: 0; } }
+      @keyframes yrRace { 0% { transform: translateX(-60vw); opacity: 0; } 18% { opacity: 1; } 82% { opacity: .5; } 100% { transform: translateX(60vw); opacity: 0; } }
+      .yr-veil { animation: yrVeil 1.25s ease-in-out both; }
       .yr-ring { animation: yrRing 1.6s cubic-bezier(.16,.8,.3,1) both; }
       .yr-seal { animation: yrSeal 2s cubic-bezier(.2,.7,.3,1) both; }
       .yr-rise { animation: yrRise 1.6s cubic-bezier(.16,.85,.3,1) both; }
       .yr-sweep { animation: yrSweep 1.5s cubic-bezier(.4,0,.2,1) .25s both; }
       .yr-ember { animation: yrEmber 1.7s ease-out both; }
-      .yr-tick { animation: yrTick 1.6s ease-out both; }
+      .yr-tick { animation: yrTick 1.25s ease-out both; }
       .yr-line { animation: yrLine 1.5s cubic-bezier(.2,.8,.3,1) both; transform-origin: center; }
+      .yr-out { animation: yrOut 1.25s cubic-bezier(.5,0,.2,1) both; }
+      .yr-in { animation: yrIn 1.25s cubic-bezier(.2,.85,.25,1) both; }
+      .yr-band { animation: yrBand 1.25s cubic-bezier(.2,.8,.3,1) both; transform-origin: center; }
+      .yr-race { animation: yrRace 1.1s cubic-bezier(.4,0,.3,1) .1s both; }
       @keyframes slFill { from { width: 0; } }
       @keyframes slGlowPulse { 0%,100% { box-shadow: 0 0 0 0 ${accent}00; } 50% { box-shadow: 0 0 22px 2px ${accent}55; } }
       .sl-atmos { animation: slDrift 26s ease-in-out infinite; will-change: transform; }
@@ -10206,7 +10369,7 @@ export default function ShinobiLife() {
         .sl-flash, .sl-float, .sl-eye, .sl-ripple { display: none !important; }
         .sl-card3, .sl-card3:hover, .sl-card3:active { transform: none !important; transition: none !important; }
         .sl-count, .sl-panel-in, .sl-stagger > *, .sl-statbar { animation: none !important; opacity: 1 !important; transform: none !important; }
-        .yr-veil, .yr-ring, .yr-seal, .yr-rise, .yr-sweep, .yr-ember, .yr-tick, .yr-line { animation-duration: .01s !important; }
+        .yr-veil, .yr-ring, .yr-seal, .yr-rise, .yr-sweep, .yr-ember, .yr-tick, .yr-line, .yr-out, .yr-in, .yr-band, .yr-race { animation-duration: .01s !important; }
         .sl-deck > *, .sl-hero::before { animation: none !important; opacity: 1 !important; transform: none !important; }
         .sl-ab, .sl-fill { transition: none !important; }
         .sl-bar::after { animation: none; display: none; }
@@ -10434,48 +10597,42 @@ export default function ShinobiLife() {
         );
       })()}
       {yearFlash != null && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 60, pointerEvents: "none", overflow: "hidden" }}>
-          {/* a veil that actually covers the page — the year turn should be its own moment */}
-          <div className="yr-veil" style={{ position: "absolute", inset: 0,
+        <div style={{ position: "fixed", inset: 0, zIndex: 60, pointerEvents: "none", overflow: "hidden",
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Only a band, not a blackout. The old version covered the whole page for a
+              second and a half every single year, which is a lot of waiting to be told
+              a number went up by one. This shows the number actually going up. */}
+          <div className="yr-veil" aria-hidden style={{ position: "absolute", inset: 0,
             background: THEME.light
-              ? "radial-gradient(120% 90% at 50% 42%, " + T.ink + "f0, " + T.bg + "fa 70%)"
-              : "radial-gradient(120% 90% at 50% 42%, rgba(8,10,16,.94), rgba(3,4,8,.985) 68%)" }} />
+              ? "linear-gradient(180deg, transparent 28%, " + T.ink + "cc 42%, " + T.ink + "cc 58%, transparent 72%)"
+              : "linear-gradient(180deg, transparent 28%, rgba(5,6,11,.90) 42%, rgba(5,6,11,.90) 58%, transparent 72%)" }} />
+          <div className="yr-band" aria-hidden style={{ position: "absolute", left: 0, right: 0, height: 1,
+            background: "linear-gradient(90deg, transparent, " + accent + ", transparent)", marginTop: -74 }} />
+          <div className="yr-band" aria-hidden style={{ position: "absolute", left: 0, right: 0, height: 1,
+            background: "linear-gradient(90deg, transparent, " + accent + ", transparent)", marginTop: 74, animationDelay: ".05s" }} />
+          {/* a light racing along the band */}
+          <div className="yr-race" aria-hidden style={{ position: "absolute", top: "50%", marginTop: -75, width: "22%", height: 3,
+            background: "linear-gradient(90deg, transparent, " + accent + ", transparent)", filter: "blur(1px)" }} />
 
-          {/* one quiet ring, sized to the type rather than the screen */}
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg className="yr-ring" width="min(38vmin,340px)" height="min(38vmin,340px)" viewBox="0 0 200 200" aria-hidden>
-              <circle cx="100" cy="100" r="94" fill="none" stroke={accent} strokeWidth=".6" opacity=".35" />
-              <circle cx="100" cy="100" r="78" fill="none" stroke={accent} strokeWidth="1" strokeDasharray="2 10" opacity=".55" />
-            </svg>
-          </div>
-
-          {/* a few embers, small and slow */}
-          {Array.from({ length: 10 }).map((_, i2) => (
-            <span key={i2} className="yr-ember" aria-hidden style={{
-              position: "absolute", left: (12 + i2 * 8) + "%", bottom: "18%",
-              width: 2, height: 2, borderRadius: 99,
-              background: i2 % 3 === 0 ? T.gold : accent, opacity: .5,
-              "--dx": ((i2 % 4) - 1.5) * 16 + "px", animationDelay: (i2 * 0.07) + "s",
-            }} />
-          ))}
-
-          {/* the year */}
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <div className="yr-tick" style={{ color: accent, fontSize: FS(9, 11), letterSpacing: ".44em", fontWeight: 800 }}>
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div className="yr-tick" style={{ color: accent, fontSize: FS(9, 10.5), letterSpacing: ".44em", fontWeight: 800 }}>
               {skin.label}
             </div>
-            <div className="yr-rise" style={{ position: "relative", overflow: "hidden", padding: "0 .1em", marginTop: 6 }}>
-              <div style={{ fontFamily: SERIF, fontSize: "clamp(48px,10vw,140px)", lineHeight: .95, fontWeight: 700,
-                letterSpacing: "-.02em", color: T.text, textShadow: THEME.light ? "none" : "0 0 60px " + skin.glow }}>
+            {/* the odometer: last year leaves upward, this year arrives from below */}
+            <div style={{ position: "relative", height: "clamp(52px,11vw,132px)", overflow: "hidden", marginTop: 8,
+              display: "flex", alignItems: "center", justifyContent: "center", minWidth: "min(52vw,420px)" }}>
+              <div className="yr-out" style={{ position: "absolute", fontFamily: SERIF, fontSize: "clamp(46px,9.4vw,128px)",
+                lineHeight: 1, fontWeight: 700, letterSpacing: "-.02em", color: T.dim }}>
+                {yearFlash - 1}
+              </div>
+              <div className="yr-in" style={{ position: "absolute", fontFamily: SERIF, fontSize: "clamp(46px,9.4vw,128px)",
+                lineHeight: 1, fontWeight: 700, letterSpacing: "-.02em", color: T.text,
+                textShadow: THEME.light ? "none" : "0 0 54px " + skin.glow }}>
                 {yearFlash}
               </div>
-              <div className="yr-sweep" style={{ position: "absolute", top: 0, bottom: 0, width: "30%",
-                background: "linear-gradient(90deg, transparent, " + (THEME.light ? "rgba(0,0,0,.10)" : "rgba(255,255,255,.32)") + ", transparent)", pointerEvents: "none" }} />
             </div>
-            <div className="yr-line" style={{ width: "min(30vmin,260px)", height: 1, marginTop: 12,
-              background: "linear-gradient(90deg, transparent, " + accent + ", transparent)" }} />
-            <div className="yr-tick" style={{ color: T.soft, fontSize: FS(10, 12), letterSpacing: ".26em", marginTop: 12, animationDelay: ".1s" }}>
-              AH · YOU ARE {c.age}
+            <div className="yr-tick" style={{ color: T.soft, fontSize: FS(10, 12), letterSpacing: ".26em", marginTop: 10, animationDelay: ".12s" }}>
+              AH · YOU ARE <span style={{ color: accent, fontWeight: 800 }}>{c.age}</span>
             </div>
           </div>
         </div>
@@ -11470,6 +11627,30 @@ export default function ShinobiLife() {
             <Row label={"Accept promotion to " + rankLabel(c, 5)} sub={canElite ? "The rank above jonin, and the paperwork that comes with it" : "Requires 2 years at " + rankLabel(c, 4)} onClick={() => promote(5)} disabled={!canElite} />
             <Row label={"Stand for " + (eraOf(c).kage || V.kage)} sub={canKage ? "They will vote" : "Requires " + rankLabel(c, 4) + ", age 22, standing 65"} onClick={() => promote(6)} disabled={!canKage} />
           </>}
+          {!c.rogue && c.rank >= 3 && (() => {
+            /* the work that comes with the rank, rather than the mission board
+               a twelve-year-old picks from. Repeatable, one action each. */
+            const mine = DUTIES.filter((d) => c.rank >= d.min && c.rank <= d.max && (!d.vill || !eraOf(c).hideVillages));
+            if (!mine.length) return null;
+            const served = Object.values(c.dutyLog || {}).reduce((a, b) => a + b, 0);
+            return (
+              <>
+                <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">DUTIES OF THE RANK</div>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  {c.rank >= 4
+                    ? "A jonin is not asked, they are assigned \u2014 and the village runs on who takes which of these."
+                    : "Chunin do not only take missions. These are the rotations the tower puts your name down for."}
+                  {served ? " You have served " + served + (served === 1 ? " rotation." : " rotations.") : ""}
+                </div>
+                {mine.map((d) => {
+                  const done = (c.dutyLog || {})[d.id] || 0;
+                  return <Row key={d.id} label={d.n} sub={d.d + (done ? " \u00b7 served " + done + "\u00d7" : "")}
+                    right={money(d.pay[0]) + "+"} onClick={() => doDuty(d)} disabled={c.actions < 1}
+                    tone={d.dark ? T.blood + "66" : c.actions >= 1 ? accent : null} />;
+                })}
+              </>
+            );
+          })()}
           {!c.rogue && !c.founded && !isLeader(c) && (
             <>
               <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">LEAVE THE COUNTRY</div>
@@ -11570,7 +11751,7 @@ export default function ShinobiLife() {
               <button key={k} onClick={() => cheat((c) => { c.cheats[k] = !c.cheats[k]; if (k === "god" && c.cheats[k]) c.health = 100; })}
                 style={{ background: c.cheats && c.cheats[k] ? T.epic : T.panel, color: c.cheats && c.cheats[k] ? "#0b0d11" : T.text, border: "1px solid " + (c.cheats && c.cheats[k] ? T.epic : T.line), borderRadius: 8 }} className="px-2 py-2.5 text-left">
                 <div className="text-xs font-bold">{n}</div>
-                <div style={{ opacity: .7 }} style={{ fontSize: 10, lineHeight: 1.25 }}>{d}</div>
+                <div style={{ opacity: .7, fontSize: 10, lineHeight: 1.25 }}>{d}</div>
               </button>
             ))}
           </div>
@@ -11595,7 +11776,7 @@ export default function ShinobiLife() {
                 <div className="flex-1"><Bar v={c.stats[k]} max={100} col={T.epic} h={5} /></div>
                 <b style={{ width: 26 }} className="text-xs text-right">{c.stats[k]}</b>
                 {[["-10", -10], ["+10", 10]].map(([lb, d]) => (
-                  <button key={lb} onClick={() => cheat((c) => { c.stats[k] = cl(c.stats[k] + d); })} style={{ background: T.panel, border: "1px solid " + T.line, color: T.soft, borderRadius: 6 }} style={{ fontSize: 10 }} className="px-2 py-1 font-bold">{lb}</button>
+                  <button key={lb} onClick={() => cheat((c) => { c.stats[k] = cl(c.stats[k] + d); })} style={{ background: T.panel, border: "1px solid " + T.line, color: T.soft, borderRadius: 6, fontSize: 10 }} className="px-2 py-1 font-bold">{lb}</button>
                 ))}
               </div>
             ))}
