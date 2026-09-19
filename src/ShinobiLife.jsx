@@ -141,8 +141,110 @@ const CLANS = [
   { n: "Kurogane", v: "kumo", kg: "Storm Release", b: { nin: 8, spd: 6 }, d: "Storm Release. Light that bends around corners." },
   { n: "Kamizuru", v: "iwa", kg: null, b: { int: 8, con: 5 }, d: "Bee handlers. Older than Iwa itself." },
   { n: "Gansaku", v: "iwa", kg: "Explosion Release", b: { nin: 9, str: 5 }, d: "Explosion Release. Art, apparently." },
+  { n: "Tsuchigumo", v: "any", kg: null, b: { nin: 7, con: 6, int: 4 }, d: "A hidden house with one scroll in it that nobody outside has read and lived. Born to this name and the Fury is your inheritance rather than a theft." },
   { n: "Civilian-born", v: "*", kg: null, b: { con: 3, int: 3 }, d: "No name, no inheritance, nothing handed to you." },
 ];
+
+/* ============================ WHERE YOUR NAME COMES FROM ============================ */
+/* Every house has a before. seat is where they hold ground, past is how they got
+   there and what it cost, and names are the ones the histories actually kept. */
+const CLAN_LORE = {
+  Otsutsuki: { seat: "Nowhere on this world's maps",
+    past: "They came down for the fruit of a tree that had not grown yet, and stayed long enough to leave chakra behind in people who were never meant to have it. Everything since \u2014 every clan, every village, every war in this book \u2014 is the long argument over what they left.",
+    names: [["Kaguya", "ate the fruit herself and stopped asking anyone's permission about anything ever again"],
+            ["Hagoromo", "her son, who sealed her and then spent a lifetime teaching what she had taken"],
+            ["Hamura", "the other son, who took his half to the moon and left a watch on it"]] },
+  Uchiha: { seat: "The southern compound at Konohagakure, walled off from the rest of it",
+    past: "Descended from the elder son, and they have never once let anybody forget it. Founded the village jointly with the Senju and were policing it within two generations, which is not the same thing as running it. Everything about this house is downstream of one fact: their eyes get stronger when they lose somebody.",
+    names: [["Madara", "founded a village with his oldest enemy and walked out of it inside a decade"],
+            ["Izuna", "his brother, who gave up his eyes before he died and was never asked whether he wanted to"],
+            ["Itachi", "did the thing the village asked and let the world believe the worst of him for it"]] },
+  Hyuga: { seat: "The main house at Konohagakure, and the branch house behind it",
+    past: "Older than the village and organised like a court. The Byakugan is the oldest dojutsu there is, and the house protects it by branding the branch family with a seal that kills the eye when the body dies. Nobody in the main house calls this cruelty. Everybody in the branch house does.",
+    names: [["Hizashi", "died in his twin brother's place and made the seal's whole logic impossible to defend"],
+            ["Neji", "was born into the branch house and spent his life arguing with what that was supposed to mean"],
+            ["Hinata", "was the heiress they wrote off, which turned out to be a misreading"]] },
+  Senju: { seat: "Konohagakure, which they built",
+    past: "The clan of the thousand skills, and the other half of the oldest feud in the world. They ended it by founding a village with the people they had been killing for two hundred years. There is almost nobody left of them now, which is the part the histories tend to hurry past.",
+    names: [["Hashirama", "the only founder who lived long enough to grow old, and the only one who wanted to"],
+            ["Tobirama", "invented half of what every shinobi alive does, and was warm about none of it"],
+            ["Tsunade", "the last of the blood, who left, and came back twenty years later for the hat"]] },
+  Uzumaki: { seat: "Uzushiogakure, in the Land of Whirlpools, until it was not there any more",
+    past: "Cousins to the Senju, with lives long enough to be suspicious and seals good enough to be worth destroying. Three countries agreed on one thing exactly once, and it was that Uzushiogakure should stop existing. The survivors scattered. Konoha still wears their spiral on its back.",
+    names: [["Mito", "sealed the Nine-Tails into herself and held it for fifty years without telling most people"],
+            ["Kushina", "held it after her and died the night it came out"],
+            ["Nagato", "had the Rinnegan put into him by somebody else's plan and carried it for both of them"]] },
+  Nara: { seat: "The forest and the deer park on Konohagakure's eastern edge",
+    past: "They keep deer, they make medicine nobody else can, and they produce, with dreary reliability, the cleverest person in any room they walk into. The shadow techniques are old and the laziness is a house policy with a strategy underneath it.",
+    names: [["Shikaku", "ran the war as its head strategist and did not once ask to be thanked"],
+            ["Shikamaru", "his son, who found the whole thing tiresome and did it anyway"]] },
+  Akimichi: { seat: "Konohagakure, and the best kitchens in it",
+    past: "Sworn to the Nara and the Yamanaka for as long as any of them have been written down \u2014 three houses, one formation, and a friendship that has outlived several wars. The pills cost years off a life and every Akimichi is taught what that means before they are taught to use them.",
+    names: [["Choza", "led the formation through two wars and came home each time"],
+            ["Choji", "took the third pill, the one nobody is supposed to survive"]] },
+  Yamanaka: { seat: "Konohagakure, the flower shop on the main road, and the intelligence division under it",
+    past: "The mind techniques mean this house does the work the village does not put in the record. They run interrogation, they run the sensor net, and in war they are the reason anybody knows anything. It is not a house that comes home unchanged.",
+    names: [["Inoichi", "held the whole allied network open inside his own head until it killed him"],
+            ["Ino", "took the division after him, younger than anyone wanted"]] },
+  Inuzuka: { seat: "The kennels on Konohagakure's northern slope",
+    past: "You are given a ninken as a child and the pair of you are one shinobi after that. Loud, fast, absolutely reliable in a tracking line, and utterly indifferent to anybody's opinion of their manners.",
+    names: [["Tsume", "ran the clan and the front-line tracking teams in the same voice"],
+            ["Kiba", "and Akamaru, who is the other half of the answer to what Kiba can do"]] },
+  Aburame: { seat: "Konohagakure, in the quietest houses on the street",
+    past: "A colony is placed in the body at birth and fed chakra for a lifetime. The trade is absolute: you are never alone, you are never quite only yourself, and there is very little in the field you cannot find.",
+    names: [["Shibi", "spoke about four times a year and was right on each occasion"],
+            ["Shino", "kept trying to be noticed, which for this house is the unusual part"]] },
+  Sarutobi: { seat: "Konohagakure, close to the tower and not by accident",
+    past: "Old Fire Country blood with the monkey contract and a habit of ending up in the seat. Two generations of them have carried the village through wars that should have finished it.",
+    names: [["Hiruzen", "held the hat longer than anybody and was called the Professor for knowing every technique in it"],
+            ["Asuma", "walked out over the Twelve Guardians and came back, and died on a job that was not his"]] },
+  Hatake: { seat: "Konohagakure, a small house with a short line in it",
+    past: "Few in number and fast beyond reason. The name was ruined in a single decision and rebuilt by the son who had to live through what it did to his father.",
+    names: [["Sakumo", "chose his squad over the mission, was broken for it by the village he had saved, and took his own life"],
+            ["Kakashi", "spent thirty years being the best in the village and never once said so"]] },
+  Sabaku: { seat: "Sunagakure, the Kazekage's residence",
+    past: "The Kazekage's line, and the house that pays for it. Magnet Release runs in the blood and so does the habit of sealing things into children because the village needed a weapon that year.",
+    names: [["Rasa", "sealed the One-Tail into his own newborn son and called it policy"],
+            ["Gaara", "was that son, and became the best Kazekage the village has had"]] },
+  Kazekari: { seat: "Sunagakure, the puppet workshops in the old quarter",
+    past: "Engineers and poisoners. The puppet corps is this house's doing and so is most of what the Land of Wind knows about killing somebody slowly and at a distance.",
+    names: [["Chiyo", "built the corps, outlived nearly everyone in it, and gave her life back to somebody else's granddaughter"],
+            ["Sasori", "her grandson, who decided a body was a design problem"]] },
+  Yuki: { seat: "The Land of Water, wherever was far enough from the purges",
+    past: "Ice Release, and hunted for it. Kirigakure spent a generation killing bloodline clans and this one caught the worst of it \u2014 not on a battlefield but house by house, often by neighbours.",
+    names: [["Haku", "was hidden by his mother, found by his father, and taken in by the only person who ever wanted him"]] },
+  Hozuki: { seat: "Kirigakure",
+    past: "The body turns to water and blades go through it. Two Mizukage out of this house and a reputation for being impossible to finish properly.",
+    names: [["Gengetsu", "the Second Mizukage, who died of wounds laughing, which everybody found unsettling"],
+            ["Suigetsu", "wants the seven swords and is collecting them in the order he finds them"]] },
+  Kaguya: { seat: "The Land of Water, and then nowhere",
+    past: "They grew their own skeletons into weapons and fought for the pleasure of it. The clan threw itself at Kirigakure's gates in a war nobody had declared and was wiped out in a night, which is roughly what it wanted.",
+    names: [["Kimimaro", "was the last of them, and spent what was left of a short life belonging to somebody"]] },
+  Terumi: { seat: "Kirigakure",
+    past: "Two bloodlines in one body, which is rare enough to be worth a war. The house survived the purges by being too useful to purge and then produced the Mizukage who ended them.",
+    names: [["Mei", "took the hat and spent it undoing what the Bloody Mist had been"]] },
+  Yotsuki: { seat: "Kumogakure",
+    past: "Lightning armour and shoulders. The Raikage's guard comes out of this house and so does the opinion, widely held within it, that most problems are solved by hitting them harder.",
+    names: [["Darui", "carried the black lightning and the Fourth's temper, and became Fifth anyway"]] },
+  Kurogane: { seat: "Kumogakure, the high towers",
+    past: "Storm Release: light that bends around corners and does not stop when it hits you. A small house with an outsized share of Kumo's hunting teams.",
+    names: [["Darui", "the storm as it is actually meant to be used, according to everyone who has seen it"]] },
+  Kamizuru: { seat: "Iwagakure, and the old hives above it",
+    past: "Older than Iwagakure itself and reduced by it. They handled bees before the village existed, lost a war to the Aburame, and have been slowly written out of their own country's records since.",
+    names: [["Suzumebachi", "tried to take the honey back and found out how much the world had moved on"]] },
+  Gansaku: { seat: "Iwagakure",
+    past: "Explosion Release, and an argument about whether what they do is a technique or an art form. Iwagakure's position is that it does not care as long as the wall comes down.",
+    names: [["Deidara", "left over the argument, took the clay with him, and never once conceded the point"]] },
+  Tsuchigumo: { seat: "A valley in the Land of Water that is on no map anybody has been allowed to keep",
+    past: "A small house with one thing in it that matters, and everything about the Tsuchigumo is downstream of that one thing. The scroll was written by the founder and has been argued about by every generation since \u2014 whether to destroy it, whether to seal it into a person rather than a scroll, whether the house exists to use it or to make sure nobody does. The answer has changed with whoever was holding the seat. What has never changed is that the clan buries its own dead defending it, and that the world outside keeps coming for it anyway.",
+    names: [["En no Gyoja", "wrote the Fury, and then spent the rest of his life arguing that it should never be read twice. The house kept the scroll and lost the argument"],
+            ["Hotaru", "had the technique sealed into her own back as a child so there would be no scroll left to steal, and grew up being protected from what she was carrying rather than told about it"],
+            ["Tonbee", "her guardian, who was old when he took the job and kept it long past the point where anybody else would have handed it on"],
+            ["Utakata", "not of the blood. A missing-nin who was asked to teach her and turned it down, and then did it anyway"]] },
+  "Civilian-born": { seat: "Wherever your parents could afford",
+    past: "No compound, no elders, no technique waiting for you in a locked room. Everything you end up with, you will have taken off somebody or been handed by somebody who owed you nothing. There is no house behind you and nothing to live up to, which some people find heavier than the alternative.",
+    names: [] },
+};
 
 const NATURES = ["Fire", "Wind", "Lightning", "Earth", "Water"];
 const BEATS = { Fire: "Wind", Wind: "Lightning", Lightning: "Earth", Earth: "Water", Water: "Fire" };
@@ -907,6 +1009,40 @@ const AH = (y) => y + " AH";
 /* the four Great Ninja Wars happen on the calendar, nowhere else */
 /* the deaths the histories record, and the year each one happens in this calendar.
    applied on schedule so nobody is walking around years after the thing that killed them. */
+/* When the named were born, on this calendar rather than on anyone else's.
+   Anchored to the years the game already commits to: the founding in 890, the
+   Sannin named in 962, the Nine-Tails in 983, the Fourth War in 1000, and every
+   date in DEATH_YEAR below. Without these the Village Roll could put an age
+   against the rank-and-file and nothing against the people you have heard of,
+   which made half the roll look unfinished. Anyone genuinely ageless — the
+   Otsutsuki, the artificial — is deliberately absent and simply shows no age. */
+const BORN_YEAR = {
+  kawarama: 851, butsuma: 830, tajima: 830,
+  madara: 858, hashirama: 858, izuna: 862, tobirama: 862, toka: 860, madaraRe: 858,
+  firstRaikage: 852, ishikawa: 850, reto: 848, byakuren: 856,
+  mu: 870, secondRaikage: 872, shamon: 876,
+  gengetsu: 890, thirdMizukage: 906, hiruzen: 898, onoki: 900, chiyo: 902, danzo: 900,
+  hanzo: 915, thirdKazekage: 920, thirdRaikage: 918,
+  jiraiya: 930, tsunade: 930, orochimaru: 930,
+  sakumo: 935, sasori: 940, rasa: 940, pain: 945, konan: 945, jigen: 950,
+  minato: 948, kushina: 948, kakuzu: 910,
+  kisame: 953, killerb: 953, ay: 955, zabuza: 955,
+  kakashiYoung: 958, obitoYoung: 958, guyYoung: 958, kakashi: 958, guy: 958, obito: 958,
+  mei: 960, koji: 960, yagura: 962, darui: 962, kabuto: 962, kimimaro: 978,
+  itachi: 968, chojuro: 968, kurotsuchi: 968, haku: 972, deidara: 976, hidan: 978,
+  naruto: 983, sasuke: 983, sakura: 983, gaara: 983, lee: 983, shikamaru: 983, neji: 982,
+  narutoAdult: 983, sasukeAdult: 983,
+  kawaki: 1004, boruto: 1005, sarada: 1005, mitsuki: 1005, shikadai: 1005,
+};
+/* how old they are in the year you are standing in, or null if they are
+   somebody the calendar does not apply to */
+function namedAge(c, id) {
+  const b = BORN_YEAR[id];
+  if (b == null || !c || !c.year) return null;
+  const end = DEATH_YEAR[id] != null && c.year > DEATH_YEAR[id] ? DEATH_YEAR[id] : c.year;
+  const a = end - b;
+  return a >= 0 && a < 130 ? a : null;
+}
 const DEATH_YEAR = {
   kawarama: 862, izuna: 880, butsuma: 886, tajima: 886,
   hashirama: 926, madara: 927, toka: 930,
@@ -1034,8 +1170,8 @@ function seedHistoricDeaths(c) {
    every one of the first three, the way the records actually have it. */
 const GREAT_WARS = [
   { no: 1, from: 927, to: 940, sides: [["konoha", "suna"], ["kumo", "iwa"]], over: "the borders the founding left unsettled",
-    note: "Kirigakure stays out of it, already turning inward toward what it will become. Tobirama Senju dies covering a retreat and the map is redrawn twice before anybody signs." },
-  { no: 2, from: 958, to: 969, sides: [["konoha", "suna"], ["iwa", "kumo", "kiri"]], over: "Amegakure, and everybody's right to march through it",
+    note: "Hashirama Senju was already a year in the ground when it opened. Kirigakure stays out of it, already turning inward toward what it will become. Tobirama Senju dies three years in, covering a retreat, and the map is redrawn twice before anybody signs." },
+  { no: 2, from: 958, to: 968, sides: [["konoha", "suna"], ["iwa", "kumo", "kiri"]], over: "Amegakure, and everybody's right to march through it",
     note: "The war that makes three orphans in Ame into something else, and gives three Konoha genin a name." },
   { no: 3, from: 969, to: 973, sides: [["konoha", "suna"], ["iwa"]], over: "Kusagakure and the bridge at Kannabi",
     note: "Kumogakure and Kirigakure sit this one out. Fought mostly by children. Kakashi makes jonin at thirteen and loses Obito the same season." },
@@ -1060,11 +1196,13 @@ const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 const HISTORIC = [
   { y: 890, t: "Hashirama Senju and Madara Uchiha have signed. Konohagakure stands in the Land of Fire, and the Warring States Period is over.", c: "THE VILLAGES", big: true },
   { y: 900, t: "The first Kage Summit has been held. Five leaders sat in one room to divide the tailed beasts between them. Nobody left satisfied.", c: "THE COURTS", big: true },
+  { y: 926, t: "Hashirama Senju is dead. The First Hokage was the only founder to live long enough to grow old, and Tobirama Senju has taken the hat.", c: "OBITUARIES", big: true },
   { y: 927, t: "The First Great Ninja War has begun. Territorial disputes between the five new villages have finally come to open fighting.", c: "WAR", big: true },
-  { y: 940, t: "The First Great Ninja War has ended, with both Senju brothers in the ground and neither country holding what it fought for.", c: "WAR", big: true },
+  { y: 930, t: "Tobirama Senju is dead, three years into the war, covering his own squad's retreat from the Gold and Silver Brothers. Hiruzen Sarutobi has the hat and the war.", c: "OBITUARIES", big: true },
+  { y: 940, t: "The First Great Ninja War has ended, with the Second Hokage in the ground and neither country holding what it fought for.", c: "WAR", big: true },
   { y: 958, t: "The Second Great Ninja War has begun, twenty years after the last one ended.", c: "WAR", big: true },
   { y: 962, t: "Three Konoha shinobi survived Hanzo of the Salamander at Amegakure. He has named them the Legendary Sannin.", c: "BINGO BOOK", big: true },
-  { y: 969, t: "The Second Great Ninja War has ended in treaty. Almost nobody expects it to hold.", c: "WAR", big: true },
+  { y: 968, t: "The Second Great Ninja War has ended in treaty. Almost nobody expects it to hold.", c: "WAR", big: true },
   { y: 969, t: "The Third Great Ninja War has begun. Some are calling it a continuation of the last one rather than a new war.", c: "WAR", big: true },
   { y: 973, t: "The Third Great Ninja War is over. Minato Namikaze ended a battle single-handedly and enemy shinobi now have standing orders to flee on sight.", c: "WAR", big: true },
   { y: 983, t: "The Nine-Tails has come over the wall at Konohagakure. The village is burning and the tower is not answering.", c: "THE BEASTS", big: true },
@@ -1090,7 +1228,10 @@ const KAGE_LINE = {
   /* terms are set so each seat lands in the year the histories put it:
      Hashirama through the Founding, Hiruzen through the wars, Minato until 983,
      Hiruzen again after the Nine-Tails, Tsunade for the Fourth War, then the New Era. */
-  konoha: [{ id: "hashirama", term: 37, dies: true }, { id: "tobirama", term: 4, dies: true }, { id: "hiruzen", term: 49 }, { id: "minato", term: 4, dies: true }, { id: "hiruzen", term: 13, again: true, dies: true }, { id: "tsunade", term: 8 }, { id: "kakashi", term: 7 }, { id: "narutoAdult", term: 23 }, { id: "shikamaru", term: 30 }],
+  /* Hashirama 890-926 and Tobirama 926-930, which is what DEATH_YEAR already
+     says. The terms used to run a year past both graves, so each brother held
+     the hat for a year after the histories had buried him. */
+  konoha: [{ id: "hashirama", term: 36, dies: true }, { id: "tobirama", term: 4, dies: true }, { id: "hiruzen", term: 50 }, { id: "minato", term: 4, dies: true }, { id: "hiruzen", term: 13, again: true, dies: true }, { id: "tsunade", term: 8 }, { id: "kakashi", term: 7 }, { id: "narutoAdult", term: 23 }, { id: "shikamaru", term: 30 }],
   suna: [{ id: "reto", term: 24, dies: true }, { id: "shamon", term: 28, dies: true }, { id: "thirdKazekage", term: 42, dies: true }, { id: "rasa", term: 22, dies: true }, { id: "gaara", term: 40 }],
   kumo: [{ id: "firstRaikage", term: 34, dies: true }, { id: "secondRaikage", term: 30, dies: true }, { id: "thirdRaikage", term: 31, dies: true }, { id: "ay", term: 26 }, { id: "darui", term: 30 }],
   iwa: [{ id: "ishikawa", term: 34, dies: true }, { id: "mu", term: 32, dies: true }, { id: "onoki", term: 46 }, { id: "kurotsuchi", term: 30 }],
@@ -1316,12 +1457,17 @@ const WAR_DEFS = {
   third: { fixed: false, side: "your village", armyOf: (n) => n + "'s forces" },
   naruto: {
     fixed: true, side: "the Allied Shinobi Forces", enemyName: "the Akatsuki coalition",
+    /* The whole point of this one is that it is the first time all five stood
+       together. It was being built with no allies at all, so the war that is
+       famous for its alliance was the one war where you fought entirely alone. */
+    withMe: ["konoha", "suna", "kiri", "kumo", "iwa"],
     leader: "obito", army: "the White Zetsu Army", pool: ["missing", "akatsuki", "jin"],
     champs: ["kisame", "deidara", "sasori", "hidan", "kakuzu", "konan", "itachi"],
     blurb: "One hundred thousand shinobi under one banner for the first time in history, against an army that does not tire and cannot be reasoned with.",
   },
   boruto: {
     fixed: true, side: "the allied villages", enemyName: "Kara", leader: "jigen", army: "Kara's Inners and their Outers",
+    withMe: ["konoha", "suna", "kiri", "kumo", "iwa"],
     pool: ["akatsuki", "jin", "kage"], champs: ["delta", "koji"],
     blurb: "An organisation with no country, no borders and technology nobody in the elemental nations can explain.",
   },
@@ -1353,12 +1499,20 @@ function villageFoe(c, v) {
     pressure: rr(9, 16), front: pick(BATTLE_SITES), out: false,
   };
 }
-function allyEntry(c, key) {
+function allyEntry(c, key, committed) {
   const v = VILLAGES.find((x) => x.id === key);
   return {
     kind: v ? "village" : "clan", key,
     name: v ? (villageExists(c, key) ? v.name : "the " + v.land) : "the " + key + " clan",
-    strength: rr(30, 60), committed: false, asked: false, spent: false,
+    /* a sworn ally who has not marched has no front. one who is in it from the
+       opening day holds ground of their own, which is the whole point: a great
+       war is not five countries queueing up to fight one person. */
+    /* A country that is in the war from the opening day has mobilised. At the
+       old numbers an allied front could not win a single engagement against a
+       great-war enemy, so every ally simply crumbled and the coalition was
+       decoration. */
+    strength: committed ? rr(56, 84) : rr(34, 62), committed: !!committed, asked: !!committed, spent: false,
+    front: committed ? pick(BATTLE_SITES) : null,
   };
 }
 /* point the legacy war fields at whichever foe you are currently fighting */
@@ -1375,6 +1529,15 @@ function focusFoe(w, i) {
   w.vid = f.kind === "village" ? f.key : null;
 }
 const liveFoes = (w) => (w && w.foes ? w.foes.filter((f) => !f.out) : []);
+/* how much fight a country has left in it, as distinct from how much army. a
+   coalition partner that is still strong can still decide this is not its war. */
+const foeWill = (f) => (f.will == null ? 70 : f.will);
+/* your whole side, for the times the game has to say who is actually fighting */
+function sideNames(c, w) {
+  const mine = w.side;
+  const withYou = committedAllies(w).map((a) => a.name);
+  return withYou.length ? cap(mine) + " and " + joinList(withYou) : cap(mine);
+}
 const foeLabel = (w) => joinList(liveFoes(w).map((f) => f.name));
 /* eight names in a sentence is not a headline, it is a list. */
 const shortList = (names, max) => {
@@ -1397,6 +1560,12 @@ function buildWar(c, L, opts) {
   const foes = opts.foes.filter(Boolean);
   if (!foes.length) return;
   const sworn = ((c.rule && c.rule.allies) || []).filter((a) => !foes.some((f) => f.key === a));
+  /* Countries that are in this war on your side from the opening day. Without
+     these a canon great war read "Konohagakure against Iwagakure, Kumogakure
+     and Kirigakure" and never once mentioned that Sunagakure was standing next
+     to you the whole time — which is exactly why it felt like the world versus
+     one person. */
+  const coalition = (opts.withMe || []).filter((k) => k !== c.village && !foes.some((f) => f.key === k) && !sworn.includes(k));
   const multi = foes.length > 1;
   /* the calendar alone does not make a war "the Great War" — a random single-front
      border roll that happens to land inside those years is still just a border war.
@@ -1421,16 +1590,21 @@ function buildWar(c, L, opts) {
       : multi ? "The war against " + shortList(foes.map((f) => f.name), 2)
       : ERA.hideVillages ? "The war with " + foes[0].name : "The border war with " + foes[0].name),
     no: canon ? canon.no : declaredGreat ? ((c.world && c.world.greatNo) || 1) : 0,
-    years: rr(3, 6) + (multi ? foes.length - 1 : 0),
+    /* A canon great war runs to the year the histories close it, not to a
+       private countdown. This is why the Second Great Ninja War could report
+       itself "over" in 963 when it ran to 969: the player's war object rolled
+       its own 3-6 year span and then announced the end of the whole war. */
+    years: canon ? Math.max(1, canon.to - c.year) : rr(3, 6) + (multi ? foes.length - 1 : 0),
     momentum: cl(50 - (foes.length - 1) * 8), contribution: 0, stage: 0,
     side, great, allied: false,
-    foes, allies: sworn.map((a) => allyEntry(c, a)), active: 0,
+    foes, allies: coalition.map((a) => allyEntry(c, a, true)).concat(sworn.map((a) => allyEntry(c, a))), active: 0,
     pool: ERA.hideVillages ? ["thug", "genin", "chunin"] : ERA.pool, champs: opts.champs || null,
-    reinforced: 0, called: 0,
+    reinforced: 0, called: 0, joined: 0,
     blurb: opts.blurb || (multi
       ? "You have taken on " + foes.length + " at once. They have already noticed each other, and they are talking."
       : "They have called up every fighter they have. So has your side."),
   };
+  w.foes.forEach((f) => { if (f.will == null) f.will = rr(58, 84); });
   /* no two fronts on the same ground */
   const used = [];
   w.foes.forEach((f) => {
@@ -1442,9 +1616,16 @@ function buildWar(c, L, opts) {
   });
   focusFoe(w, 0);
   c.war = w;
-  P(L, w.name + " has begun. " + cap(side) + " against " + foeSummary(w) + ". The fighting opens at " + w.front + ".", "e");
+  const joiningLate = canon && c.year > canon.from;
+  P(L, joiningLate
+    ? w.name + " is in its " + (ORDINALS[Math.min(9, Math.max(1, c.year - canon.from + 1)) - 1] || "later") + " year and you are in it now. "
+      + cap(side) + " against " + foeSummary(w) + ". You have been sent to " + lowerName(w.front) + "."
+    : w.name + " has begun. " + cap(side) + " against " + foeSummary(w) + ". The fighting opens at " + w.front + ".", "e");
   if (w.blurb) P(L, w.blurb, "n");
-  if (w.allies.length) P(L, "Sworn to you and not yet committed: " + joinList(w.allies.map((a) => a.name)) + ". They will have to be called.", "n");
+  const inFromTheStart = w.allies.filter((a) => a.committed);
+  const notYet = w.allies.filter((a) => !a.committed);
+  if (inFromTheStart.length) P(L, joinList(inFromTheStart.map((a) => a.name)) + " " + (inFromTheStart.length > 1 ? "are" : "is") + " in it on your side, holding " + joinList(inFromTheStart.map((a) => a.front)) + ".", "g");
+  if (notYet.length) P(L, "Sworn to you and not yet committed: " + joinList(notYet.map((a) => a.name)) + ". They will have to be called.", "n");
   /* one headline for the declaration, however many they are — but a canon Great War was
      already announced to the world on the calendar year it actually started (see HISTORIC).
      somebody posted to its front years late (too young at the outbreak, for instance) is
@@ -1478,7 +1659,7 @@ function beginClanWar(c, L, foeArg) {
 }
 
 const pactHolds = (c, key) => !!(c.pacts && c.pacts[key] > c.year);
-function beginWar(c, L, forcedEnemy, great) {
+function beginWar(c, L, forcedEnemy, great, withMe) {
   const ERA = eraOf(c);
   const targets = Array.isArray(forcedEnemy) ? forcedEnemy : forcedEnemy ? [forcedEnemy] : [];
   if (ERA.hideVillages && !targets.length) { beginClanWar(c, L); return; }
@@ -1493,6 +1674,7 @@ function beginWar(c, L, forcedEnemy, great) {
     buildWar(c, L, {
       name: canon ? "The " + ORDINALS[canon.no - 1] + " Great Ninja War" : ERA.war,
       great: true, champs: def.champs, blurb: def.blurb,
+      withMe: (def.withMe || []).filter((k) => k !== c.village && villageExists(c, k)),
       foes: [{
         kind: "org", key: def.enemyName, name: def.enemyName, army: def.army,
         leaderName: NAMED[def.leader] ? NAMED[def.leader].name : def.enemyName,
@@ -1508,7 +1690,7 @@ function beginWar(c, L, forcedEnemy, great) {
     ? targets.map((t) => VILLAGES.find((v) => v.id === t)).filter(Boolean)
     : (opts.length ? [pick(opts)] : []);
   if (!evs.length) return;
-  buildWar(c, L, { foes: evs.map((v) => villageFoe(c, v)), great });
+  buildWar(c, L, { foes: evs.map((v) => villageFoe(c, v)), great, withMe });
 }
 
 /* the enemy is losing and sends for help */
@@ -1554,6 +1736,143 @@ function reportWithdrawals(c, gone) {
     return;
   }
   newsItem(c, cap(shortList(gone.map((f) => f.name), 3)) + " have all withdrawn from " + lowerName(c.war.name) + " inside a year. " + tail, "WAR", true);
+}
+
+/* ---------------- THE WAR, RUNNING WITHOUT YOU ----------------
+   The old model was one number on a random walk with the player at the centre
+   of it. Every front was yours, every enemy was fighting you and nobody else,
+   and the countries on your own side existed only as a button marked "call
+   them" — so a great war read as five nations queueing up to fight one person.
+
+   Now each committed ally holds a front of its own and fights on it whether or
+   not you are there; enemies press whichever front is weakest rather than
+   always yours; and every country in the enemy coalition has a will to keep
+   going that is separate from its army. Countries leave when that runs out,
+   and the war can be going well nationally while you are losing your own
+   ground, or the reverse. */
+
+/* one off-screen engagement: somebody of ours against somebody of theirs */
+function frontClash(c, L, w, a, f, news) {
+  const ours = a.strength / 8.5 + rr(-3, 6);
+  const theirs = f.strength / 8.5 + f.pressure / 6.0 + rr(-3, 6);
+  const site = a.front || f.front;
+  if (ours >= theirs) {
+    f.strength -= rr(5, 12);
+    f.will = cl(foeWill(f) - rr(4, 10));
+    a.strength = cl(a.strength + rr(0, 3), 4, 100);
+    news.push([cap(a.name) + " held " + site + " against " + f.name + ". You were nowhere near it and it went well anyway.", "g"]);
+    return 3;
+  }
+  a.strength = cl(a.strength - rr(5, 12), 0, 100);
+  f.strength += rr(0, 5);
+  f.will = cl(foeWill(f) + rr(1, 4));
+  news.push([cap(f.name) + " broke the line at " + site + ". " + cap(a.name) + " has pulled back and is not saying what it cost.", "b"]);
+  return -3;
+}
+
+/* a country decides the war is not worth the next season of it */
+function foeSuesForPeace(c, L, f) {
+  const w = c.war;
+  f.out = true;
+  P(L, cap(f.name) + " has sued for peace. " + f.leaderName + " signed without telling the rest of the coalition, and the rest of the coalition found out the way everyone else did.", "g");
+  newsItem(c, cap(f.name) + " has withdrawn from " + lowerName(w.name) + ". " + f.leaderName + " signed separately — the countries still in it are describing the terms as a betrayal.", "WAR", true);
+  liveFoes(w).forEach((o) => { o.will = cl(foeWill(o) - rr(5, 14)); });
+}
+
+/* the coalition decides where to put its weight this year */
+function enemyPlan(c, L, w, news) {
+  const foes = liveFoes(w);
+  if (!foes.length) return 0;
+  const allies = committedAllies(w);
+  let net = 0;
+  /* they press whoever is weakest, which is not automatically you */
+  const weakestAlly = allies.slice().sort((x, y) => x.strength - y.strength)[0];
+  if (weakestAlly && weakestAlly.strength < 38 && roll(46)) {
+    const f = foes.slice().sort((x, y) => y.strength - x.strength)[0];
+    weakestAlly.strength = cl(weakestAlly.strength - rr(6, 14), 0, 100);
+    net -= 3;
+    news.push([cap(f.name) + " has turned its weight onto " + weakestAlly.name + " rather than onto you. They can read a map.", "b"]);
+    if (weakestAlly.strength <= 0) {
+      weakestAlly.committed = false; weakestAlly.spent = true; weakestAlly.front = null;
+      news.push([cap(weakestAlly.name) + " is out. What is left of their army went home and the front they were holding is nobody's now.", "b"]);
+      newsItem(c, cap(weakestAlly.name) + " has left " + lowerName(w.name) + " after losing the ground it was holding. " + cap(w.side) + " now covers that front alone.", "WAR", true);
+      net -= 4;
+    }
+  }
+  /* the ones who are losing lose their nerve, and some of them act on it.
+     Will has to move at the speed a war actually moves or no country ever
+     reaches the point of signing and the whole mechanic is decoration. */
+  foes.forEach((f) => {
+    if (f.strength < 34) f.will = cl(foeWill(f) - rr(4, 11));
+    if (f.strength > 70) f.will = cl(foeWill(f) + rr(1, 4));
+    /* losing the war overall wears them down even where their own front holds */
+    if (w.momentum >= 60) f.will = cl(foeWill(f) - rr(3, 8));
+    else if (w.momentum <= 34) f.will = cl(foeWill(f) + rr(1, 5));
+    /* and every year of it costs something */
+    f.will = cl(foeWill(f) - rr(0, 3));
+  });
+  const quitting = foes.filter((f) => foeWill(f) <= 0 || (foeWill(f) < 30 && roll(42)));
+  /* never all of them at once — a war that evaporates is not a war either */
+  quitting.slice(0, Math.max(0, foes.length - 1)).forEach((f) => { foeSuesForPeace(c, L, f); net += 5; });
+  return net;
+}
+
+/* a neutral country reads which way it is going and picks a side */
+function neutralJoins(c, L, w, news) {
+  if (eraOf(c).hideVillages || (w.joined || 0) >= 2) return 0;
+  /* countries do not pick a side every single year, but they do pick one */
+  if (!roll(26)) return 0;
+  const taken = liveFoes(w).map((f) => f.key)
+    .concat((w.allies || []).map((a) => a.key), [c.village]);
+  const free = VILLAGES.filter((v) => villageExists(c, v.id) && !taken.includes(v.id) && !c.razed.includes(v.name));
+  if (!free.length) return 0;
+  const v = pick(free);
+  w.joined = (w.joined || 0) + 1;
+  /* they join whichever side is winning, because that is what countries do */
+  if (w.momentum >= 53 && !pactBroken(c, v.id)) {
+    const a = allyEntry(c, v.id, true);
+    w.allies.push(a);
+    news.push([cap(a.name) + " has come in on your side. Nobody asked them — they have decided which way this is going.", "g"]);
+    newsItem(c, cap(a.name) + " has entered " + lowerName(w.name) + " alongside " + w.side + ". The declaration cites a treaty nobody had read in twenty years.", "WAR", true);
+    return 5;
+  }
+  if (w.momentum <= 46) {
+    const f = villageFoe(c, v);
+    f.will = rr(55, 80);
+    w.foes.push(f);
+    news.push([cap(f.name) + " has come in against you. They waited until they were sure, and now they are sure.", "b"]);
+    newsItem(c, cap(f.name) + " has entered " + lowerName(w.name) + " against " + w.side + ". That is " + liveFoes(w).length + " fronts open at once.", "WAR", true);
+    return -6;
+  }
+  return 0;
+}
+const pactBroken = (c, k) => false;
+
+/* the whole war year: your front, their plan, and every front that is not yours */
+function warYear(c, L) {
+  const w = c.war;
+  if (!w) return;
+  const news = [];
+  let net = 0;
+  liveFoes(w).forEach((f) => { if (f.will == null) f.will = rr(58, 84); });
+  (w.allies || []).forEach((a) => { if (a.committed && !a.front) a.front = pick(BATTLE_SITES); });
+
+  /* every ally holds a front, and it goes how it goes */
+  const allies = committedAllies(w);
+  const foes = liveFoes(w);
+  allies.forEach((a, i) => { const f = foes[i % foes.length]; if (f) net += frontClash(c, L, w, a, f, news); });
+
+  net += enemyPlan(c, L, w, news);
+  net += neutralJoins(c, L, w, news);
+
+  /* your own front, which is the one you actually stand on */
+  const yours = rr(-4, 5) - Math.round(warPressure(w) / 2.6);
+  net += yours;
+  w.momentum = cl(w.momentum + net);
+
+  /* two lines at most, or a long war is nothing but bulletins */
+  news.slice(0, 2).forEach(([t, k]) => P(L, t, k));
+  return { net, yours, reported: news.length };
 }
 
 /* ============================ INCIDENTS & THE BROADCAST ============================ */
@@ -2003,19 +2322,43 @@ function worldTick(c, L) {
     if (live.length >= 2) { const a = pick(live); beginFeud(c, a, pick(live.filter((x) => x !== a))); }
   }
 
-  /* --- running wars between other nations --- */
+  /* --- running wars between other nations ---
+     These used to be a coin flip reported every single year, so the paper was
+     mostly "somebody broke the line somewhere" with no thread and no result.
+     Each war now holds a line between the two of them that their own strength
+     pushes on, and the side that ends up holding it wins something. */
   w.wars.forEach((war) => {
     war.years -= 1;
-    if (roll(70)) {
-      const site = pick(BATTLE_SITES);
-      const winner = roll(50) ? war.a : war.b;
+    if (war.line == null) war.line = 50;
+    const push = (k) => (w.stability[k] || 50) / 10 + rr(-4, 5);
+    const swing = Math.round(push(war.a) - push(war.b));
+    war.line = cl(war.line + swing);
+    /* report it when the line actually moves somewhere, not every year */
+    if (Math.abs(swing) >= 4 && roll(64)) {
+      const winner = swing > 0 ? war.a : war.b;
       const loser = winner === war.a ? war.b : war.a;
-      w.stability[loser] = cl(w.stability[loser] - rr(3, 9));
-      newsItem(c, cap(vLabel(c, winner, "land")) + " broke the line at " + site + ". " + cap(vLabel(c, loser, "land")) + " has pulled back and is not saying how many it cost.", "WAR", war.great);
+      w.stability[loser] = cl(w.stability[loser] - rr(2, 6));
+      const decisive = war.line >= 74 || war.line <= 26;
+      newsItem(c, decisive
+        ? cap(vLabel(c, winner, "land")) + " has taken " + pick(BATTLE_SITES) + " and is inside " + vLabel(c, loser, "land") + "'s border. " + cap(vLabel(c, loser, "land")) + " is asking for terms it will not like."
+        : cap(vLabel(c, winner, "land")) + " broke the line at " + pick(BATTLE_SITES) + ". " + cap(vLabel(c, loser, "land")) + " has pulled back and is not saying how many it cost.", "WAR", war.great);
     }
-    if (war.years <= 0) {
-      newsItem(c, cap(vLabel(c, war.a, "land")) + " and " + vLabel(c, war.b, "land") + " have signed at " + pick(BATTLE_SITES) + ". " + (war.great && war.no ? "The " + (ORDINALS[war.no - 1] || "latest") + " Great Ninja War is over." : "The border is quiet again."), "WAR", war.great);
-      w.stability[war.a] = cl(w.stability[war.a] + 6); w.stability[war.b] = cl(w.stability[war.b] + 6);
+    /* a war can end because one of them is finished, not only because time ran out */
+    const collapsed = war.line >= 88 || war.line <= 12;
+    if (war.years <= 0 || collapsed) {
+      war.years = 0;
+      const winner = war.line > 55 ? war.a : war.line < 45 ? war.b : null;
+      if (winner) {
+        const loser = winner === war.a ? war.b : war.a;
+        w.stability[winner] = cl(w.stability[winner] + rr(4, 10));
+        w.stability[loser] = cl(w.stability[loser] - rr(6, 14));
+        newsItem(c, cap(vLabel(c, loser, "land")) + " has signed " + vLabel(c, winner, "land") + "'s terms at " + pick(BATTLE_SITES) + ". "
+          + (war.great && war.no ? "The " + (ORDINALS[war.no - 1] || "latest") + " Great Ninja War is over." : "Reparations, a redrawn border, and a generation that will remember it."), "WAR", war.great);
+      } else {
+        w.stability[war.a] = cl(w.stability[war.a] + 5); w.stability[war.b] = cl(w.stability[war.b] + 5);
+        newsItem(c, cap(vLabel(c, war.a, "land")) + " and " + vLabel(c, war.b, "land") + " have signed at " + pick(BATTLE_SITES) + " with the border where it started and nothing to show for any of it. "
+          + (war.great && war.no ? "The " + (ORDINALS[war.no - 1] || "latest") + " Great Ninja War is over." : "The border is quiet again."), "WAR", war.great);
+      }
     }
   });
   w.wars = w.wars.filter((x) => x.years > 0);
@@ -2238,9 +2581,12 @@ function greatWarTick(c, L) {
        the year they turn 12, same as the war promised. */
     if (c.greatWar.side >= 0 && !c.greatWar.enrolled && c.age >= 12 && !c.war) {
       const mine2 = c.village;
-      const foes2 = (g.all ? g.all.filter((k) => k !== mine2) : (g.sides[1 - c.greatWar.side] || [])).filter((k) => k !== "akatsuki");
+      const rawFoes2 = g.all ? g.all.filter((k) => k !== mine2) : (g.sides[1 - c.greatWar.side] || []);
+      const vFoes2 = rawFoes2.filter((k) => k !== "akatsuki");
+      const foes2 = vFoes2.length ? vFoes2 : rawFoes2;
+      const mates2 = (g.all ? [] : (g.sides[c.greatWar.side] || [])).filter((k) => k !== mine2 && k !== "akatsuki");
       P(L, "You are " + c.age + " now. The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War still needs bodies, and yours is one of them. You have been posted to a front.", "e");
-      beginWar(c, L, foes2.length ? foes2 : null, true);
+      beginWar(c, L, foes2.length ? foes2 : null, true, mates2);
       if (c.war) { c.war.great = true; c.war.no = g.no; }
       c.greatWar.enrolled = true;
     }
@@ -2254,12 +2600,24 @@ function greatWarTick(c, L) {
     P(L, "The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War has opened and " + (villageExists(c, mine) ? vName2(mine) : "your country") + " is not in it. That will last as long as it is useful to somebody.", "n");
     return;
   }
-  const foes = (g.all ? g.all.filter((k) => k !== mine) : (g.sides[1 - side] || [])).filter((k) => k !== "akatsuki");
+  const rawFoes = g.all ? g.all.filter((k) => k !== mine) : (g.sides[1 - side] || []);
+  /* The Fourth is the five nations against the Akatsuki, so stripping the
+     Akatsuki out left the war with no enemy in it at all and the declaration
+     read "against , and everybody who can hold a kunai is in it". Only drop
+     them when there is somebody else on that side to fight. */
+  const villageFoes = rawFoes.filter((k) => k !== "akatsuki");
+  const foes = villageFoes.length ? villageFoes : rawFoes;
+  /* who is standing on YOUR side of it. This was never read, so every canon
+     great war announced itself as your village alone against a coalition. */
+  const mates = (g.all ? [] : (g.sides[side] || [])).filter((k) => k !== mine && k !== "akatsuki");
   const nameOf = (k) => k === "akatsuki" ? "the Akatsuki" : vName2(k);
-  P(L, "The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War. " + (g.all ? "Every great nation against every other — " + vName2(mine) + " against " + joinList(foes.map(nameOf)) + ", and none of them against each other any less." : vName2(mine) + " is in it against " + joinList(foes.map(nameOf)) + ", and so is everybody who can hold a kunai.")
+  const ourSide = mates.length ? vName2(mine) + " and " + joinList(mates.map(nameOf)) : vName2(mine);
+  P(L, "The " + (ORDINALS[g.no - 1] || "") + " Great Ninja War. " + (g.all
+      ? "Every great nation against every other \u2014 " + vName2(mine) + " against " + joinList(foes.map(nameOf)) + ", and none of them against each other any less."
+      : ourSide + " against " + joinList(foes.map(nameOf)) + ", and everybody who can hold a kunai is in it.")
     + (c.age < 12 ? " You are " + c.age + ". They will come for your year eventually." : " You have been posted to a front."), "e");
   if (c.age >= 12 && !c.war) {
-    beginWar(c, L, foes.length ? foes : null, true);
+    beginWar(c, L, foes.length ? foes : null, true, mates);
     if (c.war) { c.war.great = true; c.war.no = g.no; }
     c.greatWar.enrolled = true;
   }
@@ -2306,6 +2664,20 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.0", n: "The War Has Other People In It", items: [
+    "The war was never against you. It only looked that way, and the reason was one line of code: when a Great War opened, the game worked out who was on the other side and never once read who was on yours. So the Second Great Ninja War announced itself as Konohagakure against Iwagakure, Kumogakure and Kirigakure \u2014 with Sunagakure, your ally in it from the first day, never mentioned. It now reads Konohagakure and Sunagakure against Iwagakure, Kumogakure and Kirigakure, because that is what it always was",
+    "And the Fourth \u2014 the war whose entire point is that all five villages stood together for the first time in history \u2014 was being built with no allies at all. It was the one war you fought completely alone",
+    "The war has an AI now instead of a dice roll. Every country fighting beside you holds a front of its own and fights on it whether you are there or not: 'Sunagakure held the Kamizuru Flats against Iwagakure. You were nowhere near it and it went well anyway.' Enemies press whichever front is weakest, which is often not yours \u2014 'Kumogakure has turned its weight onto Sunagakure rather than onto you. They can read a map.' Neutral countries watch which way it is going and pick a side. Every country in the enemy coalition has a will to keep fighting that is separate from its army, and when that runs out it signs separately and the rest find out the way you do",
+    "The overall war and your own front are two different numbers now. You can be holding your ground while the war is being lost somewhere else, or losing yours while it is won without you",
+    "The background wars between countries you have nothing to do with used to be a coin flip reported every single year. They hold a line now, and the side that ends up holding it takes reparations and a redrawn border off the side that does not",
+    "Fixed: the Second Great Ninja War could announce itself over in 963 when it runs to 968. Your own involvement had a private countdown that ended the entire war when it ran out. A canon great war now lasts as long as the histories say it lasts, and joining one already in progress says so rather than claiming the war has just begun",
+    "Fixed the timeline around the First War: Hashirama and Tobirama each held the hat for a year after the date the game itself records for their deaths. Hashirama dies in 926 and the paper says so, the war opens in 927, and Tobirama dies three years into it covering a retreat \u2014 in that order, each with its own headline",
+    "The Village Roll shows ages. It always had them for the rank and file and never for anybody you had heard of, which made half the roll look unfinished. Sixty-odd named shinobi have birth years now, anchored to this calendar, and age is its own column",
+    "Izanagi did nothing at all. It was a Mangekyo you could roll that granted a technique which did not exist. It is real now: cast it and the next thing that would kill you simply did not, once, and the eye that paid for it goes dark for good. Izanami was a damage roll with a two-turn stun, which is not what it is \u2014 it is a loop they do not get out of until they accept what they are, and against anything short of a legend it ends the fight",
+    "You can be born Tsuchigumo. Born to the house, the Fury is your inheritance rather than something stolen off two other forbidden techniques first \u2014 the elders decide, and it is still the hardest thing in the game to survive learning",
+    "Every clan has its history now, under your clan's panel: where the house holds ground, how it got there, and the names the histories actually kept. The Tsuchigumo entry has En no Gyoja, who wrote the Fury and spent the rest of his life arguing it should never be read twice; Hotaru, who had it sealed into her own back as a child; Tonbee, who guarded her long past the point anybody else would have handed the job on; and Utakata, who was asked to teach her, said no, and did it anyway",
+    "Dying no longer throws away everything you learned. Spending a life on jutsu used to buy nothing the moment it ended. Everything you knew is written down now: your heir is taught the best of it outright and can work through the rest off your notes in about half the time it took you, and the death screen shows you exactly what you are leaving behind",
+  ] },
   { v: "9.10", n: "The Year Turn Stops Shouting, and a Sweep", items: [
     "Fixed the big one: every single age-up threw a full-strength shockwave from the dead centre of the screen. It was the loudest effect in the game and it fired once a turn, for the whole game. It is gone \u2014 the band and the odometer already mark the year, and they do it without washing the page",
     "The background ripple a press makes is local now instead of crossing the screen. It used to travel most of the way across in two and a bit seconds, which meant one press sent a wave over every word on the page and the next press started another before the first had finished. Half the travel, a band three times tighter, and done in one second",
@@ -3599,8 +3971,10 @@ const FORBIDDEN = [
     d: "Hundreds at once. It is forbidden because it kills ordinary people to attempt it, not because it is complicated." },
   { n: "Living Corpse Rebirth", t: 6, k: "gen", p: 122, c: 48, e: "stun", cost: "self",
     d: "Take somebody else's body and leave yours. You keep going. You do not stay yourself." },
-  { n: "Izanami", t: 6, k: "gen", p: 130, c: 52, e: "stun", cost: "eye",
-    d: "They repeat the same moments until they accept what they are. It costs you the eye that cast it, permanently." },
+  { n: "Izanagi", t: 6, k: "buff", p: 0, c: 46, e: "izanagi", cost: "eye",
+    d: "Decide that the last few seconds did not happen. Cast it and the next thing that would kill you simply did not, once \u2014 and the eye that cast it closes for good." },
+  { n: "Izanami", t: 6, k: "gen", p: 74, c: 52, e: "izanami", cost: "eye",
+    d: "Not a blow. You put them in the same few seconds over and over and they do not get out of it until they accept what they are. They stop fighting. The eye that cast it closes for good." },
   { n: "Cursed Seal Application", t: 5, k: "buff", p: 0, c: 34, e: "atk", cost: "health",
     d: "Mark somebody with a piece of yourself. One in ten survive it and the nine are on you." },
   { n: "Human Sacrifice Ritual", t: 5, k: "heal", p: 96, c: 30, e: null, cost: "dark",
@@ -3614,8 +3988,15 @@ const FORBIDDEN = [
   { n: "Mind Body Switch: Permanent", t: 6, k: "gen", p: 126, c: 50, e: "stun", cost: "self",
     d: "Go into a mind and do not come back out. Whoever is left in your body is not you." },
   { n: "Fury", t: 6, k: "nin", p: 235, c: 78, e: "burn", cost: "life", rare: true,
-    req: (c) => (c.forbidden || []).length >= 2 && power(c) >= 88,
-    reqTxt: "Two other forbidden techniques already learned, and real strength besides",
+    /* Born to the house, the scroll is not a theft — it is what the elders have
+       been deciding whether to hand you since you were old enough to be told
+       there was a scroll. Still lethal to attempt, still the hardest thing in
+       the game to survive, but it does not demand you first learn two other
+       forbidden techniques from strangers. */
+    req: (c) => c.clan === "Tsuchigumo"
+      ? (power(c) >= 62 && c.age >= 16 && (c.clanStanding || 0) >= 30)
+      : ((c.forbidden || []).length >= 2 && power(c) >= 88),
+    reqTxt: "Two other forbidden techniques already learned, and real strength besides \u2014 unless you were born Tsuchigumo, in which case the house decides",
     d: "The last technique of the Tsuchigumo clan, sealed inside a scroll they buried their own dead defending rather than let it be read twice. It does not stop at a person. Cast to completion, it takes the village." },
 ];
 const KIN_COST = {
@@ -3645,7 +4026,8 @@ const MANGEKYO_POWERS = [
   { id: "avatar", n: "Susanoo", d: "A skeleton of chakra around you, then muscle, then armour, then a sword.", j: "Susanoo", cost: "strain", eff: "def" },
   { id: "warp", n: "Kamui", d: "A place that is not here, and you can put things in it. Including yourself.", j: "Kamui", cost: "strain", eff: "evade" },
   { id: "bind", n: "Kotoamatsukami", d: "One order, given so gently they will believe it was their own idea for a decade.", j: "Kotoamatsukami", cost: "long", eff: "stun" },
-  { id: "chain", n: "Izanagi", d: "You can decide that the last few seconds did not happen. Once, and it costs the eye.", j: "Izanagi", cost: "eye", eff: null },
+  { id: "chain", n: "Izanagi", d: "You can decide that the last few seconds did not happen. Once, and it costs the eye.", j: "Izanagi", cost: "eye", eff: "izanagi" },
+  { id: "loop", n: "Izanami", d: "You put them in the same few seconds until they accept what they are. They stop fighting. It costs the eye.", j: "Izanami", cost: "eye", eff: "izanami" },
 ];
 const RINNEGAN_PATHS = [
   { id: "deva", n: "Deva Path", d: "Push and pull at everything in front of you, on a count you can feel.", j: "Almighty Push" },
@@ -4769,21 +5151,21 @@ function villageRoll(c, vid) {
   const rows = VILLAGE_SHAPE.map((slot) => {
     let people = [];
     if (slot.r === "Kage") {
-      people = kage ? [{ name: kage.name, note: kage.title, pw: kage.named && NAMED[kage.named] ? NAMED[kage.named].lvl : (kage.name === c.name ? power(c) : 88), you: mine && kage.name === c.name }] : [];
+      people = kage ? [{ name: kage.name, note: kage.title, pw: kage.named && NAMED[kage.named] ? NAMED[kage.named].lvl : (kage.name === c.name ? power(c) : 88), you: mine && kage.name === c.name, age: kage.name === c.name ? c.age : namedAge(c, kage.named) }] : [];
     } else if (slot.r === "Jonin") {
-      people = named.filter((id) => (NAMED[id].lvl || 0) >= 74).map((id) => ({ name: NAMED[id].name, note: namedTitle(c, id), pw: NAMED[id].lvl, named: id }));
+      people = named.filter((id) => (NAMED[id].lvl || 0) >= 74).map((id) => ({ name: NAMED[id].name, note: namedTitle(c, id), pw: NAMED[id].lvl, named: id, age: namedAge(c, id) }));
       if (mine && rankLabel(c, c.rank) === "Jonin") people.push({ name: c.name, note: c.canonId && NAMED[me] ? NAMED[me].title : "you", pw: power(c), you: true });
     } else if (slot.r === "Special Jonin") {
-      people = named.filter((id) => (NAMED[id].lvl || 0) >= 60 && (NAMED[id].lvl || 0) < 74).map((id) => ({ name: NAMED[id].name, note: namedTitle(c, id), pw: NAMED[id].lvl, named: id }));
+      people = named.filter((id) => (NAMED[id].lvl || 0) >= 60 && (NAMED[id].lvl || 0) < 74).map((id) => ({ name: NAMED[id].name, note: namedTitle(c, id), pw: NAMED[id].lvl, named: id, age: namedAge(c, id) }));
     }
     /* the actual roll: named people with ages who came up through the ranks */
     if (mine && c.roll && c.roll[vid]) {
       const locals = c.roll[vid].filter((p2) => p2.rank === slot.r)
-        .map((p2) => ({ name: p2.name, note: p2.age + " years old", pw: p2.pw, age: p2.age }));
+        .map((p2) => ({ name: p2.name, note: "", pw: p2.pw, age: p2.age }));
       people = people.concat(locals);
     } else if (foreignRoster) {
       const locals = foreignRoster.filter((p2) => p2.rank === slot.r)
-        .map((p2) => ({ name: p2.name, note: p2.age + " years old", pw: p2.pw, age: p2.age }));
+        .map((p2) => ({ name: p2.name, note: "", pw: p2.pw, age: p2.age }));
       people = people.concat(locals);
     }
     if (mine && rankLabel(c, c.rank) === slot.r) {
@@ -6242,9 +6624,11 @@ export default function ShinobiLife() {
         if (!w.foes) { /* a war saved before the fronts existed */ w.foes = [{ kind: w.foeClan ? "clan" : "village", key: w.foeClan || w.vid, name: w.enemyName, army: w.enemyArmy, leaderName: w.leaderName, leaderTitle: w.leaderTitle, leaderId: w.leader, strength: 50, pressure: 12, front: w.front, out: false }]; w.allies = w.allies && w.allies.length && typeof w.allies[0] === "object" ? w.allies : []; w.active = 0; }
         w.years -= 1;
         w.elapsed = (w.elapsed || 0) + 1;
-        /* every front pushes, every committed ally pushes back */
-        const swing = rr(-4, 5) - Math.round(warPressure(w) / 2.2);
-        w.momentum = cl(w.momentum + swing);
+        /* the war runs itself: allies hold their own fronts, the coalition
+           picks where to press, and countries join or quit on their own read
+           of it. Your front is one of several, not the whole war. */
+        const yr = warYear(c, L) || { net: 0, yours: 0 };
+        const swing = yr.yours;
         liveFoes(w).forEach((f) => {
           f.pressure = cl(f.pressure + rr(-2, 2), 2, 30);
           if (roll(30)) f.front = pick(BATTLE_SITES);
@@ -6259,8 +6643,21 @@ export default function ShinobiLife() {
           /* they are losing and they know who owes them a favour */
           if (w.momentum >= 66 && roll(w.momentum >= 78 ? 45 : 26)) enemyReinforce(c, L);
           const fronts = liveFoes(w);
-          P(L, w.name + ": " + (fronts.length > 1 ? fronts.length + " fronts open. " : "") + "The line at " + w.front + " is " + (swing >= 0 ? "holding against " + w.enemyArmy : "giving ground to " + w.enemyArmy) + ". Momentum " + w.momentum + "%.", swing >= 0 ? "n" : "b");
-          committedAllies(w).forEach((a) => { if (roll(9)) { a.committed = false; a.spent = true; P(L, a.name + " has pulled their people out. They took losses they cannot explain at home.", "b"); } });
+          const withYou = committedAllies(w);
+          P(L, w.name + ": " + (fronts.length > 1 ? fronts.length + " fronts open. " : "")
+            + "Your line at " + w.front + " is " + (swing >= 0 ? "holding against " + w.enemyArmy : "giving ground to " + w.enemyArmy) + ". "
+            + (withYou.length ? joinList(withYou.map((a) => a.name)) + " " + (withYou.length > 1 ? "are" : "is") + " in it with you. " : "")
+            + "The war overall is at " + w.momentum + "%.", swing >= 0 ? "n" : "b");
+          /* This was a flat 9% a year per ally, which over a ten-year war took
+             the whole coalition apart on its own regardless of how the war was
+             going. They leave when they are losing, which is when it hurts. */
+          committedAllies(w).forEach((a) => {
+            const shaky = w.momentum <= 38 || a.strength <= 24;
+            if (roll(shaky ? 11 : 2)) {
+              a.committed = false; a.spent = true; a.front = null;
+              P(L, a.name + " has pulled their people out. They took losses they cannot explain at home.", "b");
+            }
+          });
           if (c.team && roll(13)) { const al = c.team.filter((t) => t.alive); if (al.length) { const d = pick(al); d.alive = false; P(L, d.name + " was killed by " + w.enemyArmy + " at " + w.front + ". There was no body to send back.", "b"); loss(c, L, d.name); } }
           if (w.years <= 0 || w.momentum <= 0) endWar(c, L);
         }
@@ -6447,13 +6844,19 @@ export default function ShinobiLife() {
       if (!mv) return;
       const tier = mv.tier || 2;
       if (!c.study || c.study.name !== name) c.study = { name, put: 0, since: c.year };
-      const effort = Math.round(6 + c.stats.int * 0.16 + c.stats.con * 0.20 + (c.specialty && mv.kind === c.specialty ? 5 : 0) + (c.natures.includes(mv.nature) ? 5 : 0));
+      /* your predecessor's notes are worth more than any tutor in the village */
+      const inArchive = !!(c.legacy && (c.legacy.jutsu || []).includes(name));
+      const effort = Math.round((6 + c.stats.int * 0.16 + c.stats.con * 0.20
+        + (c.specialty && mv.kind === c.specialty ? 5 : 0)
+        + (c.natures.includes(mv.nature) ? 5 : 0)) * (inArchive ? 1.9 : 1));
       c.study.put += effort;
       const need = 18 + tier * 16;
       if (c.study.put >= need) {
         const nm = c.study.name;
         c.study = null;
-        learn(c, L, nm, "It took " + Math.max(1, c.year - (c.study ? c.study.since : c.year)) + " and it is yours: " + nm + ".");
+        learn(c, L, nm, inArchive
+          ? "You had " + c.legacy.from + "'s own notes on it, in their own hand, and it came in half the time. " + nm + " is yours."
+          : "It took " + Math.max(1, c.year - (c.study ? c.study.since : c.year)) + " and it is yours: " + nm + ".");
         c.stats.int = cl(c.stats.int + 1);
       } else {
         const pct = Math.round((c.study.put / need) * 100);
@@ -6461,7 +6864,7 @@ export default function ShinobiLife() {
           "A year on " + name + ". You can do the seals in your sleep and the technique still will not come.",
           "You are closer to " + name + " than you were. Not close enough to use it in front of anyone.",
           name + " is starting to answer. " + pct + "% of the way there by your own reckoning.",
-        ]), "n");
+        ]) + (inArchive ? " " + c.legacy.from + " left notes on this one, and they are the only reason it is going this fast." : ""), "n");
         if (tier >= 4 && roll(18)) { const d = rr(3, 9); c.health = cl(c.health - d); P(L, "It went wrong in the practice field. -" + d + " health.", "b"); }
       }
     });
@@ -6673,7 +7076,27 @@ export default function ShinobiLife() {
       setTimeout(() => setModal("spoils"), 150);
       return;
     }
-    newsItem(c, cap(lowerName(w.name)) + " is over. " + (won ? cap(w.side) + " held the field against " + (foeSummary(w) || w.enemyName) + "." : cap(foeSummary(w) || w.enemyName) + " broke " + w.side + " at " + w.front + "."), "WAR", true);
+    /* Name everybody. The old line read off only the foes still standing at the
+       final tick, so a coalition that had lost two members along the way was
+       reported as if it had always been three — and your own side was always
+       just you, however many countries had been holding fronts beside you. */
+    const allFoes = (w.foes || []).map((f) => f.name);
+    const stillIn = liveFoes(w).map((f) => f.name);
+    const quit = allFoes.filter((n) => !stillIn.includes(n));
+    const ourSide = sideNames(c, w);
+    /* A canon great war has an ending the histories already record. Your own
+       front can still go badly without the paper printing that the alliance
+       lost a war it is about to be written down as winning, so when the war is
+       a canon one the report is about your front, not about the outcome. */
+    const canonWar = w.no && GREAT_WARS.some((g) => g.no === w.no && g.from <= c.year + 2);
+    newsItem(c, canonWar
+      ? cap(lowerName(w.name)) + " has closed on the " + lowerName(w.front).replace(/^the /, "") + " front. " + ourSide
+          + (committedAllies(w).length ? (won ? " held the ground they were sent to hold." : " gave up the ground they were sent to hold, and the accounting is still going on.")
+                                       : (won ? " held the ground it was sent to hold." : " gave up the ground it was sent to hold, and the accounting is still going on."))
+      : cap(lowerName(w.name)) + " is over. "
+        + (won ? ourSide + " held the field against " + shortList(allFoes, 3) + "."
+               : cap(shortList(stillIn.length ? stillIn : allFoes, 3)) + " broke " + lowerName(ourSide) + " at " + w.front + ".")
+        + (quit.length ? " " + cap(shortList(quit, 2)) + " had already signed separately." : ""), "WAR", true);
     /* a war that changes nothing is not a war. beaten villages carry it for a generation. */
     const beatenVillages = (w.foes || []).filter((f) => f.kind === "village");
     if (won && beatenVillages.length) {
@@ -7140,6 +7563,29 @@ export default function ShinobiLife() {
           newsItem(nc, hn + " has taken the " + nc.myClan.name + " while " + nm + " is still a child. The house is being held, not given.", "THE VILLAGES");
         }
       }
+      /* ---- THE ARCHIVE ----
+         The heir used to inherit the era, the Bingo Book, the kage line, the
+         running war, the clan, the treasury — and not one technique. Which
+         meant a life spent learning jutsu bought exactly nothing the moment it
+         ended, and the only rational way to play was to stop studying. Now
+         everything you learned is written down. Your heir starts having been
+         taught the ones a house actually teaches a child, and can study the
+         rest off your notes at roughly half the effort. Forbidden techniques
+         are in the archive too, because you wrote them down, but nobody hands
+         those to a sixteen-year-old — they have to be worked for. */
+      const worth = (n) => (MOVES[n] ? MOVES[n].tier || 2 : 2);
+      const teachable = (old.jutsu || []).filter((n) => !MOVES[n] || (MOVES[n].tier || 2) < 6);
+      nc.legacy = {
+        from: old.name,
+        jutsu: clone(old.jutsu || []),
+        titles: clone(old.titles || []),
+        kills: old.kills || 0,
+        natures: clone(old.natures || []),
+      };
+      /* the four they were taught at the knee: the best of what is teachable */
+      const handed = teachable.slice().sort((a2, b2) => worth(b2) - worth(a2)).slice(0, 4);
+      handed.forEach((n) => { if (!nc.jutsu.includes(n)) nc.jutsu.push(n); });
+      nc.legacy.handed = handed;
       nc.war = old.war ? clone(old.war) : null;
       if (nc.war) nc.war.contribution = 0;
       nc.rank = 3; nc.rankName = rankLabel(nc, 3);
@@ -8524,7 +8970,11 @@ export default function ShinobiLife() {
       if (c.cheats && c.cheats.god) { p.hp = p.max; p.ck = p.ckMax; }
       tickFx(p, lg); tickFx(e, lg);
       if (e.hp <= 0) { b.over = true; b.win = true; lg.push({ t: e.name + " collapses. Silence.", k: "e" }); setBt(b); return; }
-      if (p.hp <= 0) { b.over = true; b.win = false; lg.push({ t: "You cannot stand. The last thing you see is the sky.", k: "b" }); setBt(b); return; }
+      if (p.hp <= 0 && p.fx && p.fx.izanagi) {
+        p.fx.izanagi = false; p.fx.izanagiSpent = true;
+        p.hp = Math.max(1, Math.round(p.max * 0.45));
+        lg.push({ t: "That killed you. You decide it did not. The blow lands somewhere that is no longer happening and you are standing where you were a moment ago \u2014 and the eye that paid for it has gone dark for good.", k: "e" });
+      } else if (p.hp <= 0) { b.over = true; b.win = false; lg.push({ t: "You cannot stand. The last thing you see is the sky.", k: "b" }); setBt(b); return; }
       b.turn += 1; setBt(b);
     };
 
@@ -8649,6 +9099,22 @@ export default function ShinobiLife() {
     lg.push({ t: hitLine, k: "g" });
     if (move.kind === "gen") genHold(p, e, lg);
     if (move.eff === "stun") { e.fx.stun = 2; lg.push({ t: e.name + " is locked. They cannot take a step.", k: "g" }); }
+    /* Izanami is not a damage technique and never was. It closes the loop and
+       they stop fighting — which against anything short of a legend is the end
+       of the fight, and against a legend is still four turns of nothing. */
+    if (move.eff === "izanami") {
+      const legend = (e.lvl || 0) >= 88;
+      e.fx.stun = legend ? 4 : 99;
+      e.fx.izanami = true;
+      lg.push({ t: legend
+        ? e.name + " is in it now \u2014 the same few seconds, again, and again. They are strong enough to be dragged back out of it eventually, but not soon."
+        : e.name + " is in the loop. They will go round it until they accept what they are, and they have stopped trying to reach you.", k: "g" });
+    }
+    /* Izanagi does not do anything to them. It arms the refusal. */
+    if (move.eff === "izanagi") {
+      p.fx.izanagi = true;
+      lg.push({ t: "The eye is open and the world has gone provisional. Whatever happens next, you can decide it did not.", k: "e" });
+    }
     if (move.eff === "burn") { e.fx.burn = 3; lg.push({ t: "Black flame catches and will not go out.", k: "g" }); }
     if (move.self) { p.hp = Math.max(1, p.hp - move.self); lg.push({ t: "The technique costs you " + move.self + " HP.", k: "b" }); }
     if (move.pierce) lg.push({ t: "It goes straight through the guard.", k: "g" });
@@ -8663,7 +9129,11 @@ export default function ShinobiLife() {
     } else {
       b.log.push({ t: "You turn to run. They are already on you. The price of the attempt is paid in blood.", k: "b" });
       b.p.hp -= rr(14, 28);
-      if (b.p.hp <= 0) { b.over = true; b.win = false; b.log.push({ t: "You do not get back up.", k: "b" }); }
+      if (b.p.hp <= 0 && b.p.fx && b.p.fx.izanagi) {
+        b.p.fx.izanagi = false; b.p.fx.izanagiSpent = true;
+        b.p.hp = Math.max(1, Math.round(b.p.max * 0.45));
+        b.log.push({ t: "You decide that did not happen. The eye closes for good and you are on your feet.", k: "e" });
+      } else if (b.p.hp <= 0) { b.over = true; b.win = false; b.log.push({ t: "You do not get back up.", k: "b" }); }
     }
     setBt(b);
   }
@@ -9910,6 +10380,20 @@ export default function ShinobiLife() {
               ))}
             </div>
             {c.titles.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{c.titles.map((t, i) => <Chip key={i} col={T.gold}>{t}</Chip>)}</div>}
+            {c.jutsu.length > 0 && (
+              <div style={{ ...glass(T.gold), marginTop: 16 }} className="p-3.5">
+                <div style={{ color: T.gold, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-1.5">WHAT YOU LEAVE BEHIND</div>
+                <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, lineHeight: 1.5 }}>
+                  {c.jutsu.length} technique{c.jutsu.length === 1 ? "" : "s"}, written down in your own hand.
+                  Whoever takes up the line after you is taught the best of them outright and can work through the rest off your notes in about half the time it took you.
+                  {c.legacy && c.legacy.from ? " " + c.legacy.from + "'s notes are in there too — the archive grows." : ""}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {c.jutsu.slice(0, 14).map((j, i) => <Chip key={i} col={T.soft}>{j}</Chip>)}
+                  {c.jutsu.length > 14 ? <Chip col={T.dim}>and {c.jutsu.length - 14} more</Chip> : null}
+                </div>
+              </div>
+            )}
             {c.kids.length > 0 && <div style={{ color: T.dim, fontFamily: SERIF }} className="mt-4 text-sm">Survived by {c.kids.map((k) => k.name + " (" + k.age + ")").join(", ")}.</div>}
             {c.lineage && c.lineage.length > 0 && (
               <div className="mt-4">
@@ -13287,6 +13771,32 @@ export default function ShinobiLife() {
               </>
             )}
             {c.clanHeadIsYou && <div style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">The house is yours. What it does next is on you.</div>}
+            {(() => {
+              /* where the name came from, which the game knew and never said */
+              const lore = CLAN_LORE[c.clan];
+              if (!lore) return null;
+              return (
+                <>
+                  <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">THE HISTORY OF THE HOUSE</div>
+                  <div style={{ ...glass() }} className="p-3.5 mb-3">
+                    <div style={{ color: T.gold, fontSize: 10.5, letterSpacing: ".06em" }} className="mb-2">{lore.seat}</div>
+                    <div style={{ fontFamily: SERIF, fontSize: 13, lineHeight: 1.5, color: T.soft }}>{lore.past}</div>
+                    {lore.names && lore.names.length ? (
+                      <>
+                        <div style={{ borderTop: "1px solid " + T.line, margin: "11px 0 9px" }} />
+                        <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 8.5 }} className="font-bold mb-2">THE NAMES THE HISTORIES KEPT</div>
+                        {lore.names.map(([n2, what], i) => (
+                          <div key={i} className="mb-2" style={{ paddingLeft: 9, borderLeft: "2px solid " + accent + "55" }}>
+                            <span style={{ fontFamily: SERIF, fontSize: 13, color: T.text }} className="font-bold">{n2}</span>
+                            <span style={{ color: T.dim, fontSize: 12, lineHeight: 1.45 }}> \u2014 {what}.</span>
+                          </div>
+                        ))}
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              );
+            })()}
             <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">THE ROLL</div>
             {(() => {
               /* you are on your own clan's roll, at the rank the elders have you at */
@@ -13756,13 +14266,14 @@ export default function ShinobiLife() {
               <div key={row.rank} className="mb-3">
                 <div className="flex items-baseline justify-between mb-1.5">
                   <div style={{ color: T.soft, fontSize: 9.5, letterSpacing: ".22em" }} className="font-bold">{row.rank.toUpperCase()}</div>
-                  <div style={{ color: T.dim, fontSize: 10 }}>{row.count} on the roll</div>
+                  <div style={{ color: T.dim, fontSize: 10 }}>{row.count} on the roll <span style={{ opacity: .6 }}>\u00b7 age \u00b7 power</span></div>
                 </div>
                 {row.people.length ? row.people.map((p2, i) => (
                   <div key={i} className="flex justify-between items-center py-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,.05)", fontSize: 12 }}>
                     <span style={{ fontFamily: SERIF, color: p2.you ? T.gold : T.text }}>{p2.name}{p2.you ? " — you" : ""}</span>
                     <span className="flex items-center gap-2">
                       <span style={{ color: T.dim, fontSize: 10.5 }}>{p2.note}</span>
+                      <span title="age" style={{ color: p2.age == null ? T.line : T.dim, fontSize: 10.5, fontVariantNumeric: "tabular-nums", minWidth: 24, textAlign: "right" }}>{p2.age == null ? "\u2014" : p2.age}</span>
                       <span style={{ color: T.soft, fontSize: 10.5, fontVariantNumeric: "tabular-nums", minWidth: 26, textAlign: "right" }}>{p2.pw}</span>
                       <span style={{ width: 42, height: 3, background: "rgba(0,0,0,.5)", borderRadius: 99, display: "inline-block" }}>
                         <span style={{ display: "block", width: cl(p2.pw) + "%", height: "100%", background: p2.you ? T.gold : accent, borderRadius: 99 }} />
