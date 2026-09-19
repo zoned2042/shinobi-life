@@ -259,6 +259,7 @@ const MUSIC_TRACKS = [
   { id: "parajo", tag: "Shippuden OP 3", name: "Blue Bird", by: "Ikimono-gakari", src: "audio/parajo.mp3" },
   { id: "hotaru", tag: "Shippuden OP 5", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
   { id: "toumei", tag: "Shippuden OP 7", name: "Toumei Datta Sekai", by: "Motohiro Hata", src: "audio/toumei.mp3" },
+  { id: "foryou", tag: "Shippuden ED 12", name: "For You", by: "Azu", src: "audio/foryou.mp3" },
   { id: "utakata", tag: "Shippuden ED 14", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
 ];
 const NC = {
@@ -2664,6 +2665,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.2", n: "One Surface, and For You", items: [
+    "Fixed the uneven black along the bottom of the screen. Two separate causes: the dock painted a scrim that went from clear to 94% black inside its top third, which over a lit background is a hard black slab rather than a fade; and People and Profile were built on a different material from every tile above them \u2014 they used the neutral glass while the deck uses the warm surface, so the tiles picked up the colour behind them and those two went grey. The scrim is a gentle fall-off with the same blur the cards use, and the two buttons sit on the deck's own surface now",
+    "The floating age-up disc and The Scroll's two round buttons had the same problem in a circle \u2014 near-opaque dark fills that read as holes punched in a lit background. Both are glass now",
+    "Added For You by Azu, the twelfth ending of Shippuden. Eight tracks, still in series order",
+  ] },
   { v: "10.1", n: "The Houses, In The Records", items: [
     "Every clan's history is in the Records now, not only your own. THE HOUSES lists all of them \u2014 yours at the top, then the ones still standing, then the ones somebody broke, then the ones somebody finished \u2014 and each opens to its seat, its history and the names the histories kept. It is in the Histories panel too, under a tab of its own, off the same list",
     "Fixed while testing it: the life-log feed and the tabbed world histories were both keyed on the same modal, so opening either one rendered both of them stacked on top of each other, and the tabbed panel \u2014 the Ages, the Wars, the Seats, the Names, the Techniques, the Beasts \u2014 was effectively unreachable. They are separate routes now",
@@ -10938,7 +10944,12 @@ export default function ShinobiLife() {
       .sc-float { position: fixed; right: 16px; bottom: 16px; z-index: 30; display: flex; flex-direction: column;
         align-items: center; gap: 8px; }
       .sc-mini { width: 42px; height: 42px; border-radius: 99px; display: flex; align-items: center; justify-content: center;
-        border: 1px solid rgba(255,255,255,.12); background: rgba(10,12,18,.88); backdrop-filter: blur(10px); cursor: pointer; }
+        border: 1px solid rgba(255,255,255,.14); cursor: pointer;
+        /* glass, not a near-opaque disc: at .88 these read as black holes
+           punched into a lit background */
+        background: linear-gradient(158deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 34%, rgba(0,0,0,.40) 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 6px 18px rgba(0,0,0,.4);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
       .sc-age { position: relative; width: 96px; height: 96px; border-radius: 99px; border: 1px solid; cursor: pointer;
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
       .sc-age-n { font-size: 30px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -11650,13 +11661,33 @@ export default function ShinobiLife() {
               {acts.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone} badge={a.badge} />)}
             </div>
             <div className="sl-dock sl-safe-b grid grid-cols-4 gap-2"
-              style={{ background: THEME.light ? "linear-gradient(180deg, rgba(221,210,182,0), rgba(221,210,182,.96) 34%)" : "linear-gradient(180deg, rgba(5,6,10,0), rgba(5,6,10,.94) 34%)", paddingTop: 10, paddingBottom: 8 }}>
-              <button onClick={() => setModal("people")} style={{ ...glass(), borderRadius: 14, color: T.text }} className="sl-ab py-3 font-semibold text-sm flex flex-col items-center justify-center gap-1">
-                <Icon name="people" size={17} color={T.soft} /><span>People</span>
-              </button>
-              <button onClick={() => setModal("profile")} style={{ ...glass(), borderRadius: 14, color: T.text }} className="sl-ab py-3 font-semibold text-sm flex flex-col items-center justify-center gap-1">
-                <Icon name="profile" size={17} color={T.soft} /><span>Profile</span>
-              </button>
+              /* The scrim used to go from transparent to 94% black inside the
+                 top third, which over a bright background painted a hard black
+                 slab behind People and Profile while every tile above them
+                 stayed translucent. Same material as the cards now: a gentle
+                 fall-off plus the same blur, so the bottom of the screen reads
+                 as one surface instead of a black bar stuck under it. */
+              style={{ background: THEME.light
+                  ? "linear-gradient(180deg, rgba(221,210,182,0) 0%, rgba(221,210,182,.55) 42%, rgba(221,210,182,.74) 100%)"
+                  : "linear-gradient(180deg, rgba(6,8,13,0) 0%, rgba(6,8,13,.42) 42%, rgba(6,8,13,.62) 100%)",
+                backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+                paddingTop: 10, paddingBottom: 8 }}>
+              {/* These two sat on glass() while every tile above them sat on the
+                  warm surface tokens, so side by side they read as two different
+                  materials — the tiles picked up the background and these went
+                  grey. Same surface as the deck now, just without the accent. */}
+              {[["people", "People"], ["profile", "Profile"]].map(([k, lab]) => (
+                <button key={k} onClick={() => setModal(k)}
+                  style={{
+                    position: "relative", overflow: "hidden", color: T.text, borderRadius: 14,
+                    background: "linear-gradient(158deg," + T.s2 + " 0%," + T.s0 + " 34%, rgba(0,0,0,.34) 100%)",
+                    border: "1px solid rgba(255,255,255,.10)",
+                    boxShadow: "inset 0 1px 0 " + T.edgeHi + ", inset 0 -2px 0 rgba(0,0,0,.55), 0 6px 18px " + T.shadow,
+                  }}
+                  className="sl-ab py-3 font-semibold text-sm flex flex-col items-center justify-center gap-1">
+                  <Icon name={k} size={17} color={T.soft} /><span>{lab}</span>
+                </button>
+              ))}
               {/* the dock keeps the two things you press most within thumb reach on a phone */}
               {c.broadcast && !c.broadcast.answered && (
                 <button onClick={() => setModal("broadcast")}
@@ -14039,13 +14070,15 @@ export default function ShinobiLife() {
             position: "fixed", right: "max(14px, env(safe-area-inset-right))",
             bottom: "calc(14px + env(safe-area-inset-bottom))", zIndex: 40,
             width: 62, height: 62, borderRadius: "50%", overflow: "hidden",
+            /* was a near-opaque dark disc (ee = 93%) sitting on a bright
+               animated field, which read as a black hole rather than as glass */
             background: c.actions > 0
-              ? "linear-gradient(160deg," + T.panel2 + "ee," + T.ink + "ee)"
+              ? "linear-gradient(158deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 34%, rgba(0,0,0,.42) 100%)"
               : "linear-gradient(160deg," + accent + "," + accent + "bb)",
             color: c.actions > 0 ? T.soft : ON(),
-            border: "1px solid " + (c.actions > 0 ? T.line : accent),
+            border: "1px solid " + (c.actions > 0 ? "rgba(255,255,255,.14)" : accent),
             boxShadow: c.actions > 0
-              ? "0 8px 24px rgba(0,0,0,.5)"
+              ? "inset 0 1px 0 rgba(255,255,255,.12), 0 8px 24px rgba(0,0,0,.45)"
               : "0 8px 26px rgba(0,0,0,.55), 0 0 26px " + accent + "77",
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
             lineHeight: 1.05, cursor: "pointer", backdropFilter: "blur(8px)",
