@@ -2306,6 +2306,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "9.9", n: "A Second Interface, and a Drop You Drag", items: [
+    "New, under Appearance: INTERFACE. Two builds of the game's screen, and this time it is the screen and not the paint. The Chakra Engine and Cinema Mode only ever changed the background and the buttons \u2014 the header, the tiles, the dock and the columns were the same in every mode. They are not any more",
+    "The Scroll throws the whole dossier out. No sticky header: your health, standing and power are three rings drawn around your age. No labelled tiles two across: every action is a square seal you read by its mark, packed five and six to a row. No four-slot dock: the year is turned from a disc that floats over the page wherever you have scrolled to. The life runs underneath it unboxed, with no card around it at all, and the paper is one wire story rather than a whole front page",
+    "The Dossier is still there and still the default, so nothing you are used to has been taken away \u2014 the two sit side by side and the game remembers which one you chose",
+    "The click drop is much smaller again. Half the travel, a tighter band, a third less opacity and gone in 0.62s instead of 0.85 \u2014 about a 50px halo on a phone now rather than the 120px one before it",
+    "And you can drag it. Hold the pointer down and pull, and it lays a trail of small drops along the path your hand takes: slow and careful draws a continuous line, a fast flick throws a sparser, harder one. Each one is quieter than the press that started it, and moving the pointer with nothing held down does nothing at all",
+  ] },
   { v: "9.8", n: "Two More Songs, and the Music List Says Where They Come From", items: [
     "Toumei Datta Sekai by Motohiro Hata and Wind by Akeboshi added to the music list. Seven tracks now, all playing out of the game's own audio folder with nothing streaming",
     "Every track is named for the opening or ending it is, and the list runs in series order \u2014 Naruto OP 4 \u00b7 GO!!!, Shippuden OP 3 \u00b7 Blue Bird, Shippuden ED 14 \u00b7 Utakata Hanabi, and so on. Not all of them are Shippuden: Wind is the first ending of the original run and GO!!! its fourth opening, and the Toshio Masuda piece is an OST cue rather than an opening at all, so those are labelled for what they actually are",
@@ -5656,6 +5663,8 @@ export default function ShinobiLife() {
   const [themeId, setThemeId] = useState(() => INITIAL_PREFS.themeId || "deep");
   const [bgMode, setBgMode] = useState(() => INITIAL_PREFS.bgMode || "village");
   const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
+  /* which interface the game wears, not which colours it wears */
+  const [ui, setUi] = useState(() => INITIAL_PREFS.ui || "dossier");
   const [motion, setMotion] = useState(() => INITIAL_PREFS.motion || "full");
   const [cinema, setCinema] = useState(() => INITIAL_PREFS.cinema || "off");
   const [engineMode, setEngineMode] = useState(() => INITIAL_PREFS.engineMode || "off");
@@ -5673,8 +5682,8 @@ export default function ShinobiLife() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(() => (typeof INITIAL_PREFS.musicVolume === "number" ? INITIAL_PREFS.musicVolume : 45));
   const [musicError, setMusicError] = useState(false);
-  useEffect(() => { writePrefs({ themeId, bgMode, layout, motion, cinema, engineMode, musicTrackId, musicVolume }); },
-    [themeId, bgMode, layout, motion, cinema, engineMode, musicTrackId, musicVolume]);
+  useEffect(() => { writePrefs({ themeId, bgMode, layout, ui, motion, cinema, engineMode, musicTrackId, musicVolume }); },
+    [themeId, bgMode, layout, ui, motion, cinema, engineMode, musicTrackId, musicVolume]);
   const audioRef = useRef(null);
   function playMusicTrack(id) {
     const track = MUSIC_TRACKS.find((t) => t.id === id);
@@ -5799,7 +5808,7 @@ export default function ShinobiLife() {
       const tgt = ev.target;
       const hard = !!(tgt && tgt.closest && tgt.closest("button"));
       if (engineRef.current) engineRef.current.ripple(x, y, hard ? 1.15 : 0.5);
-      if (dropRef.current) dropRef.current.drop(x, y, hard ? 1 : 0.6);
+      if (dropRef.current) dropRef.current.drop(x, y, hard ? 0.75 : 0.45);
       /* Cinema Mode's press has to outlive the press. :active only lasts while the
          button is physically held, which is about a tenth of a second and is why
          none of this was visible before — so stamp a class on and take it off on a
@@ -5816,8 +5825,40 @@ export default function ShinobiLife() {
         }
       }
     };
+    /* Hold and drag and you trail your hand through it. Each step of the drag
+       lays down its own small drop, spaced by distance so a slow careful drag
+       draws a continuous line and a fast flick throws a sparser, harder one.
+       Gated on distance rather than on a timer, or standing still with the
+       button held would pile drops on one spot and burn through every slot. */
+    let held = false, lx = 0, ly = 0, lt = 0;
+    const onMove = (ev) => {
+      if (!held) return;
+      const w = window.innerWidth || 1, h = window.innerHeight || 1;
+      const dx = ev.clientX - lx, dy = ev.clientY - ly;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 22) return;
+      const dt = Math.max(16, ev.timeStamp - lt);
+      lx = ev.clientX; ly = ev.clientY; lt = ev.timeStamp;
+      /* speed in px/ms, mapped to a gentle range — the trail is never as loud
+         as the press that started it */
+      const spd = Math.min(1, (dist / dt) / 1.6);
+      if (dropRef.current) dropRef.current.drop(ev.clientX / w, ev.clientY / h, 0.24 + spd * 0.3);
+    };
+    const onUp = () => { held = false; };
+    const startDrag = (ev) => { held = true; lx = ev.clientX; ly = ev.clientY; lt = ev.timeStamp; };
+
     window.addEventListener("pointerdown", onDown, { passive: true });
-    return () => window.removeEventListener("pointerdown", onDown);
+    window.addEventListener("pointerdown", startDrag, { passive: true });
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onUp, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerdown", startDrag);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
   }, [engineOn, dropOn]);
 
   /* z-index above every modal, battle screen and cinematic in the game, and
@@ -10315,6 +10356,86 @@ export default function ShinobiLife() {
 
       /* wide — fill the monitor */
       .lay-wide .sl-wrap { max-width: 100% !important; }
+
+      /* ---------- THE SCROLL interface ----------
+         One column, no cards. Everything here is its own layout rather than a
+         restyle of the dossier's: the seals are a dense icon grid read by mark
+         instead of by label, the record runs unboxed, and the year is turned
+         from a disc that floats over the page wherever you have scrolled to. */
+      .sc-root { max-width: 940px; margin: 0 auto; padding: 14px 16px 230px; }
+      .sc-band { display: flex; align-items: center; gap: 14px; padding: 6px 2px 16px; }
+      .sc-sigil { position: relative; width: 62px; height: 62px; flex-shrink: 0; background: none; border: 0; padding: 0; cursor: pointer; }
+      .sc-sigil-n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+      .sc-who { min-width: 0; flex: 1; }
+      .sc-name { font-size: 27px; line-height: 1.04; font-weight: 700; letter-spacing: -.02em;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sc-sub { font-size: 11.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sc-year { text-align: right; flex-shrink: 0; }
+
+      /* a hairline with the section name sitting on it, instead of a card header */
+      .sc-rule { display: flex; align-items: center; gap: 10px; margin: 20px 0 11px; }
+      .sc-rule > span { font-size: 9px; letter-spacing: .3em; font-weight: 800; opacity: .62; white-space: nowrap; }
+      .sc-rule::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, currentColor, transparent); opacity: .18; }
+      .sc-rule > button { font-size: 10.5px; font-weight: 700; background: none; border: 0; cursor: pointer; white-space: nowrap; }
+      .sc-rule > button + ::after { display: none; }
+
+      .sc-seals { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+      .sc-seal { position: relative; aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 7px; border: 1px solid; border-radius: 15px; cursor: pointer;
+        background: linear-gradient(162deg, rgba(255,255,255,.055), rgba(0,0,0,.34));
+        transition: transform .16s cubic-bezier(.2,.8,.3,1), box-shadow .16s, background .16s; }
+      .sc-seal-ring { position: absolute; inset: 7px; border: 1px dashed; border-radius: 11px; opacity: .5; pointer-events: none; }
+      .sc-seal-l { font-size: 9.5px; font-weight: 700; letter-spacing: .02em; text-align: center; line-height: 1.15;
+        padding: 0 4px; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+      .sc-seal-b { position: absolute; top: 5px; right: 5px; font-size: 9px; font-weight: 800; border-radius: 99px; padding: 0 5px; line-height: 15px; }
+      .sc-seal.is-off { opacity: .4; cursor: not-allowed; background: rgba(255,255,255,.02); }
+      .sc-seal:not(.is-off):hover { transform: translateY(-2px); background: linear-gradient(162deg, rgba(255,255,255,.09), rgba(0,0,0,.3)); }
+      .sc-seal:not(.is-off):active { transform: translateY(1px) scale(.97); }
+
+      .sc-log { max-height: 46vh; overflow-y: auto; padding-left: 13px; position: relative; }
+      .sc-log::before { content: ""; position: absolute; left: 2px; top: 4px; bottom: 4px; width: 1px;
+        background: linear-gradient(180deg, transparent, currentColor 14%, currentColor 86%, transparent); opacity: .16; }
+      .sc-wire { padding-left: 13px; border-left: 2px solid currentColor; }
+
+      .sc-body { display: flex; align-items: flex-end; gap: 6px; }
+      .sc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+      .sc-col-t { width: 100%; height: 74px; border-radius: 5px; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; overflow: hidden; }
+      .sc-col-f { width: 100%; border-radius: 5px; transition: height .5s cubic-bezier(.2,.8,.3,1); }
+      .sc-col > b { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+      .sc-col > span { font-size: 8px; letter-spacing: .1em; opacity: .5; }
+      .sc-vitals { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 9.5px; letter-spacing: .16em; opacity: .62; padding-right: 116px; }
+      .sc-vitals b { letter-spacing: 0; font-size: 12px; margin-left: 4px; opacity: 1; }
+
+      .sc-tail { display: flex; gap: 8px; margin-top: 22px; }
+      .sc-tail button { flex: 1; padding: 9px; font-size: 11px; font-weight: 700; border: 1px solid; border-radius: 9px;
+        background: rgba(255,255,255,.03); cursor: pointer; }
+      .sc-live { width: 100%; margin-top: 12px; padding: 10px; border-radius: 10px; font-size: 11px; font-weight: 800;
+        letter-spacing: .14em; cursor: pointer; }
+
+      /* the seal that turns the year rides above the page at all times */
+      .sc-float { position: fixed; right: 16px; bottom: 16px; z-index: 30; display: flex; flex-direction: column;
+        align-items: center; gap: 8px; }
+      .sc-mini { width: 42px; height: 42px; border-radius: 99px; display: flex; align-items: center; justify-content: center;
+        border: 1px solid rgba(255,255,255,.12); background: rgba(10,12,18,.88); backdrop-filter: blur(10px); cursor: pointer; }
+      .sc-age { position: relative; width: 96px; height: 96px; border-radius: 99px; border: 1px solid; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+      .sc-age-n { font-size: 30px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+      .sc-age-l { font-size: 8.5px; font-weight: 800; letter-spacing: .22em; opacity: .8; }
+      .sc-age-p { display: flex; gap: 3px; margin-top: 3px; }
+      .sc-age-p i { width: 5px; height: 5px; border-radius: 99px; border: 1px solid; opacity: .85; }
+
+      @media (max-width: 560px) {
+        .sc-root { padding: 12px 13px 240px; }
+        .sc-seals { grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 7px; }
+        .sc-name { font-size: 23px; }
+        .sc-age { width: 84px; height: 84px; }
+        .sc-age-n { font-size: 26px; }
+        .sc-mini { width: 38px; height: 38px; }
+        .sc-col-t { height: 60px; }
+      }
+
       .lay-wide .sl-deck { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 
       @media (min-width: 1900px) { .lay-stacked .sl-shell { max-width: 1240px; } }
@@ -10474,6 +10595,45 @@ export default function ShinobiLife() {
       </button>
     );
   };
+
+  /* Every action in the game, as data rather than as markup. Two interfaces
+     render this list in completely different shapes, and neither should be the
+     place where "can I take students yet" is decided. */
+  const acts = [
+    { id: "train", icon: "train", label: "Train", sub: "Pick a regimen", onClick: () => setModal("train"), disabled: c.actions < 1 || c.age < 5 },
+    { id: "mission", icon: "mission", label: c.rogue ? "Contracts" : "Missions", sub: c.rogue ? "Bounties and jobs" : "D through S rank", onClick: () => setModal("mission"), disabled: c.actions < 1 || c.rank < 2 },
+    { id: "jutsu", icon: "jutsu", label: "Study jutsu", sub: c.study ? "Working on " + c.study.name : "Choose what to learn", onClick: studyJutsu, disabled: c.actions < 1 || c.rank < 1, badge: c.study ? "\u2026" : null },
+    (c.rank >= 4 || c.students) && { id: "students", icon: "people", tone: T.gold, label: c.students ? (c.studentSquad || "Your cell") : "Take students", sub: c.students ? c.students.filter((x) => x.alive).length + " under you" : "A genin cell of your own", onClick: () => setModal("students"), disabled: c.actions < 1 },
+    { id: "shop", icon: "shop", label: "Shop", sub: "Gear, pills, tutors", onClick: () => setModal("shop"), badge: itemCount || null },
+    { id: "powers", icon: "powers", label: "Powers", sub: "Beast, eyes, gates", tone: T.epic, onClick: () => setModal("powers"), disabled: c.actions < 1 || !hasPowers },
+    { id: "path", icon: "path", label: "Ninja path", sub: "Exams, rank, village", onClick: () => setModal("path"), disabled: c.actions < 1, badge: canAcademy || canExam ? "!" : null },
+    isLeader(c) && { id: "rule", icon: "rule", tone: T.gold, label: eraOf(c).hideVillages ? "Rule the Clan" : "Rule the Village", sub: c.rankName, onClick: () => setModal("rule"), disabled: c.actions < 1 },
+    c.war && { id: "war", icon: "war", tone: T.blood, label: "The War", sub: (liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts \u00b7 vs " : "vs ") + (foeSummary(c.war, 2) || c.war.enemyName), onClick: () => setModal("war"), disabled: c.actions < 1 || c.rank < 2, badge: c.war.momentum + "%" },
+    { id: "bingo", icon: "bingo", label: "Bingo Book", sub: "Named shinobi of the age", tone: T.blood, onClick: () => setModal("bingo"), disabled: c.actions < 1 || c.rank < 2 },
+    eraOf(c).hideVillages && { id: "clans", icon: "clans", label: "The Clans", sub: "Rosters, heads, the broken", onClick: () => setModal("clans") },
+    { id: "myclan", icon: "clans", tone: c.myClan ? c.myClan.kg.colour : bornClan(c) ? T.epic : T.gold,
+      label: c.myClan ? "The " + c.myClan.name : bornClan(c) ? "The " + c.clan : "Found a Clan",
+      sub: c.myClan ? c.myClan.kg.name + " \u00b7 " + kgStageName(c.myClan.kg)
+        : bornClan(c) ? (c.age < 8 ? "You are " + c.age + " \u00b7 they are still deciding about you"
+            : c.clanHeadIsYou ? "Head of the house" : (c.clanRole || "Untested") + " \u00b7 standing " + (c.clanStanding || 0))
+        : "No blood behind you \u2014 start your own",
+      onClick: () => setModal("myclan"),
+      badge: c.myClan && (c.myClan.kg.stage || 0) < 2 ? "\u2191" : c.clanHeadIsYou ? "HEAD" : null },
+    c.beast && { id: "beast", icon: "powers", tone: T.epic,
+      label: c.beast.named ? (BEASTS.find((x) => x.id === c.beast.id) || {}).name : "The " + ((BEASTS.find((x) => x.id === c.beast.id) || {}).tails || "?") + "-Tails",
+      sub: beastStageName(c) + " \u00b7 bond " + (c.beast.rel || 0),
+      onClick: () => setModal("beast"), disabled: c.actions < 1,
+      badge: (c.beast.rel || 0) <= 15 ? "!" : null },
+    (c.rogue || c.akatsuki) && { id: "akatsuki", icon: "bingo", tone: T.blood,
+      label: c.akatsuki ? "The Ring " + c.akatsuki.ring : "The Organisation",
+      sub: c.akatsuki ? "Partnered with " + c.akatsuki.partner : canJoinAkatsuki(c) ? "They are looking at you" : "Ten rings, ten fingers",
+      onClick: () => setModal("akatsuki"), disabled: c.actions < 1,
+      badge: c.akatsuki ? c.akatsuki.ring : canJoinAkatsuki(c) ? "!" : null },
+    (c.rank >= 3 || c.daimyoSeat) && { id: "court", icon: "rule", tone: T.gold, label: c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Court", sub: c.daimyoSeat ? "You rule the country \u00b7 unrest " + (c.daimyoSeat.unrest || 20) : "Favour " + ((c.court && c.court.favour) || 0) + " \u00b7 the seat above the village", onClick: () => setModal("court"), disabled: c.actions < 1, badge: c.daimyoSeat ? "DAIMYO" : null },
+    { id: "villageroll", icon: "path", label: "The Village Roll", sub: "Who holds which rank, and who is strongest", onClick: () => setModal("villageroll") },
+    { id: "records", icon: "records", label: "The Records", sub: "Kage lines, eras, the world", onClick: () => setModal("records") },
+    { id: "bounty", icon: "bounty", label: "Bounty Board", sub: (ORGS[c.era] ? ORGS[c.era].n + " and " : "") + "missing-nin", onClick: () => setModal("bounty"), disabled: c.actions < 1 || c.rank < 2 },
+  ].filter(Boolean);
 
   return (
     <div className={"sl-scale lay-" + layout} style={{ background: bgMode === "none" ? "linear-gradient(180deg,#04050a 0%," + T.bg + " 42%,#030409 100%)" : T.bg, backgroundAttachment: "fixed", color: T.text, minHeight: "100dvh", fontFamily: UI, position: "relative" }}>
@@ -10655,6 +10815,7 @@ export default function ShinobiLife() {
       )}
       <div style={{ position: "relative", zIndex: 1 }}>
       <div style={{ height: 2, background: "linear-gradient(90deg," + accent + "," + skin.key2 + " 45%, transparent 78%)" }} />
+      {ui === "dossier" && (<>
       {/* ---------- THE DOSSIER ---------- */}
       <div style={{ position: "sticky", top: 0, zIndex: 20, background: THEME.light ? "linear-gradient(180deg, " + T.ink + "f2, " + T.panel + "e0)" : "linear-gradient(180deg, rgba(13,16,21,.96), rgba(7,8,12,.88))", borderBottom: "1px solid " + (THEME.light ? T.line : "rgba(255,255,255,.07)"), backdropFilter: "blur(14px)" }} className="px-3 sm:px-4 pt-2 pb-1.5">
         <div className="sl-wrap max-w-7xl mx-auto">
@@ -10898,39 +11059,7 @@ export default function ShinobiLife() {
               <div className="flex gap-1">{[0, 1, 2, 3].map((i) => <span key={i} style={{ width: 6, height: 6, borderRadius: 99, background: i < c.actions ? accent : T.line }} />)}</div>
             </div>
             <div className="sl-deck grid gap-2.5 mb-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-              <AB icon="train" label="Train" sub="Pick a regimen" onClick={() => setModal("train")} disabled={c.actions < 1 || c.age < 5} />
-              <AB icon="mission" label={c.rogue ? "Contracts" : "Missions"} sub={c.rogue ? "Bounties and jobs" : "D through S rank"} onClick={() => setModal("mission")} disabled={c.actions < 1 || c.rank < 2} />
-              <AB icon="jutsu" label="Study jutsu" sub={c.study ? "Working on " + c.study.name : "Choose what to learn"} onClick={studyJutsu} disabled={c.actions < 1 || c.rank < 1} badge={c.study ? "…" : null} />
-              {(c.rank >= 4 || c.students) && <AB icon="people" tone={T.gold} label={c.students ? (c.studentSquad || "Your cell") : "Take students"} sub={c.students ? (c.students.filter((x) => x.alive).length) + " under you" : "A genin cell of your own"} onClick={() => setModal("students")} disabled={c.actions < 1} />}
-              <AB icon="shop" label="Shop" sub="Gear, pills, tutors" onClick={() => setModal("shop")} badge={itemCount || null} />
-              <AB icon="powers" label="Powers" sub="Beast, eyes, gates" tone={T.epic} onClick={() => setModal("powers")} disabled={c.actions < 1 || !hasPowers} />
-              <AB icon="path" label="Ninja path" sub="Exams, rank, village" onClick={() => setModal("path")} disabled={c.actions < 1} badge={canAcademy || canExam ? "!" : null} />
-              {isLeader(c) && <AB icon="rule" tone={T.gold} label={eraOf(c).hideVillages ? "Rule the Clan" : "Rule the Village"} sub={c.rankName} onClick={() => setModal("rule")} disabled={c.actions < 1} />}
-              {c.war && <AB icon="war" tone={T.blood} label="The War" sub={(liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts \u00b7 vs " : "vs ") + (foeSummary(c.war, 2) || c.war.enemyName)} onClick={() => setModal("war")} disabled={c.actions < 1 || c.rank < 2} badge={c.war.momentum + "%"} />}
-              <AB icon="bingo" label="Bingo Book" sub="Named shinobi of the age" tone={T.blood} onClick={() => setModal("bingo")} disabled={c.actions < 1 || c.rank < 2} />
-              {eraOf(c).hideVillages && <AB icon="clans" label="The Clans" sub="Rosters, heads, the broken" onClick={() => setModal("clans")} />}
-              <AB icon="clans" tone={c.myClan ? c.myClan.kg.colour : bornClan(c) ? T.epic : T.gold}
-                label={c.myClan ? "The " + c.myClan.name : bornClan(c) ? "The " + c.clan : "Found a Clan"}
-                sub={c.myClan ? c.myClan.kg.name + " · " + kgStageName(c.myClan.kg)
-                  : bornClan(c) ? (c.age < 8 ? "You are " + c.age + " · they are still deciding about you"
-                      : c.clanHeadIsYou ? "Head of the house" : (c.clanRole || "Untested") + " · standing " + (c.clanStanding || 0))
-                  : "No blood behind you — start your own"}
-                onClick={() => setModal("myclan")}
-                badge={c.myClan && (c.myClan.kg.stage || 0) < 2 ? "↑" : c.clanHeadIsYou ? "HEAD" : null} />
-              {c.beast && <AB icon="powers" tone={T.epic}
-                label={c.beast.named ? (BEASTS.find((x) => x.id === c.beast.id) || {}).name : "The " + ((BEASTS.find((x) => x.id === c.beast.id) || {}).tails || "?") + "-Tails"}
-                sub={beastStageName(c) + " · bond " + (c.beast.rel || 0)}
-                onClick={() => setModal("beast")} disabled={c.actions < 1}
-                badge={(c.beast.rel || 0) <= 15 ? "!" : null} />}
-              {(c.rogue || c.akatsuki) && <AB icon="bingo" tone={T.blood}
-                label={c.akatsuki ? "The Ring " + c.akatsuki.ring : "The Organisation"}
-                sub={c.akatsuki ? "Partnered with " + c.akatsuki.partner : canJoinAkatsuki(c) ? "They are looking at you" : "Ten rings, ten fingers"}
-                onClick={() => setModal("akatsuki")} disabled={c.actions < 1}
-                badge={c.akatsuki ? c.akatsuki.ring : canJoinAkatsuki(c) ? "!" : null} />}
-              {(c.rank >= 3 || c.daimyoSeat) && <AB icon="rule" tone={T.gold} label={c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Court"} sub={c.daimyoSeat ? "You rule the country · unrest " + (c.daimyoSeat.unrest || 20) : "Favour " + ((c.court && c.court.favour) || 0) + " · the seat above the village"} onClick={() => setModal("court")} disabled={c.actions < 1} badge={c.daimyoSeat ? "DAIMYO" : null} />}
-              <AB icon="path" label="The Village Roll" sub="Who holds which rank, and who is strongest" onClick={() => setModal("villageroll")} />
-              <AB icon="records" label="The Records" sub="Kage lines, eras, the world" onClick={() => setModal("records")} />
-              <AB icon="bounty" label="Bounty Board" sub={(ORGS[c.era] ? ORGS[c.era].n + " and " : "") + "missing-nin"} onClick={() => setModal("bounty")} disabled={c.actions < 1 || c.rank < 2} badge={c.bounties.length || null} />
+              {acts.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone} badge={a.badge} />)}
             </div>
             <div className="sl-dock sl-safe-b grid grid-cols-4 gap-2"
               style={{ background: THEME.light ? "linear-gradient(180deg, rgba(221,210,182,0), rgba(221,210,182,.96) 34%)" : "linear-gradient(180deg, rgba(5,6,10,0), rgba(5,6,10,.94) 34%)", paddingTop: 10, paddingBottom: 8 }}>
@@ -11061,6 +11190,148 @@ export default function ShinobiLife() {
           </div>
         </div>
       </div>
+      </>)}
+
+      {/* ---------- THE SCROLL ----------
+           A different interface, not a different coat of paint. No dossier card,
+           no two-across labelled tiles, no four-slot dock: one continuous column,
+           the actions as a dense grid of seals you read by their mark, the life
+           running underneath it as an unbroken record, and the year turned by a
+           seal that floats over the whole thing wherever you have scrolled to. */}
+      {ui === "scroll" && (() => {
+        const arc = (r2, v, col, w2) => {
+          const cc = 2 * Math.PI * r2;
+          return <circle cx="50" cy="50" r={r2} fill="none" stroke={col} strokeWidth={w2} strokeLinecap="round"
+            strokeDasharray={cc} strokeDashoffset={cc * (1 - cl(v) / 100)} transform="rotate(-90 50 50)" opacity=".95" />;
+        };
+        const lead = c.news.length ? (c.news.find((n) => n.big) || c.news[0]) : null;
+        return (
+          <div className="sc-root sl-wrap" style={{ position: "relative", zIndex: 1 }}>
+            {/* There are no cards here to sit the text on, so the column itself
+                carries one soft scrim. Without it the record is unreadable over
+                a chakra field that is busy by design. */}
+            <div aria-hidden style={{ position: "absolute", inset: "0 -1px", zIndex: -1,
+              background: THEME.light
+                ? "linear-gradient(180deg, rgba(232,224,201,.80), rgba(232,224,201,.92))"
+                : "linear-gradient(180deg, rgba(6,8,13,.72), rgba(6,8,13,.88))",
+              backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)",
+              borderLeft: "1px solid " + T.line, borderRight: "1px solid " + T.line }} />
+
+            {/* the band: everything the old header said, in one strip */}
+            <div className="sc-band">
+              <button className="sc-sigil" onClick={() => { if (owner) { setModal("owner"); return; } const n = taps + 1; setTaps(n); if (n >= 5) { setOwner(true); setModal("owner"); } }}
+                aria-label="Vitals" style={{ color: accent }}>
+                <svg viewBox="0 0 100 100" width="62" height="62">
+                  <circle cx="50" cy="50" r="46" fill="none" stroke={T.line} strokeWidth="3" />
+                  <circle cx="50" cy="50" r="37" fill="none" stroke={T.line} strokeWidth="3" />
+                  <circle cx="50" cy="50" r="28" fill="none" stroke={T.line} strokeWidth="3" />
+                  {arc(46, c.health, c.health > 60 ? T.good : c.health > 30 ? T.gold : T.bad, 3)}
+                  {arc(37, c.rogue ? c.infamy : c.standing, c.rogue ? T.blood : T.gold, 3)}
+                  {arc(28, (pw / 120) * 100, accent, 3)}
+                </svg>
+                <span className="sc-sigil-n" style={{ color: T.text }}>{c.age}</span>
+              </button>
+
+              <div className="sc-who">
+                <div className="sc-name" style={{ fontFamily: SERIF }}>{c.name}</div>
+                <div className="sc-sub">
+                  <span style={{ color: accent, fontWeight: 800 }}>{c.rankName}</span>
+                  <span style={{ color: T.dim }}> · {c.founded ? c.founded.name : c.rogue ? "no village" : villageExists(c, c.village) ? V.name : "the " + c.land}</span>
+                  {c.clan !== "Civilian-born" ? <span style={{ color: T.dim }}> · {c.clan}</span> : null}
+                </div>
+              </div>
+
+              <div className="sc-year">
+                <div style={{ fontFamily: SERIF, fontSize: 26, lineHeight: 1, color: T.text }}>{c.year}</div>
+                <div style={{ color: T.dim, fontSize: 9, letterSpacing: ".2em" }}>AH</div>
+                <div style={{ color: T.gold, fontSize: 11, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{money(c.ryo)}</div>
+              </div>
+            </div>
+
+            {/* the seals */}
+            <div className="sc-rule"><span>THE SEALS</span></div>
+            <div className="sc-seals">
+              {acts.map((a) => {
+                const key = a.tone || accent;
+                return (
+                  <button key={a.id} className={"sc-seal" + (a.disabled ? " is-off" : "")} disabled={a.disabled}
+                    onClick={(e) => { if (!a.disabled) { ripple(e); a.onClick && a.onClick(e); } }}
+                    title={a.label + " — " + a.sub}
+                    style={{ "--k": key, borderColor: a.disabled ? "rgba(255,255,255,.06)" : key + "4d" }}>
+                    <span className="sc-seal-ring" aria-hidden style={{ borderColor: a.disabled ? "transparent" : key + "33" }} />
+                    <Icon name={a.icon || "records"} size={22} color={a.disabled ? T.dim : key} />
+                    <span className="sc-seal-l" style={{ color: a.disabled ? T.dim : T.soft }}>{a.label}</span>
+                    {a.badge ? <span className="sc-seal-b" style={{ background: key, color: ON() }}>{a.badge}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* the record — no card, just the life */}
+            <div className="sc-rule">
+              <span>THE RECORD</span>
+              <button onClick={() => setModal("history")} style={{ color: accent }}>all of it →</button>
+            </div>
+            <div ref={feedRef} className="sc-log sl-scroll">{feed(recent)}</div>
+
+            {/* one wire story, the rest behind the link */}
+            {lead && (
+              <>
+                <div className="sc-rule"><span>THE WIRE</span><button onClick={() => setModal("news")} style={{ color: accent }}>{c.news.length} stories →</button></div>
+                <div className="sc-wire">
+                  <div style={{ color: CAT_COL[lead.cat] || T.dim, fontSize: 8, letterSpacing: ".22em" }} className="font-bold mb-1">{lead.cat}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.25 }}>{lead.txt}</div>
+                </div>
+              </>
+            )}
+
+            {/* the body, as columns rather than a stack of bars */}
+            <div className="sc-rule"><span>THE BODY</span><button onClick={() => setModal("profile")} style={{ color: accent }}>the whole record →</button></div>
+            <div className="sc-body">
+              {STAT_KEYS.map(([k, l]) => (
+                <div key={k} className="sc-col" title={l + " " + c.stats[k]}>
+                  <div className="sc-col-t">
+                    <div className="sc-col-f" style={{ height: cl(c.stats[k]) + "%", background: c.stats[k] >= 90 ? "linear-gradient(180deg," + T.gold + "," + accent + ")" : "linear-gradient(180deg," + accent + "," + accent + "66)" }} />
+                  </div>
+                  <b style={{ color: c.stats[k] >= 90 ? accent : T.soft }}>{c.stats[k]}</b>
+                  <span>{l.slice(0, 3).toUpperCase()}</span>
+                </div>
+              ))}
+            </div>
+            <div className="sc-vitals">
+              <span>BATTLE HP <b style={{ color: T.text }}>{maxHP(c)}</b></span>
+              <span>CHAKRA <b style={{ color: T.ck }}>{maxCK(c)}</b></span>
+              <span>POWER <b style={{ color: accent }}>{pw}</b></span>
+              <span>{c.rogue ? "INFAMY" : "STANDING"} <b style={{ color: c.rogue ? T.blood : T.gold }}>{c.rogue ? c.infamy : c.standing}</b></span>
+            </div>
+
+            <div className="sc-tail">
+              <button onClick={(e) => { ripple(e); setModal("look"); }} style={{ color: accent, borderColor: accent + "55" }}>Appearance</button>
+              <button onClick={() => setModal("changelog")} style={{ color: T.soft, borderColor: T.line }}>v{CHANGELOG[0].v}</button>
+              {owner && <button onClick={() => setModal("owner")} style={{ color: T.epic, borderColor: T.epic + "77" }}>◆ Owner</button>}
+            </div>
+
+            {c.broadcast && !c.broadcast.answered && (
+              <button onClick={() => setModal("broadcast")} className="sc-live">
+                <span className="sl-live" style={{ display: "inline-flex", verticalAlign: "-2px", marginRight: 6 }}><Icon name="live" size={13} color={T.blood} /></span>
+                LIVE — {c.broadcast.org.toUpperCase()} AT {c.broadcast.targetName.toUpperCase()}
+              </button>
+            )}
+
+            {/* the year turns from a seal that follows you down the page */}
+            <div className="sc-float sl-safe-b">
+              <button className="sc-mini" onClick={() => setModal("people")} aria-label="People" style={{ color: T.soft }}><Icon name="people" size={18} color={T.soft} /></button>
+              <button className="sc-mini" onClick={() => setModal("profile")} aria-label="Profile" style={{ color: T.soft }}><Icon name="profile" size={18} color={T.soft} /></button>
+              <button onClick={ageUp} className={"sc-age" + (c.actions === 0 ? " sl-hero" : "")}
+                style={{ background: "radial-gradient(70% 70% at 30% 24%, " + skin.key2 + ", " + accent + " 70%)", color: ON(), borderColor: accent, boxShadow: "0 10px 30px " + skin.glow }}>
+                <span className="sc-age-n">{c.age + 1}</span>
+                <span className="sc-age-l">AGE UP</span>
+                <span className="sc-age-p">{[0, 1, 2, 3].map((i) => <i key={i} style={{ background: i < c.actions ? ON() : "transparent", borderColor: ON() }} />)}</span>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ---------- BATTLE ---------- */}
       {bt && (
@@ -12686,7 +12957,17 @@ export default function ShinobiLife() {
               );
             })}
           </div>
+          <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">INTERFACE</div>
+          <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+            Not a colour scheme — a different build of the game's screen. The Scroll throws away the dossier header, the labelled tiles and the bottom dock, and lays the whole life out as one column with the actions as a grid of seals and the year turned from a disc that floats over the page.
+          </div>
+          {[["dossier", "The Dossier", "The original. A sticky header with your vitals, big labelled tiles two across, a four-slot dock along the bottom, and side columns for the body and the paper."],
+            ["scroll", "The Scroll", "One column, no cards. Vitals as three rings around your age, every action as a square seal read by its mark, the life running unboxed underneath, and a floating seal for the year."]].map(([id, n2, d2]) => (
+            <Row key={id} label={n2} sub={d2} right={ui === id ? "In use" : "Use"} onClick={() => setUi(id)} disabled={ui === id} tone={ui === id ? accent : null} />
+          ))}
+
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">LAYOUT</div>
+          {ui === "scroll" && <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>The Scroll builds its own column, so these only take effect back on The Dossier.</div>}
           {[["stacked", "Stacked", "One wide column down the middle, big tiles two across, everything else beneath it. The roomiest reading."],
             ["classic", "Classic", "Body and record on the left, your life in the middle, the paper down the right. Roomy tiles, tall feed."],
             ["columns", "Three columns", "The same three columns, slightly tighter, with both rails sticky so they stay with you as you scroll."],
@@ -13117,8 +13398,10 @@ export default function ShinobiLife() {
         );
       })()}
 
-      {/* the floating one: always within reach, never covering the feed */}
-      {!bt && !modal && !c.dilemma && !c.investiture && yearFlash == null && (
+      {/* the floating one: always within reach, never covering the feed. The
+           Scroll carries its own age-up seal, so this would be a second one
+           sitting on top of it. */}
+      {ui === "dossier" && !bt && !modal && !c.dilemma && !c.investiture && yearFlash == null && (
         <button onClick={(e) => { ripple(e); ageUp(); }}
           title={"Age up to " + (c.age + 1)}
           className="sl-fab"
