@@ -2664,6 +2664,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.1", n: "The Houses, In The Records", items: [
+    "Every clan's history is in the Records now, not only your own. THE HOUSES lists all of them \u2014 yours at the top, then the ones still standing, then the ones somebody broke, then the ones somebody finished \u2014 and each opens to its seat, its history and the names the histories kept. It is in the Histories panel too, under a tab of its own, off the same list",
+    "Fixed while testing it: the life-log feed and the tabbed world histories were both keyed on the same modal, so opening either one rendered both of them stacked on top of each other, and the tabbed panel \u2014 the Ages, the Wars, the Seats, the Names, the Techniques, the Beasts \u2014 was effectively unreachable. They are separate routes now",
+    "Fixed: a handful of places printed \u005cu00b7 and \u005cu2014 as literal text instead of the characters, because an escape inside JSX markup is not an escape at all. One of them predates this update",
+  ] },
   { v: "10.0", n: "The War Has Other People In It", items: [
     "The war was never against you. It only looked that way, and the reason was one line of code: when a Great War opened, the game worked out who was on the other side and never once read who was on yours. So the Second Great Ninja War announced itself as Konohagakure against Iwagakure, Kumogakure and Kirigakure \u2014 with Sunagakure, your ally in it from the first day, never mentioned. It now reads Konohagakure and Sunagakure against Iwagakure, Kumogakure and Kirigakure, because that is what it always was",
     "And the Fourth \u2014 the war whose entire point is that all five villages stood together for the first time in history \u2014 was being built with no allies at all. It was the one war you fought completely alone",
@@ -6040,6 +6045,8 @@ export default function ShinobiLife() {
   const [warPick, setWarPick] = useState([]);
   const [newsFilter, setNewsFilter] = useState("ALL");
   const [histTab, setHistTab] = useState("ages");
+  /* which house is open in the Records; only one at a time, or it is a wall of text */
+  const [histClan, setHistClan] = useState(null);
   const [openFile, setOpenFile] = useState(null);
   const [histVid, setHistVid] = useState(null);
   const [yearFlash, setYearFlash] = useState(null);
@@ -11076,6 +11083,71 @@ export default function ShinobiLife() {
     });
     return out;
   };
+  /* The houses, for both places that show them: the Records panel off the deck
+     and the Histories panel off the life log. One definition, because two
+     copies of a list this long drift apart the first time one is edited. */
+  const Houses = () => {
+    const state = (n2) => (c.extinct || []).includes(n2) ? "extinct"
+      : (c.broken || []).includes(n2) ? "broken"
+      : (c.myClan && c.myClan.name === n2) ? "yours"
+      : n2 === c.clan ? "yours" : "standing";
+    const order = { yours: 0, standing: 1, broken: 2, extinct: 3 };
+    const list = Object.keys(CLAN_LORE)
+      .map((n2) => ({ n: n2, st: state(n2) }))
+      .sort((a2, b2) => order[a2.st] - order[b2.st] || a2.n.localeCompare(b2.n));
+    return (
+      <>
+        <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-3">
+          Where each house holds ground, how it got there, and the names the histories actually kept.
+          {c.clan && CLAN_LORE[c.clan] ? " Yours is at the top." : ""}
+        </div>
+        {list.map(({ n: cn, st }) => {
+          const lore = CLAN_LORE[cn];
+          const cd = CLANS.find((x) => x.n === cn);
+          const open = histClan === cn;
+          const tone = st === "yours" ? T.gold : st === "extinct" ? T.blood : st === "broken" ? T.bad : accent;
+          return (
+            <div key={cn} className="mb-2" style={{ background: T.s0, border: "1px solid " + (open ? tone + "66" : T.line), borderRadius: 10, overflow: "hidden" }}>
+              <button onClick={(e) => { ripple(e); setHistClan(open ? null : cn); }}
+                style={{ width: "100%", textAlign: "left", background: "none", border: 0, cursor: "pointer", padding: "10px 12px" }}>
+                <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                  <span style={{ fontFamily: SERIF, fontSize: 14, color: open ? tone : T.text }} className="font-bold">
+                    The {cn}
+                    {st === "yours" ? <span style={{ color: T.gold, fontSize: 10, letterSpacing: ".14em" }}> · YOURS</span> : null}
+                    {st === "broken" ? <span style={{ color: T.bad, fontSize: 10, letterSpacing: ".14em" }}> · BROKEN</span> : null}
+                    {st === "extinct" ? <span style={{ color: T.blood, fontSize: 10, letterSpacing: ".14em" }}> · GONE</span> : null}
+                  </span>
+                  <span style={{ color: T.dim, fontSize: 10.5 }}>
+                    {cd && cd.kg ? cd.kg : "no bloodline"}{lore.names && lore.names.length ? " \u00b7 " + lore.names.length + " names" : ""} {open ? "\u2212" : "+"}
+                  </span>
+                </div>
+                {!open && <div style={{ color: T.dim, fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lore.seat}</div>}
+              </button>
+              {open && (
+                <div style={{ padding: "0 12px 12px" }}>
+                  <div style={{ color: T.gold, fontSize: 10.5 }} className="mb-2">{lore.seat}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 12.5, lineHeight: 1.5, color: T.soft }}>{lore.past}</div>
+                  {lore.names && lore.names.length ? (
+                    <>
+                      <div style={{ borderTop: "1px solid " + T.line, margin: "10px 0 8px" }} />
+                      <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 8.5 }} className="font-bold mb-2">THE NAMES THE HISTORIES KEPT</div>
+                      {lore.names.map(([nm2, what], i) => (
+                        <div key={i} className="mb-2" style={{ paddingLeft: 9, borderLeft: "2px solid " + tone + "55" }}>
+                          <span style={{ fontFamily: SERIF, fontSize: 12.5, color: T.text }} className="font-bold">{nm2}</span>
+                          <span style={{ color: T.dim, fontSize: 11.5, lineHeight: 1.45 }}> — {what}.</span>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  };
+
   const AB = ({ label, sub, onClick, disabled, badge, mark, tone, icon }) => {
     const key = tone || accent;
     return (
@@ -11422,7 +11494,7 @@ export default function ShinobiLife() {
             {[
               { k: "news", n: "The Times", i: "times", on: () => setModal("news"), badge: c.news && c.news.length ? c.news.length : null },
               { k: "villageroll", n: "Village Roll", i: "path", on: () => setModal("villageroll") },
-              { k: "history", n: "Histories", i: "records", on: () => setModal("history"), tone: T.gold },
+              { k: "histories", n: "Histories", i: "records", on: () => setModal("histories"), tone: T.gold },
               { k: "records", n: "Records", i: "records", on: () => setModal("records") },
               { k: "special", n: "Special", i: "powers", on: () => setModal("special"), tone: T.gold },
               otsuAvailable(c) ? { k: "otsu", n: "The Celestial", i: "powers", on: () => setModal("otsu"), tone: T.epic } : null,
@@ -12904,6 +12976,8 @@ export default function ShinobiLife() {
               </div>
             );
           })}
+          <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-2 font-bold">THE HOUSES</div>
+          <Houses />
           <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-2 font-bold">THE ROLL OF KAGE</div>
           {VILLAGES.filter((v) => villageExists(c, v.id)).map((v) => {
             const ln = c.line[v.id]; if (!ln) return null;
@@ -13040,8 +13114,10 @@ export default function ShinobiLife() {
         );
       })()}
 
-      {modal === "history" && (() => {
-        const TABS = [["ages", "The Ages"], ["wars", "The Wars"], ["seats", "The Seats"], ["people", "The Names"], ["jutsu", "The Techniques"], ["beasts", "The Beasts"]];
+      {/* its own id: this and the life-log feed were both keyed on "history",
+           so opening either one rendered both of them on top of each other */}
+      {modal === "histories" && (() => {
+        const TABS = [["ages", "The Ages"], ["wars", "The Wars"], ["seats", "The Seats"], ["houses", "The Houses"], ["people", "The Names"], ["jutsu", "The Techniques"], ["beasts", "The Beasts"]];
         const H = ({ children }) => <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-3 mb-1.5">{children}</div>;
         return (
           <Modal wide title="THE HISTORIES" accent={T.gold} onClose={() => setModal(null)}>
@@ -13170,6 +13246,7 @@ export default function ShinobiLife() {
               </div>
             ))}
 
+            {histTab === "houses" && <Houses />}
             {histTab === "beasts" && historyBeasts(c).map((b) => (
               <div key={b.id} className="py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
                 <div className="flex justify-between items-baseline gap-2 flex-wrap">
@@ -13788,7 +13865,7 @@ export default function ShinobiLife() {
                         {lore.names.map(([n2, what], i) => (
                           <div key={i} className="mb-2" style={{ paddingLeft: 9, borderLeft: "2px solid " + accent + "55" }}>
                             <span style={{ fontFamily: SERIF, fontSize: 13, color: T.text }} className="font-bold">{n2}</span>
-                            <span style={{ color: T.dim, fontSize: 12, lineHeight: 1.45 }}> \u2014 {what}.</span>
+                            <span style={{ color: T.dim, fontSize: 12, lineHeight: 1.45 }}> — {what}.</span>
                           </div>
                         ))}
                       </>
@@ -14455,7 +14532,7 @@ export default function ShinobiLife() {
             {summitPick.length > 0 && (
               <div style={{ background: T.panel2, border: "1px solid " + T.gold + "66", borderRadius: 8 }} className="p-3 mt-2">
                 <div style={{ fontFamily: SERIF }} className="text-sm mb-2">
-                  {ag.n} \u2014 {summitPick.length} seat{summitPick.length === 1 ? "" : "s"} at the table.
+                  {ag.n} — {summitPick.length} seat{summitPick.length === 1 ? "" : "s"} at the table.
                 </div>
                 <button onClick={() => { rule("summit", { agenda: summitAgenda, invited: summitPick.slice() }); setSummitPick([]); }}
                   style={{ background: T.gold, color: ON(), borderRadius: 8 }} className="w-full py-2.5 font-bold text-sm">Open the summit</button>
