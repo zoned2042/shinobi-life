@@ -1101,6 +1101,53 @@ const DEATH_HOW = {
 };
 /* has this person died, either at your hands or on the historical schedule */
 const isGone = (c, id) => (c.dead || []).includes(id) || (DEATH_YEAR[id] !== undefined && c.year >= DEATH_YEAR[id]);
+/* ---------------- NOBODY LIVES FOREVER ----------------
+   Only the people with a date in DEATH_YEAR were ever mortal. Thirty-seven of
+   the eighty named — Naruto, Sasuke, Kakashi, Gaara, Tsunade, Boruto, Sarada
+   and the rest of the younger generation among them — had no date at all, so
+   they simply never died. Play long enough (which god mode makes easy, though
+   it is not the cause) and the Village Roll fills with two-hundred-year-old
+   jonin. They get a natural span now, the same as anyone else.
+
+   The span is derived from the id rather than rolled, so it does not change
+   when a save is reloaded and the same person does not die twice in two
+   playthroughs at two different ages. */
+const AGELESS = ["kaguya", "isshiki", "momoshiki", "urashiki", "code", "eida", "delta", "jigen"];
+/* the ones the histories specifically record as outliving everybody */
+const LONG_LIVED = { onoki: 40, chiyo: 34, kakuzu: 30, hiruzen: 18, danzo: 16, tsunade: 26, orochimaru: 30 };
+function lifespanOf(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 9973;
+  return 71 + (h % 19) + (LONG_LIVED[id] || 0);
+}
+/* age of somebody who is still standing, or null if the calendar does not apply */
+function livingAge(c, id) {
+  const b = BORN_YEAR[id];
+  if (b == null || !c || !c.year) return null;
+  return c.year - b;
+}
+function naturalDeaths(c, L) {
+  /* Everyone the calendar can place, not only whoever is on the current era's
+     roster. Scanning the roster alone meant anybody off-screen kept not-ageing
+     and could be seeded back in two centuries later, still breathing. */
+  Object.keys(BORN_YEAR).forEach((id) => {
+    if (!NAMED[id] || isDead(c, id)) return;
+    if (AGELESS.includes(id) || isPlayerNamed(c, id)) return;
+    if (DEATH_YEAR[id] != null) return;          /* the histories already set their date */
+    const age = livingAge(c, id);
+    if (age == null) return;                     /* nobody the calendar can place */
+    const span = lifespanOf(id);
+    if (age < span) return;
+    /* past their span it is a rising chance each year rather than a cliff */
+    if (!roll(cl(28 + (age - span) * 9, 28, 100))) return;
+    killNamed(c, id, L, pick([
+      "died of old age, having outlived most of the people they started with",
+      "died at " + age + ", in their own bed, which almost nobody in this line of work manages",
+      "died after a long illness the hospital had stopped naming out loud",
+      "was found gone one morning at " + age + ", with the tea still warm",
+    ]));
+  });
+}
 function applyHistoricDeaths(c, L) {
   Object.keys(DEATH_YEAR).forEach((id) => {
     if (c.year < DEATH_YEAR[id]) return;
@@ -2313,6 +2360,7 @@ function worldTick(c, L) {
   const w = c.world;
   const others = existing(c);
   applyHistoricDeaths(c, L);
+  naturalDeaths(c, L);
   feudTick(c, L);
   incidentTick(c, L);
   timesTick(c);
@@ -2503,8 +2551,15 @@ const VILLAGE_EVENTS = [
 ];
 
 const CLAN_ROLES = [["Clan Head", 1], ["War Captain", 2], ["Warrior", 6], ["Blooded", 3], ["Untested", 3]];
+/* The Otsutsuki are not a house with a compound and a ladder. There is no
+   roll of them, no elders to impress, no War Captains — there are a handful of
+   them in the whole of creation and most are already dead or sealed. Inventing
+   fifteen relatives called Taro Otsutsuki and grading them Untested made the
+   rarest bloodline in the game read like any other village family. */
+const CELESTIAL = "Otsutsuki";
+const isCelestialClan = (c) => c && c.clan === CELESTIAL;
 function buildClanMembers(clan) {
-  if (!clan || clan === "Civilian-born") return [];
+  if (!clan || clan === "Civilian-born" || clan === CELESTIAL) return [];
   const out = []; const taken = [];
   CLAN_ROLES.forEach(([role, n]) => {
     for (let i = 0; i < n; i++) {
@@ -2523,6 +2578,9 @@ function initClanHeads(c) {
   const out = {};
   const all = WARRING_CLANS.concat([c.clan]).filter((x, i, a) => x && x !== "Civilian-born" && a.indexOf(x) === i);
   all.forEach((cl2) => {
+    /* nobody heads the Otsutsuki. Naming a "Kenji Otsutsuki" to sit at the top
+       of a house that has four members in all of history read as a joke. */
+    if (cl2 === CELESTIAL) return;
     const cn = canonHead(c, cl2);
     out[cl2] = cn ? NAMED[cn].name : givenName(Math.random() < 0.5 ? "m" : "f") + " " + cl2;
   });
@@ -2665,6 +2723,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.3", n: "Nobody Lives Forever, and the Otsutsuki Are Not a Village Family", items: [
+    "Fixed the big one: most of the cast was immortal. Only the people with a date written into the histories could ever die \u2014 thirty-seven of the eighty named had no date at all, and simply never did. Naruto, Sasuke, Sakura, Kakashi, Gaara, Tsunade, Boruto, Sarada, Mitsuki, the whole younger generation. Play long enough and the Village Roll fills with two-hundred-year-old jonin. God mode was never the cause; it just lets you live long enough to watch it happen",
+    "Everyone the calendar can place now has a natural span, worked out from who they are rather than rolled, so it does not shift when you reload and the same person does not die at two different ages in two playthroughs. Past that span it is a rising chance each year rather than a cliff. The ones the histories record as outliving everybody still do \u2014 Onoki reached 117 in testing. The ones who are genuinely ageless, the Otsutsuki and the artificial, are left out on purpose",
+    "It applies to everybody, not just whoever is on the current era's roster. Scanning the roster alone meant anybody off-screen kept not-ageing and could be seeded back in two centuries later still breathing",
+    "Your children were immortal too. They aged one a year and nothing ever ended it, so a child you did not play as would still be on the roll at two hundred. They have a span of their own now, they stop gaining power in middle age and decline after it, and a child who dies before you is no longer offered as your heir, listed among your survivors, or picked for the events that need a living one",
+    "The Otsutsuki no longer get a clan roll, because there is no such thing. The game was inventing fifteen relatives with names like Taro Otsutsuki and grading them War Captain and Untested \u2014 for a bloodline that has had four members in the whole of recorded history. No roll, no ladder, no elders, no standing. In its place: the celestial chakra in you, whether you have eaten the fruit, your eyes, and the others of your blood with what became of each of them",
+  ] },
   { v: "10.2", n: "One Surface, and For You", items: [
     "Fixed the uneven black along the bottom of the screen. Two separate causes: the dock painted a scrim that went from clear to 94% black inside its top third, which over a lit background is a hard black slab rather than a fade; and People and Profile were built on a different material from every tile above them \u2014 they used the neutral glass while the deck uses the warm surface, so the tiles picked up the colour behind them and those two went grey. The scrim is a gentle fall-off with the same blur the cards use, and the two buttons sit on the deck's own surface now",
     "The floating age-up disc and The Scroll's two round buttons had the same problem in a circle \u2014 near-opaque dark fills that read as holes punched in a lit background. Both are glass now",
@@ -3790,7 +3855,7 @@ function relationTick(c, L) {
   (c.team || []).forEach((t) => { if (t.alive) drift(t, 0); });
   if (c.sensei && c.sensei.alive) drift(c.sensei, 0);
   if (c.spouse) { if (roll(30)) c.spouse.rel = cl(c.spouse.rel + (c.age > 40 ? 1 : 0) - (c.war ? 2 : 0)); }
-  (c.kids || []).forEach((k) => { if (roll(35)) k.bond = cl((k.bond || 50) - rr(1, 2)); });
+  (c.kids || []).forEach((k) => { if (!k.dead && roll(35)) k.bond = cl((k.bond || 50) - rr(1, 2)); });
   /* and they act on their own */
   if (roll(9)) {
     const alive = (c.team || []).filter((t) => t.alive);
@@ -3812,8 +3877,8 @@ function relationTick(c, L) {
     c.spouse = null;
     c.health = cl(c.health - 8);
   }
-  if ((c.kids || []).some((k) => k.bond <= 15) && roll(10)) {
-    const k = c.kids.find((x) => x.bond <= 15);
+  if ((c.kids || []).some((k) => k.bond <= 15 && !k.dead) && roll(10)) {
+    const k = c.kids.find((x) => x.bond <= 15 && !x.dead);
     if (k && !k.estranged) { k.estranged = true; P(L, k.name + " has stopped coming by. They are old enough now to make that choice and they have made it.", "b"); }
   }
 }
@@ -4545,12 +4610,12 @@ DILEMMAS.push(
       { t: "Say they are still the best you have", e: (c, L) => { if (c.sensei) c.sensei.rel = cl(c.sensei.rel + 25); P(L, "You wrote that you would still put them on any team you were sending out. Two years later that decision cost somebody, and it was not you.", "n"); } },
       { t: "Take them onto your own command", e: (c, L) => { if (c.sensei) c.sensei.rel = 100; c.stats.int = cl(c.stats.int + 6); P(L, "You put your old sensei under your own command. Neither of you has mentioned how strange that is.", "g"); } },
     ] },
-  { id: "childasks", w: (c) => c.kids && c.kids.length > 0 && c.kids[0].age >= 6, t: "What your child asked you",
+  { id: "childasks", w: (c) => c.kids && c.kids.some((k) => !k.dead && k.age >= 6), t: "What your child asked you",
     d: "They asked how many people you have killed. They are old enough to have heard something at the Academy and young enough to ask it straight.",
     a: [
-      { t: "Tell them the number", e: (c, L) => { if (c.kids[0]) c.kids[0].bond = cl(c.kids[0].bond - 10); c.stats.cha = cl(c.stats.cha + 5); P(L, "You told them the number. They did not ask anything else that evening and they have never asked again.", "n"); } },
-      { t: "Tell them it is complicated", e: (c, L) => { if (c.kids[0]) c.kids[0].bond = cl(c.kids[0].bond + 5); P(L, "You gave them the answer adults give. They accepted it and you could see them filing it away for later.", "n"); } },
-      { t: "Tell them why", e: (c, L) => { if (c.kids[0]) { c.kids[0].bond = cl(c.kids[0].bond + 18); c.kids[0].pw += 3; } P(L, "You sat down and told them what the job actually is, at the level they could hold. It took two hours and they have brought it up every year since.", "e"); } },
+      { t: "Tell them the number", e: (c, L) => { const k0 = c.kids.find((x) => !x.dead); if (k0) k0.bond = cl(k0.bond - 10); c.stats.cha = cl(c.stats.cha + 5); P(L, "You told them the number. They did not ask anything else that evening and they have never asked again.", "n"); } },
+      { t: "Tell them it is complicated", e: (c, L) => { const k0 = c.kids.find((x) => !x.dead); if (k0) k0.bond = cl(k0.bond + 5); P(L, "You gave them the answer adults give. They accepted it and you could see them filing it away for later.", "n"); } },
+      { t: "Tell them why", e: (c, L) => { const k0 = c.kids.find((x) => !x.dead); if (k0) { k0.bond = cl(k0.bond + 18); k0.pw += 3; } P(L, "You sat down and told them what the job actually is, at the level they could hold. It took two hours and they have brought it up every year since.", "e"); } },
     ] },
   { id: "peacetalk", w: (c) => c.war && c.rank >= 5, t: "The letter from the other side",
     d: "Somebody senior on their side has written to you personally, not to your tower. They want to talk before the next season opens.",
@@ -4580,12 +4645,12 @@ DILEMMAS.push(
       { t: "Report them", e: (c, L) => { c.standing = cl(c.standing + 16); c.infamy = cl(c.infamy + 6); P(L, "You reported all three by name. Two were removed quietly and the third has not been seen. Nobody will ever bring you an offer again.", "n"); } },
       { t: "Tell them to come back with more", e: (c, L) => { c.plotting = true; c.infamy = cl(c.infamy + 10); P(L, "You told them to come back when there were twenty of them. They will.", "e"); } },
     ] },
-  { id: "kidtalent", w: (c) => c.kids && c.kids.some((k) => k.age >= 5 && k.age <= 12), t: "What your child can already do",
+  { id: "kidtalent", w: (c) => c.kids && c.kids.some((k) => !k.dead && k.age >= 5 && k.age <= 12), t: "What your child can already do",
     d: "They did something in the yard this morning that they should not be able to do for another six years.",
     a: [
-      { t: "Start training them properly", e: (c, L) => { const k = c.kids.find((x) => x.age >= 5); if (k) { k.pw += rr(10, 18); k.trained = (k.trained || 0) + 2; k.bond = cl(k.bond - 5); } P(L, "You started them early. They are going to be extraordinary and they are going to be twelve when it matters.", "n"); } },
-      { t: "Let them be a child a while longer", e: (c, L) => { const k = c.kids.find((x) => x.age >= 5); if (k) k.bond = cl(k.bond + 20); P(L, "You put it off. They spent another two years being a child, which is two years more than you got.", "g"); } },
-      { t: "Take it to the clan", e: (c, L) => { c.standing = cl(c.standing + 6); const k = c.kids.find((x) => x.age >= 5); if (k) { k.pw += rr(6, 12); k.bond = cl(k.bond - 12); } P(L, "The clan took over their training within a month. It is the correct decision and your child has been slightly formal with you ever since.", "n"); } },
+      { t: "Start training them properly", e: (c, L) => { const k = c.kids.find((x) => x.age >= 5 && !x.dead); if (k) { k.pw += rr(10, 18); k.trained = (k.trained || 0) + 2; k.bond = cl(k.bond - 5); } P(L, "You started them early. They are going to be extraordinary and they are going to be twelve when it matters.", "n"); } },
+      { t: "Let them be a child a while longer", e: (c, L) => { const k = c.kids.find((x) => x.age >= 5 && !x.dead); if (k) k.bond = cl(k.bond + 20); P(L, "You put it off. They spent another two years being a child, which is two years more than you got.", "g"); } },
+      { t: "Take it to the clan", e: (c, L) => { c.standing = cl(c.standing + 6); const k = c.kids.find((x) => x.age >= 5 && !x.dead); if (k) { k.pw += rr(6, 12); k.bond = cl(k.bond - 12); } P(L, "The clan took over their training within a month. It is the correct decision and your child has been slightly formal with you ever since.", "n"); } },
     ] },
   { id: "lastyears", w: (c) => c.age >= 55, t: "What is left",
     d: "You are past the age where anyone expects anything of you. There is time, for the first time, and not very much of it.",
@@ -4637,10 +4702,10 @@ DILEMMAS.push(
     ["Promise to slow down", (c, L) => { if (c.spouse) c.spouse.rel = cl(c.spouse.rel + 18); c.standing = cl(c.standing - 5); P(L, "You promised. You have mostly kept it, which is more than most.", "g"); }],
     ["Tell them the truth", (c, L) => { if (c.spouse) c.spouse.rel = cl(c.spouse.rel - 8); ST("cha", 5)(c); P(L, "You said you were not going to stop. They already knew and they wanted to hear you say it.", "n"); }],
     ["Take a village posting", (c, L) => { ST("int", 8)(c); c.standing = cl(c.standing + 8); if (c.spouse) c.spouse.rel = cl(c.spouse.rel + 25); P(L, "You took the desk. Your field record stopped growing that year and your marriage did not.", "g"); }]]),
-  D("kid2", (c) => c.kids && c.kids.some((k) => k.age >= 10), "They want to enrol", "Your child has asked to go to the Academy. They are the right age and you know exactly what it is.", [
-    ["Sign the form", (c, L) => { const k = c.kids.find((x) => x.age >= 10); if (k) { k.pw += 8; k.bond = cl(k.bond + 6); } P(L, "You signed it the same evening. They ran the whole way there in the morning.", "n"); }],
-    ["Refuse", (c, L) => { const k = c.kids.find((x) => x.age >= 10); if (k) k.bond = cl(k.bond - 22); P(L, "You said no. They have not forgiven it and they will go anyway in three years.", "b"); }],
-    ["Make them wait a year", (c, L) => { const k = c.kids.find((x) => x.age >= 10); if (k) { k.bond = cl(k.bond - 6); k.pw += 4; } P(L, "You made them wait. They spent the year training alone in the yard, which was not the lesson you intended.", "n"); }]]),
+  D("kid2", (c) => c.kids && c.kids.some((k) => !k.dead && k.age >= 10), "They want to enrol", "Your child has asked to go to the Academy. They are the right age and you know exactly what it is.", [
+    ["Sign the form", (c, L) => { const k = c.kids.find((x) => x.age >= 10 && !x.dead); if (k) { k.pw += 8; k.bond = cl(k.bond + 6); } P(L, "You signed it the same evening. They ran the whole way there in the morning.", "n"); }],
+    ["Refuse", (c, L) => { const k = c.kids.find((x) => x.age >= 10 && !x.dead); if (k) k.bond = cl(k.bond - 22); P(L, "You said no. They have not forgiven it and they will go anyway in three years.", "b"); }],
+    ["Make them wait a year", (c, L) => { const k = c.kids.find((x) => x.age >= 10 && !x.dead); if (k) { k.bond = cl(k.bond - 6); k.pw += 4; } P(L, "You made them wait. They spent the year training alone in the yard, which was not the lesson you intended.", "n"); }]]),
   D("war2", (c) => c.war && c.rank >= 3, "The village on the route", "There is a village between you and the objective. It is not a target and it is in the way.", [
     ["Go around", (c, L) => { if (c.war) c.war.momentum = cl(c.war.momentum - 5); c.standing = cl(c.standing + 6); P(L, "Two days added to the march and everybody in that village lived. Command noted the delay.", "g"); }],
     ["Go through quietly", (c, L) => { ST("gen", 5)(c); P(L, "You went through at night and nobody woke up. That is a skill and it is not one you advertise.", "n"); }],
@@ -5206,6 +5271,8 @@ const CLAN_GATES = [
 ];
 function clanLadderTick(c, L) {
   if (!bornClan(c)) return;
+  /* there is no ladder to climb when there is no house to climb it in */
+  if (isCelestialClan(c)) return;
   if (c.age < 8) return;   /* the house does not rank children */
   if (c.clanRole === undefined) c.clanRole = c.age >= 12 ? "Untested" : "Untested";
   if (c.clanStanding === undefined) c.clanStanding = 5;
@@ -6373,7 +6440,10 @@ export default function ShinobiLife() {
     ch.clanMembers = {};
     if (ch.clan !== "Civilian-born") {
       ch.clanMembers[ch.clan] = buildClanMembers(ch.clan);
-      ch.clanMembers[ch.clan][0].name = ch.clanHeads[ch.clan];
+      /* a house with no roll has no head to rename, and reaching into [0] of an
+         empty roster threw during character creation */
+      const roll0 = ch.clanMembers[ch.clan];
+      if (roll0 && roll0.length) roll0[0].name = ch.clanHeads[ch.clan];
     }
     ch.line = {};
     VILLAGES.forEach((v) => { if (villageExists(ch, v.id)) ch.line[v.id] = buildLine(ch, v.id); });
@@ -6486,12 +6556,25 @@ export default function ShinobiLife() {
       if (c.examCooldown > 0) c.examCooldown -= 1;
       if (c.rank === 3) c.chuninYears += 1;
       if (c.rank >= 4) c.joninYears += 1;
+      /* Children aged one a year and never stopped. Nothing ever ended a child's
+         life, so an heir you did not play as would still be on the roll at two
+         hundred. They get a span of their own now, and the ones who outlive you
+         stop gaining and start declining like anybody else. */
       c.kids.forEach((k) => {
-        k.age += 1;
+        if (!k.dead) k.age += 1;
         if (k.pw === undefined) { k.pw = rr(4, 12); k.bond = 70; k.trained = 0; }
-        if (k.age >= 6) k.pw += rr(1, 4);
+        if (k.span === undefined) k.span = rr(68, 92);
+        if (k.dead) return;
+        if (k.age >= 6 && k.age < 46) k.pw += rr(1, 4);
+        if (k.age > 62) k.pw = Math.max(4, k.pw - rr(0, 2));
         if (k.age === 6) P(L, k.name + " started at " + TT(c, "school") + ".", "g");
         if (k.age === 12) P(L, k.name + " graduated and took a forehead protector. Power " + k.pw + ".", "e");
+        if (k.age >= k.span && roll(cl(30 + (k.age - k.span) * 10, 30, 100))) {
+          k.dead = true; k.diedAt = k.age;
+          P(L, k.name + " died at " + k.age + ". You outlived your own child, which is the one thing nobody prepares you for.", "b");
+          newsItem(c, k.name + ", " + (c.clan && c.clan !== "Civilian-born" ? "of the " + c.clan : "of " + (villageExists(c, c.village) ? vName2(c.village) : "the " + c.land)) + ", has died at " + k.age + ".", "OBITUARIES");
+          loss(c, L, k.name);
+        }
       });
 
       if (c.age === 6 && c.rank === 0 && !c.rogue) { c.rank = 1; c.rankName = rankLabel(c, 1); P(L, eraOf(c).hideVillages ? "You started training in " + TT(c, "school") + " with the rest of the clan children." : "You enrolled in " + TT(c, "school") + " in " + V.name + ".", "g"); }
@@ -7390,14 +7473,15 @@ export default function ShinobiLife() {
   function heirName(c) {
     if (c.rule.successor) return c.rule.successor;
     if (c.rule.apprentice) return c.rule.apprentice.name;
-    if (c.kids.length) return c.kids[0].name;
+    const liveKid = c.kids.find((k) => !k.dead);
+    if (liveKid) return liveKid.name;
     return givenName(roll(50) ? "m" : "f") + " " + familyName(c);
   }
   /* somebody you actually chose, trained or raised — not a name off the rolls */
   function namedHeir(c) {
     if (c.rule && c.rule.successor) return { name: c.rule.successor, how: "the successor you named" };
     if (c.rule && c.rule.apprentice) return { name: c.rule.apprentice.name, how: "the apprentice you trained" };
-    const grown = (c.kids || []).filter((k) => k.age >= 16);
+    const grown = (c.kids || []).filter((k) => k.age >= 16 && !k.dead);
     if (grown.length) return { name: grown[0].name, how: "your own child, grown and serving" };
     return null;
   }
@@ -7775,7 +7859,7 @@ export default function ShinobiLife() {
   function bornClanAct(kind) {
     commit((c, L) => {
       spend(c);
-      if (!bornClan(c)) return;
+      if (!bornClan(c) || isCelestialClan(c)) return;
       if (c.age < 6) { P(L, "You are " + c.age + ". The elders are not taking cases from you.", "n"); return; }
       if (c.clanStanding === undefined) c.clanStanding = 5;
       if (!c.clanRole) c.clanRole = "Untested";
@@ -10407,7 +10491,17 @@ export default function ShinobiLife() {
                 </div>
               </div>
             )}
-            {c.kids.length > 0 && <div style={{ color: T.dim, fontFamily: SERIF }} className="mt-4 text-sm">Survived by {c.kids.map((k) => k.name + " (" + k.age + ")").join(", ")}.</div>}
+            {(() => {
+              const alive = c.kids.filter((k) => !k.dead);
+              const gone = c.kids.filter((k) => k.dead);
+              if (!c.kids.length) return null;
+              return (
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="mt-4 text-sm">
+                  {alive.length ? "Survived by " + alive.map((k) => k.name + " (" + k.age + ")").join(", ") + "." : "No children outlived you."}
+                  {gone.length ? " You buried " + gone.map((k) => k.name + " (" + k.diedAt + ")").join(", ") + "." : ""}
+                </div>
+              );
+            })()}
             {c.lineage && c.lineage.length > 0 && (
               <div className="mt-4">
                 <div style={{ color: T.dim }} className="text-xs mb-1">THE LINE BEFORE YOU</div>
@@ -11211,8 +11305,9 @@ export default function ShinobiLife() {
     { id: "bingo", icon: "bingo", label: "Bingo Book", sub: "Named shinobi of the age", tone: T.blood, onClick: () => setModal("bingo"), disabled: c.actions < 1 || c.rank < 2 },
     eraOf(c).hideVillages && { id: "clans", icon: "clans", label: "The Clans", sub: "Rosters, heads, the broken", onClick: () => setModal("clans") },
     { id: "myclan", icon: "clans", tone: c.myClan ? c.myClan.kg.colour : bornClan(c) ? T.epic : T.gold,
-      label: c.myClan ? "The " + c.myClan.name : bornClan(c) ? "The " + c.clan : "Found a Clan",
+      label: c.myClan ? "The " + c.myClan.name : isCelestialClan(c) ? "The Celestial Line" : bornClan(c) ? "The " + c.clan : "Found a Clan",
       sub: c.myClan ? c.myClan.kg.name + " \u00b7 " + kgStageName(c.myClan.kg)
+        : isCelestialClan(c) ? "Not from here \u00b7 there is no roll of your blood"
         : bornClan(c) ? (c.age < 8 ? "You are " + c.age + " \u00b7 they are still deciding about you"
             : c.clanHeadIsYou ? "Head of the house" : (c.clanRole || "Untested") + " \u00b7 standing " + (c.clanStanding || 0))
         : "No blood behind you \u2014 start your own",
@@ -13820,7 +13915,73 @@ export default function ShinobiLife() {
         );
       })()}
 
-      {modal === "myclan" && bornClan(c) && (() => {
+      {modal === "myclan" && bornClan(c) && isCelestialClan(c) && (() => {
+        /* who else there has ever been, and what became of them */
+        const line = [
+          ["kaguya", "Ate the fruit of the tree herself and stopped asking anybody's permission about anything afterwards."],
+          ["isshiki", "Came down with her and was left for dead by her. Spent a thousand years being patient about it."],
+          ["momoshiki", "Came for the harvest and treated the whole of it as a transaction."],
+          ["urashiki", "Came for the same thing and was greedier and worse at it."],
+        ];
+        const alive = (id) => NAMED[id] && !isDead(c, id);
+        const ch = c.otsu || 0;
+        return (
+          <Modal wide title="THE CELESTIAL LINE" accent={T.epic} onClose={() => setModal(null)}>
+            <div style={{ ...glass(T.epic) }} className="p-4 mb-3">
+              <div style={{ fontFamily: SERIF, fontSize: 24, lineHeight: 1 }} className="font-bold">The Otsutsuki</div>
+              <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 13, lineHeight: 1.5, marginTop: 6 }}>
+                There is no roll of your house. There is no compound, no elders, no captains and nobody to be graded by — there
+                have only ever been a handful of you in the whole of creation, and most of those are dead, sealed, or on the moon.
+                You are not climbing anything. You already outrank every living thing on this world and the only question left is
+                what you intend to do about it.
+              </div>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <div style={{ flex: 1, minWidth: 130, background: T.ink, border: "1px solid " + T.epic + "44", borderRadius: 10 }} className="px-3 py-2">
+                  <div style={{ color: T.dim, fontSize: 8.5, letterSpacing: ".16em" }}>CELESTIAL CHAKRA</div>
+                  <div style={{ color: T.epic, fontVariantNumeric: "tabular-nums" }} className="text-lg font-bold">{ch}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 130, background: T.ink, border: "1px solid " + T.line, borderRadius: 10 }} className="px-3 py-2">
+                  <div style={{ color: T.dim, fontSize: 8.5, letterSpacing: ".16em" }}>THE FRUIT</div>
+                  <div style={{ color: c.fruit ? T.gold : T.dim }} className="text-sm font-bold">{c.fruit ? "Eaten" : "Not yet"}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 130, background: T.ink, border: "1px solid " + T.line, borderRadius: 10 }} className="px-3 py-2">
+                  <div style={{ color: T.dim, fontSize: 8.5, letterSpacing: ".16em" }}>YOUR EYES</div>
+                  <div style={{ color: T.blood }} className="text-sm font-bold">{c.eye ? (c.eye.rinnegan ? "Rinnegan" : c.eye.tenseigan ? "Tenseigan" : c.eye.t || "Byakugan") : "Byakugan"}</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">THE OTHERS OF YOUR BLOOD</div>
+            {line.map(([id, what]) => (
+              <div key={id} className="py-2.5" style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+                <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                  <span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{NAMED[id] ? NAMED[id].name : id}</span>
+                  <span style={{ color: alive(id) ? T.epic : T.dim, fontSize: 10.5, letterSpacing: ".14em", fontWeight: 700 }}>
+                    {alive(id) ? "STILL OUT THERE" : "ACCOUNTED FOR"}
+                  </span>
+                </div>
+                <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, lineHeight: 1.45, marginTop: 2 }}>{what}</div>
+              </div>
+            ))}
+            <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-3">
+              Hagoromo and Hamura are beyond reach of this record. Everything any shinobi alive can do traces back to the two of them.
+            </div>
+            {(() => { const lore = CLAN_LORE[CELESTIAL]; return lore ? (
+              <>
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">WHERE YOU CAME FROM</div>
+                <div style={{ ...glass() }} className="p-3.5">
+                  <div style={{ color: T.gold, fontSize: 10.5 }} className="mb-2">{lore.seat}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 13, lineHeight: 1.5, color: T.soft }}>{lore.past}</div>
+                </div>
+              </>
+            ) : null; })()}
+            <button onClick={() => { setModal(null); setTimeout(() => setModal("otsu"), 120); }}
+              style={{ background: T.epic + "22", border: "1px solid " + T.epic, color: T.epic, borderRadius: 10 }}
+              className="w-full mt-4 py-2.5 font-bold text-xs tracking-widest">OPEN THE CELESTIAL</button>
+          </Modal>
+        );
+      })()}
+
+      {modal === "myclan" && bornClan(c) && !isCelestialClan(c) && (() => {
         const roster = (c.clanMembers && c.clanMembers[c.clan]) || [];
         const idx = clanRankIdx(c);
         const gate = CLAN_GATES[idx];
