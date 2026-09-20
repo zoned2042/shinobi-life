@@ -591,7 +591,9 @@ const ENEMIES = {
   akatsuki: EN("Akatsuki Operative", "Akatsuki", 84, 44, "Earth", [["Detonating Clay", 1.35, "nin"], ["Iron Sand Wave", 1.15, "nin"], ["Absorption Barrier", 0, "guard"]], "They travel in pairs. You only found one of them."),
   jin: EN("Enemy Jinchuriki", "Vessel", 92, 46, "Chakra", [["Tailed Beast Bomb", 1.3, "nin"], ["Chakra Arms", 1.1, "tai"], ["Version Two Cloak", 0, "buff"]], "The chakra is red and not all of it is theirs."),
   kage: EN("Rival Kage", "The hat", 94, 52, "Lightning", [["Kirin", 1.35, "nin"], ["Lightning Armour", 0, "buff"], ["Guillotine Drop", 1.2, "tai"]], "A whole village decided this person was the strongest alive."),
-  beastRaw: EN("Rampaging Beast", "Tailed beast", 90, 30, "Chakra", [["Tailed Beast Bomb", 1.35, "nin"], ["Tail Sweep", 1.15, "tai"], ["Chakra Roar", 1.0, "nin"]], "No seal, no host, no reason, no mercy."),
+  /* named, because enemyFighter hands anything unnamed a randName() — which meant
+     you tracked down the Nine-Tails and fought a jinchuriki called Kenji Mori. */
+  beastRaw: { ...EN("Rampaging Beast", "Tailed beast", 90, 30, "Chakra", [["Tailed Beast Bomb", 1.35, "nin"], ["Tail Sweep", 1.15, "tai"], ["Chakra Roar", 1.0, "nin"]], "No seal, no host, no reason, no mercy."), named: true },
 };
 
 
@@ -1032,6 +1034,57 @@ function loyalTo(c, id, foeClan, vid) {
 }
 function enemyNamed(c, vid, foeClan) {
   return livingRoster(c).filter((id) => loyalTo(c, id, foeClan, vid));
+}
+
+/* ---------------- WHO A SIDE CAN ACTUALLY SEND FORWARD ----------------
+   The champion call used to fall back to the era's enemy pool, which is a pool
+   of rogues — missing-nin, Akatsuki operatives, jinchuriki. So an enemy VILLAGE
+   answered your challenge by sending an Akatsuki operative forward, then another
+   one, then another, for ever: the wrong people, and an unlimited supply of them,
+   which is also why the war never felt like it was being won by winning.
+
+   A side has a roster and the roster is finite. A village sends its own jonin,
+   its ANBU, its squad leaders. A coalition like the Akatsuki really does send
+   operatives and jinchuriki — that part was only ever wrong for villages — but
+   it runs out of them too. Beat them all and they have nobody left to put in
+   front of you, and the option says so instead of dealing another one. */
+const CHAMP_RANKS = [
+  { t: "Jonin commander", tpl: "swordsman" },
+  { t: "ANBU captain", tpl: "hunter" },
+  { t: "Squad leader", tpl: "chunin" },
+  { t: "Elite jonin", tpl: "swordsman" },
+  { t: "Front-line captain", tpl: "chunin" },
+  { t: "Their best blade", tpl: "swordsman" },
+  { t: "Seal corps veteran", tpl: "puppet" },
+];
+const COALITION_RANKS = [
+  { t: "operative", tpl: "akatsuki" },
+  { t: "vessel", tpl: "jin" },
+  { t: "hired blade", tpl: "missing" },
+];
+/* warChamps: the names the war itself says are fighting for that side. A coalition
+   has no village roster to draw on, so those names ARE its roster — without this
+   the Fourth War sent nobodies forward while Itachi and Kisame sat in the panel
+   being listed as still fighting. */
+function champRoster(c, f, pool, warChamps) {
+  if (!f.champRoster) {
+    const isVillage = f.kind === "village";
+    const ranks = isVillage ? CHAMP_RANKS : COALITION_RANKS;
+    const gen = [];
+    const n = isVillage ? rr(2, 4) : rr(2, 3);
+    for (let i = 0; i < n; i++) {
+      const r = pick(ranks);
+      gen.push({ u: "c" + i + "_" + rr(10000, 99999), name: freshName(c, null), title: r.t, tpl: ENEMIES[r.tpl] ? r.tpl : pick(pool || ["chunin"]) });
+    }
+    f.champRoster = { named: isVillage ? enemyNamed(c, f.key) : (warChamps || []).slice(), gen };
+  }
+  f.champRoster.named = (f.champRoster.named || []).filter((id) => !isDead(c, id) && NAMED[id]);
+  return f.champRoster;
+}
+/* for the panel: how many they have left, without building the roster during a render */
+function champsLeft(c, f) {
+  if (!f || !f.champRoster) return -1;
+  return f.champRoster.named.filter((id) => !isDead(c, id)).length + f.champRoster.gen.length;
 }
 
 
@@ -2871,6 +2924,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.6", n: "The Beast Had Somebody Else's Name", items: [
+    "You could track down the Nine-Tails and end up fighting a man called Kenji Mori. Anything the game did not explicitly mark as a named character got handed a randomly generated human name, and the raw tailed beast was never marked \u2014 so every hunt put a stranger's name and a person's face on the thing you were there to seal, and the failure line read like you had lost to a jinchuriki. You now fight the beast: Shukaku is Shukaku, titled by its tails, and losing to it reads like losing to it",
+    "An enemy village answering your challenge used to send an Akatsuki operative forward. Then another one. Then another, for as long as you kept asking. The champion call fell through to the era's enemy pool, which is a pool of rogues \u2014 missing-nin, Akatsuki, jinchuriki \u2014 so a village at war with you kept putting a criminal organisation's members in front of you as its representatives, and there was no end to them",
+    "A side has a roster now and the roster is finite. A village sends its own: jonin commanders, ANBU captains, squad leaders, its best blade. You can see how many of them are left, the count goes down as you beat them, and when it reaches nothing the option says they have nobody left to send forward and stops offering. Which means answering champions is now a way to actually break a village's line rather than a button that pays out for ever",
+    "The Akatsuki and the Otsutsuki really do send operatives and vessels, so they still do \u2014 but they send their real names too. The Fourth War was listing Itachi, Kisame, Deidara and Sasori as still fighting while sending unnamed nobodies forward instead of them. They come out themselves now, and they run out as well",
+  ] },
   { v: "10.5", n: "The Summit Is A Grave", items: [
     "A rogue ninja can attack a Kage Summit. Every so often the five great villages call one \u2014 the paper announces the hall and what is on the table \u2014 and if you are a rogue the deck offers you a way in. The whole table is in one room: five Kage in their seats, two bodyguards behind each one, and you decide who dies and in what order",
     "You do not have to go alone. Before the doors open you can put a crew together out of the other rogues of the world, and the bigger the name the more they bring and the more of them the hall notices coming",
@@ -7492,16 +7551,33 @@ export default function ShinobiLife() {
           { name: champ.name, title: champ.role + " of the " + foeClan });
         setModal(null); return;
       }
-      const listed = (w.champs || []).filter((x) => loyalTo(c, x, null, w.vid));
-      const fromEnemy = enemyNamed(c, w.vid);
-      const id = listed.length ? pick(listed) : fromEnemy.length ? pick(fromEnemy) : null;
-      if (!id) {
-        startBattle(pick(pool), { type: "war", champion: true }, 0,
-          w.enemyName + " sent a champion forward at " + w.front + " — one of " + w.leaderName + "'s own, and no name you know.");
+      /* their roster, not an inexhaustible supply of somebody else's rogues */
+      let chosen = null;
+      commit((c2) => {
+        const w2 = c2.war; if (!w2) return;
+        const f2 = (w2.foes || [])[w2.active]; if (!f2) return;
+        const r = champRoster(c2, f2, pool, (w2.champs || []).concat(f2.champs || []));
+        const named = r.named;
+        if (named.length && (roll(70) || !r.gen.length)) chosen = { kind: "named", id: pick(named) };
+        else if (r.gen.length) chosen = { kind: "gen", g: pick(r.gen) };
+      });
+      if (!chosen) {
+        commit((c2, L) => {
+          const w2 = c2.war; if (!w2) return;
+          w2.momentum = cl(w2.momentum + 4);
+          P(L, w.enemyName + " has nobody left to put in front of you. Every name they had is buried and the line at " + w.front + " is being held by people who were never meant to hold it.", "g");
+        });
         setModal(null); return;
       }
-      startBattle(id, { type: "war", champion: true, id }, 0,
-        w.enemyName + " sent a champion forward at " + w.front + ". It is " + NAMED[id].name + ", fighting under " + w.leaderName + ".");
+      if (chosen.kind === "named") {
+        startBattle(chosen.id, { type: "war", champion: true, id: chosen.id }, 0,
+          w.enemyName + " sent a champion forward at " + w.front + ". It is " + NAMED[chosen.id].name + ", fighting under " + w.leaderName + ".");
+      } else {
+        const g = chosen.g;
+        startBattle(g.tpl, { type: "war", champion: true, champU: g.u }, 0,
+          w.enemyName + " sent " + g.name + " forward at " + w.front + ", their " + g.title.toLowerCase() + ", fighting under " + w.leaderName + ".",
+          { name: g.name, title: g.title + " of " + w.enemyName });
+      }
       setModal(null); return;
     }
     if (kind === "boss") {
@@ -9577,7 +9653,9 @@ export default function ShinobiLife() {
         } else if (b.fled) { c.standing = cl(c.standing - 5); c.health = cl(c.health - rr(3, 8)); P(L, ctx.story.t + " — abandoned. You got out alive.", "b"); }
         else {
           const d = rr(18, 40); c.health = cl(c.health - d); c.standing = cl(c.standing - 8);
-          P(L, ctx.story.t + " — failed. " + b.e.name + " left you bleeding in the dirt and walked away. −" + d + " health. The report will not be kind.", "b");
+          P(L, ctx.beastId
+            ? ctx.story.t + " \u2014 failed. " + b.e.name + " broke the array, put you through a ridgeline and went on its way. It is still loose. −" + d + " health."
+            : ctx.story.t + " \u2014 failed. " + b.e.name + " left you bleeding in the dirt and walked away. −" + d + " health. The report will not be kind.", "b");
           if (c.team && roll(18)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come home. You carried the body.", "b"); loss(c, L, dd.name); } }
           if (c.health <= 0) die(c, L, "was killed in the field");
         }
@@ -9669,7 +9747,14 @@ export default function ShinobiLife() {
             if (c.war.stage >= eraOf(c).bosses.length) { c.war.momentum = 100; c.war.contribution += 10; addTitle(c, "Ended " + c.war.name); P(L, "There is nothing left standing on their side. The war is over because you ended it.", "e"); endWar(c, L); }
             else P(L, "Their command falls back. One more stands between you and the end of this.", "e");
           }
-          if (ctx.champion) { c.defeated.push(b.e.name); addTitle(c, "Beat " + b.e.name); killNamed(c, ctx.id, L, "was killed in single combat with " + c.name + " on the front line"); killFeat(c, L, ctx.id); }
+          if (ctx.champion) {
+            c.defeated.push(b.e.name); addTitle(c, "Beat " + b.e.name);
+            killNamed(c, ctx.id, L, "was killed in single combat with " + c.name + " on the front line"); killFeat(c, L, ctx.id);
+            /* that is one fewer champion they have, which is the whole point of answering one */
+            if (ctx.champU && tgt && tgt.champRoster) tgt.champRoster.gen = tgt.champRoster.gen.filter((x) => x.u !== ctx.champU);
+            const f4 = tgt && tgt.champRoster ? champsLeft(c, tgt) : -1;
+            if (f4 === 0) P(L, "That was the last name " + (tgt ? tgt.name : "they") + " had. There is nobody else for them to send.", "e");
+          }
         } else {
           c.war.momentum = cl(c.war.momentum - (ctx.boss ? 20 : 10));
           const d = rr(18, 40); c.health = cl(c.health - d);
@@ -10341,7 +10426,10 @@ export default function ShinobiLife() {
   }
   function huntBeast(id) {
     const b = BEASTS.find((x) => x.id === id);
-    startBattle("beastRaw", { type: "mission", key: "S", beastId: id, story: { t: "Sealing " + b.name, pay: [200000, 500000] } }, 0, "You found " + b.name + " \u2014 " + b.t + ".");
+    startBattle("beastRaw", { type: "mission", key: "S", beastId: id, story: { t: "Sealing " + b.name, pay: [200000, 500000] } }, 0,
+      "You found " + b.name + " \u2014 " + b.t + ".",
+      /* it is the beast standing there, with the beast's own name and tails */
+      { name: b.name, title: b.tails + "-Tails" });
     setModal(null);
   }
   function trainSage() {
@@ -13424,7 +13512,24 @@ export default function ShinobiLife() {
               right={w.akHelp ? "In the field" : "Ask"} onClick={() => warAct("callak")} disabled={!!w.akHelp || c.actions < 1} tone={T.blood} />}
             {c.anbu && (w.foes || [])[w.active] && <Row label={"Put " + w.leaderName + " in the ground yourself"} sub={"Mask on, into their command post at " + w.front + ". If it works their army finds out at dawn. If it does not, everyone knows who sent you."} right="+22% · lethal" onClick={() => warAct("assassinate")} tone={T.epic} />}
             {isLeader(c) && (w.foes || [])[w.active] && <Row label={"Meet " + w.leaderName + " on the field"} sub={"Kage against Kage, alone, in front of both armies. Nobody who watches it will talk about anything else for a generation."} right="+30% · lethal" onClick={() => warAct("kagevkage")} tone={T.gold} />}
-            <Row label="Answer their champion" sub={w.champs && w.champs.filter((x) => !isDead(c, x)).length ? "Names still fighting for them: " + w.champs.filter((x) => !isDead(c, x)).map((x) => NAMED[x].name).join(", ") : "They will send somebody forward."} right="+16% on a win" onClick={() => warAct("champion")} />
+            {(() => {
+              /* how many they have left to send, so the call is a finite resource and not a faucet */
+              const foeNow = (w.foes || [])[w.active];
+              const left = champsLeft(c, foeNow);
+              const byName = (foeNow && foeNow.champRoster ? foeNow.champRoster.named : (w.champs || [])).filter((x) => !isDead(c, x) && NAMED[x]);
+              return (
+                <Row label="Answer their champion"
+                  sub={left === 0
+                    ? "They have nobody left to send forward."
+                    : byName.length
+                    ? "Names still fighting for them: " + byName.map((x) => NAMED[x].name).join(", ")
+                    : left > 0
+                    ? left + " still willing to come out and meet you"
+                    : "They will send somebody forward."}
+                  right={left === 0 ? "None left" : "+16% on a win"}
+                  onClick={() => warAct("champion")} disabled={left === 0 || c.actions < 1} />
+              );
+            })()}
             {bosses.length > 0 && (
               <>
                 <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">THE ENEMY COMMAND</div>
