@@ -808,6 +808,7 @@ function killFolk(c, name) {
   return true;
 }
 function freshName(c, clan) {
+  if (!c) return clan ? givenName(roll(50) ? "m" : "f") + " " + clan : randName(roll(50) ? "m" : "f");
   if (!c.usedNames) c.usedNames = [];
   for (let i = 0; i < 30; i++) {
     const n = (clan ? givenName(roll(50) ? "m" : "f") + " " + clan : randName(roll(50) ? "m" : "f"));
@@ -1152,6 +1153,101 @@ const DEATH_HOW = {
 };
 /* has this person died, either at your hands or on the historical schedule */
 const isGone = (c, id) => (c.dead || []).includes(id) || (DEATH_YEAR[id] !== undefined && c.year >= DEATH_YEAR[id]);
+/* what the world reads afterwards */
+function summitReport(c, L, routed) {
+  const s2 = c.summit;
+  if (!s2 || !s2.kills.length) {
+    if (s2 && s2.started) P(L, "You broke contact and went out through the roof with nothing to show for it.", "n");
+    return;
+  }
+  const kageDead = s2.kills.filter((k) => k.kind === "kage");
+  const guardDead = s2.kills.filter((k) => k.kind === "guard");
+  const bits = [];
+  if (kageDead.length) bits.push(joinList(kageDead.map((k) => k.name + " of " + vName2(k.vid))));
+  if (guardDead.length) bits.push(guardDead.length + " of their guard");
+  P(L, "You went out through the same hole you came in by. Behind you: " + joinList(bits) + ".", "e");
+  const head = kageDead.length >= 3
+    ? "THE SUMMIT AT " + s2.site.toUpperCase() + " IS A GRAVE"
+    : kageDead.length
+    ? cap(joinList(kageDead.map((k) => k.title + " " + k.name))) + " killed at the summit"
+    : "Blood at the summit";
+  newsItem(c, head + ". " + (kageDead.length
+      ? joinList(kageDead.map((k) => k.name + ", " + k.title + " of " + vName2(k.vid))) + " "
+        + (kageDead.length > 1 ? "are" : "is") + " dead, killed inside the hall at " + s2.site + " by " + c.name + "."
+      : "The guard of five villages took losses inside the hall at " + s2.site + ".")
+    + (guardDead.length ? " " + guardDead.length + " of the bodyguard died with them." : "")
+    + (routed ? " The killer was driven off before it was finished." : " The killer walked out.")
+    + " Every village that had a seat at that table is now at war with one person.", "WAR", true);
+  if (kageDead.length) {
+    newsItem(c, "The surviving seats have suspended the summit and gone home under escort. Nobody is saying which of them will call the next one, or whether there will be one.", "THE COURTS", true);
+  }
+}
+/* ============================ THE KAGE SUMMIT ============================
+   The five meet every so often, and for a missing-nin that is every person who
+   signed your death warrant standing in one building with a handful of guards.
+   The summit exists in the world whether or not you go near it; if you do, it
+   becomes a board of targets rather than a single fight. */
+const SUMMIT_SITES = ["the Land of Iron", "the neutral hall at Tetsu", "a fortified inn on the Iron road", "the old daimyo's winter palace"];
+const SUMMIT_AGENDAS = [
+  "the tailed beasts, and who is holding which",
+  "a missing-nin problem none of them will name out loud",
+  "the border seals, for the fourth time this decade",
+  "an organisation that has started taking jinchuriki",
+  "whether the last war's terms are worth keeping",
+];
+function guardName(c, vid) {
+  const v = VILLAGES.find((x) => x.id === vid);
+  return freshName(c, null) + " of " + ((v && v.short) || "the guard");
+}
+/* the room, built the moment somebody decides to walk into it */
+function buildSummit(c) {
+  const seats = VILLAGES.filter((v) => GREAT_VILLAGES.includes(v.id) && villageExists(c, v.id) && c.kages[v.id]);
+  const kages = seats.map((v) => {
+    const k = c.kages[v.id];
+    const nm = k.named && NAMED[k.named] ? NAMED[k.named] : null;
+    return {
+      kind: "kage", vid: v.id, name: k.name, title: k.title, id: k.named || null,
+      lvl: nm ? nm.lvl : rr(84, 94), dead: false,
+    };
+  });
+  const guards = [];
+  seats.forEach((v) => {
+    for (let i = 0; i < 2; i++) {
+      guards.push({ kind: "guard", vid: v.id, name: guardName(c, v.id),
+        title: "bodyguard to the " + (c.kages[v.id] || {}).title, id: null,
+        lvl: rr(62, 76), dead: false });
+    }
+  });
+  return {
+    /* the same hall the paper announced, not a second one rolled on the spot */
+    site: (c.summitOpen && c.summitOpen.site) || pick(SUMMIT_SITES),
+    agenda: (c.summitOpen && c.summitOpen.agenda) || pick(SUMMIT_AGENDAS), year: c.year,
+    kages, guards, alert: 0, crew: [], kills: [], started: false, over: false,
+  };
+}
+const summitLive = (s2) => (s2 ? s2.kages.filter((k) => !k.dead) : []);
+const summitGuards = (s2) => (s2 ? s2.guards.filter((g) => !g.dead) : []);
+/* how hard the room is now that they know you are in it */
+const summitHeat = (s2) => (s2 ? Math.min(3, Math.floor(s2.alert / 2)) : 0);
+
+/* the five call one every so often, and the paper carries it */
+function summitTick(c, L) {
+  if (eraOf(c).hideVillages) return;
+  if (c.summitOpen && c.year > c.summitOpen.until) {
+    if (!c.summitOpen.raided) newsItem(c, "The summit at " + c.summitOpen.site + " has broken up. The communiqu\u00e9 runs to one paragraph and says nothing.", "THE COURTS");
+    c.summitOpen = null;
+    c.summit = null;
+  }
+  if (c.summitOpen || c.summit) return;
+  const seats = VILLAGES.filter((v) => GREAT_VILLAGES.includes(v.id) && villageExists(c, v.id) && c.kages[v.id]);
+  if (seats.length < 3) return;
+  if (!roll(9)) return;
+  const site = pick(SUMMIT_SITES), agenda = pick(SUMMIT_AGENDAS);
+  c.summitOpen = { site, agenda, from: c.year, until: c.year + 1, raided: false };
+  newsItem(c, "The five have called a Kage Summit at " + site + ", over " + agenda + ". Every seat will be filled and every one of them is bringing guards.", "THE COURTS", true);
+  P(L, "A Kage Summit has been called at " + site + "." + (c.rogue ? " Every person who signed your death warrant will be in one building." : ""), c.rogue ? "e" : "n");
+}
+
 /* ---------------- NOBODY LIVES FOREVER ----------------
    Only the people with a date in DEATH_YEAR were ever mortal. Thirty-seven of
    the eighty named — Naruto, Sasuke, Kakashi, Gaara, Tsunade, Boruto, Sarada
@@ -2412,6 +2508,7 @@ function worldTick(c, L) {
   const others = existing(c);
   applyHistoricDeaths(c, L);
   naturalDeaths(c, L);
+  summitTick(c, L);
   feudTick(c, L);
   incidentTick(c, L);
   timesTick(c);
@@ -2774,6 +2871,16 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.5", n: "The Summit Is A Grave", items: [
+    "A rogue ninja can attack a Kage Summit. Every so often the five great villages call one \u2014 the paper announces the hall and what is on the table \u2014 and if you are a rogue the deck offers you a way in. The whole table is in one room: five Kage in their seats, two bodyguards behind each one, and you decide who dies and in what order",
+    "You do not have to go alone. Before the doors open you can put a crew together out of the other rogues of the world, and the bigger the name the more they bring and the more of them the hall notices coming",
+    "The hall is not a list of targets that stands still. Every kill raises the alarm \u2014 a Kage far more than a guard \u2014 and the guard closes ranks around whoever is left, so the fifth seat is a different fight from the first. Kill a guard quietly and the room may not even know. Get greedy and you are fighting a summit that is already awake, with your own crew dying around you",
+    "However it ends \u2014 all five seats emptied, or you walking out, or the guard routing you \u2014 the Shinobi Times writes it up as the front page it would be. It names the dead by name and title, names the hall, names you if they know it was you, and the world moves afterwards: seats get filled, villages answer, and the Bingo Book entry that comes out of it is not the one you had before",
+    "The Akatsuki had five jobs on the board and four of them did nothing when pressed. Collecting a bounty, sealing a tailed beast into the statue, recruiting a partner and setting up a cell in a country all work now, all pay, all leave a mark on the world \u2014 money in the organisation's hands, a ring on a new finger, a country's underworld answering to the ring instead of its village",
+    "Fixed the rogue contracts. Every atrocity on the board \u2014 the well, the bloodline, the orphanage \u2014 threw an error the instant you pressed it and the button just sat there. It was one bad argument passed to the name generator. They all work",
+    "The main screen is sorted instead of a wall of nineteen identical cards. What genuinely cannot wait sits at the top under NEEDS YOU NOW, the things you spend the year on are under THIS YEAR with the count of actions you have left, and the reading \u2014 the paper, the roll, the histories, the book \u2014 is down under THE WORLD where it does not compete with the war",
+    "Swept for duplicates across the rolls, the Bingo Book and the world roster: no one appears twice, and you are no longer listed as a stranger in your own village",
+  ] },
   { v: "10.4", n: "Half The World Was Missing", items: [
     "Twelve of the eighty named shinobi were women, and the gaps were not obscure ones. Hinata, Ino, Shizune, Temari, Tenten, Kurenai, Anko and Mito Uzumaki \u2014 who carried the Nine-Tails for fifty years before Kushina did \u2014 were not in the game at all. Twenty-five names added, across every era",
     "The Founding and the Great Wars: Mito Uzumaki, and Pakura of the Hidden Sand, whose own country traded her life for a truce and then put up a statue",
@@ -3545,7 +3652,7 @@ function newChar(name, gender, vid, clanName, eraId, otsuEye) {
     sixPaths: false, gates: 0, curse: 0, stats, health: 100, standing: 50, infamy: 0, ryo: rr(4000, 12000),
     jutsu: otsuBonusJutsu.slice(), otsu: otsuChakra, eyePaths: otsuEyePaths,
     titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
-    dutyLog: {}, scouted: 0,
+    dutyLog: {}, scouted: 0, summit: null, summitOpen: null,
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
     sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
@@ -8126,9 +8233,67 @@ export default function ShinobiLife() {
     if (!a) return;
     startBattle(pick(["hunter", "chunin", "missing"]), { type: "atrocity", id }, 0,
       a.n + ". " + a.d,
-      { name: freshName(null, null) || "The one who saw you", title: "somebody who was there" });
+      /* freshName(null) threw on c.usedNames, which meant every one of these
+         rows silently did nothing at all when pressed */
+      { name: freshName(c, null) || "The one who saw you", title: "somebody who was there" });
     setModal(null);
   }
+  /* ---------- walking into the Kage Summit ---------- */
+  function summitAct(kind, arg) {
+    if (kind === "open") {
+      /* you get one run at a given summit. walking out and walking back in would
+         rebuild the board with the alarm back at nothing, which is not a raid. */
+      if (!c.summit && c.summitOpen && c.summitOpen.raided) { commit((c, L) => P(L, "That hall is empty now. Whoever walked out of it walked out of it once.", "n")); return; }
+      commit((c) => { if (!c.summit) c.summit = buildSummit(c); });
+      setModal("summitraid"); return;
+    }
+    if (kind === "recruit") {
+      commit((c, L) => {
+        const s2 = c.summit; if (!s2 || s2.started) return;
+        const cost = 120000 + s2.crew.length * 80000;
+        if (c.ryo < cost) { P(L, "Nobody works this job on credit.", "b"); return; }
+        if (s2.crew.length >= 3) { P(L, "Three is already more people than can move quietly.", "n"); return; }
+        c.ryo -= cost;
+        const odds = cl(42 + c.infamy * 0.5 + (c.akatsuki ? 22 : 0), 12, 92);
+        if (!roll(odds)) { P(L, "You put word out and got back silence and one letter telling you to stop writing.", "b"); return; }
+        const n = freshName(c, null);
+        s2.crew.push({ name: n, lvl: rr(60, 82), alive: true, spent: false });
+        P(L, n + " is in. They did not ask what the plan was, which is either very good or very bad.", "g");
+      });
+      return;
+    }
+    if (kind === "strike") {
+      /* arg: { kind: "kage"|"guard", i } — the target off the board */
+      const s2 = c.summit; if (!s2) return;
+      const list = arg.kind === "kage" ? s2.kages : s2.guards;
+      const t = list[arg.i];
+      if (!t || t.dead) return;
+      commit((c2) => { if (c2.summit) { c2.summit.started = true; c2.summit.pending = arg; } });
+      const heat = summitHeat(s2);
+      const opener = arg.kind === "kage"
+        ? (s2.alert === 0
+            ? "You came through the ceiling of the council chamber before anybody had finished sitting down. " + t.name + " is already on their feet."
+            : "The room knows now. " + t.name + " has stopped pretending this is a negotiation.")
+        : "A bodyguard steps between you and the table. " + t.name + " does not intend to move.";
+      startBattle(t.id || (arg.kind === "kage" ? "kage" : "hunter"),
+        { type: "summit", tgt: arg, id: t.id || null, name: t.name, vid: t.vid },
+        heat >= 2 ? -1 : 0, opener,
+        t.id ? null : { name: t.name, title: t.title });
+      setModal(null);
+      return;
+    }
+    if (kind === "leave") {
+      commit((c, L) => {
+        const s2 = c.summit; if (!s2) return;
+        summitReport(c, L, false);
+        c.summit = null;
+        if (c.summitOpen) c.summitOpen.raided = true;
+      });
+      setModal(null);
+      return;
+    }
+  }
+
   /* ---------- the organisation ---------- */
   function akatsukiAct(kind) {
     if (kind === "hunt") {
@@ -8140,6 +8305,79 @@ export default function ShinobiLife() {
     }
     commit((c, L) => {
       spend(c);
+      /* ---- the four jobs the panel offered and the handler never implemented.
+         Every one of these rows was rendered, enabled, pressable and did
+         absolutely nothing, which is why the organisation felt empty. ---- */
+      if (kind === "bounty") {
+        const ak = c.akatsuki; if (!ak) return;
+        const take = rr(180000, 460000) + (ak.jobs || 0) * 12000;
+        c.ryo += take; c.infamy = cl(c.infamy + rr(4, 8));
+        ak.jobs = (ak.jobs || 0) + 1;
+        ak.funds = (ak.funds || 0) + Math.round(take * 0.4);
+        const hunted = rr(2, 5); c.kills += hunted;
+        P(L, "A season on the bounty stations. " + hunted + " heads, " + money(take) + ", and the treasurer counted it twice in front of you.", "g");
+        if (roll(22)) {
+          const who = freshName(c, null);
+          P(L, "One of them was somebody you knew. " + who + " did not recognise you until it was already done.", "b");
+          c.darkDeeds = (c.darkDeeds || 0) + 1;
+        }
+        if (roll(18)) newsItem(c, "Bounty stations in three countries have paid out on the same night to the same collector. Nobody at the counter will describe them.", "BINGO BOOK");
+        return;
+      }
+      if (kind === "seal") {
+        const ak = c.akatsuki; if (!ak) return;
+        ak.jobs = (ak.jobs || 0) + 1;
+        const held = (c.world && c.world.akTaken ? c.world.akTaken.length : 0);
+        c.stats.cha = cl(c.stats.cha + rr(2, 5));
+        c.stats.con = cl(c.stats.con + rr(1, 4));
+        c.health = cl(c.health - rr(2, 7));
+        c.infamy = cl(c.infamy + 4);
+        if (!held) { P(L, "Three days of holding a seal on an empty statue. Nobody says what it is for and you have stopped asking.", "n"); return; }
+        P(L, "Three days on the statue's finger while it took its time. " + held + " of the nine are in it now, and the room was quieter afterwards than it was before.", "e");
+        if (held >= 7 && roll(40)) P(L, "Somebody counted out loud how many are left. Nobody answered them.", "b");
+        if (roll(26)) {
+          const mv = pick(["Sealing: Nine Phantom Dragons", "Chakra Drain Seal", "Shared Vision Link"]);
+          if (!c.jutsu.includes(mv)) learn(c, L, mv, "You watched the same sequence for three days and your hands learned it before you decided to.");
+        }
+        return;
+      }
+      if (kind === "recruit") {
+        const ak = c.akatsuki; if (!ak) return;
+        const free = AKATSUKI_RINGS.filter((r) => r.who && isDead(c, r.who));
+        const odds = cl(36 + c.infamy * 0.4 + (ak.jobs || 0) * 3, 12, 88);
+        ak.jobs = (ak.jobs || 0) + 1;
+        c.ryo += rr(60000, 160000);
+        if (!roll(odds)) { P(L, "You found somebody and they turned it down, which they are allowed to do exactly once.", "b"); return; }
+        const n = freshName(c, null);
+        ak.recruits = (ak.recruits || []).concat([n]);
+        c.infamy = cl(c.infamy + 8);
+        P(L, n + " is wearing a ring now. They are yours to vouch for, which means what they do next is partly on you.", "g");
+        newsItem(c, "A new cloak has been seen working with " + (ak.partner || "the organisation") + ". The Bingo Book has opened a page and left it mostly blank.", "BINGO BOOK");
+        if (free.length && roll(35)) P(L, "There was an empty ring waiting. Nobody explained what happened to the last finger in it.", "n");
+        return;
+      }
+      if (kind === "cell") {
+        const ak = c.akatsuki; if (!ak) return;
+        ak.jobs = (ak.jobs || 0) + 1;
+        const vs = VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== c.village && !(ak.cells || []).includes(v.id));
+        if (!vs.length) { P(L, "There is no underworld left in this world that does not already answer to the organisation.", "n"); return; }
+        const v = pick(vs);
+        const odds = cl(40 + c.stats.int * 0.35 + c.infamy * 0.3, 15, 90);
+        if (!roll(odds)) {
+          c.health = cl(c.health - rr(4, 14));
+          P(L, "The smugglers in the " + v.land + " had already been bought by somebody else, and they wanted you to know it.", "b");
+          return;
+        }
+        ak.cells = (ak.cells || []).concat([v.id]);
+        const take = rr(250000, 620000);
+        c.ryo += take; c.infamy = cl(c.infamy + 12);
+        ak.funds = (ak.funds || 0) + Math.round(take * 0.5);
+        if (c.world && c.world.stability) c.world.stability[v.id] = cl((c.world.stability[v.id] || 50) - rr(5, 12));
+        P(L, "Every smuggler, fence and hired blade in the " + v.land + " now works for the organisation, and most of them think they work for themselves. +" + money(take), "e");
+        newsItem(c, "The " + v.land + " has lost control of its own underworld. " + vName2(v.id) + " is denying there is anything to lose control of.", "THE COURTS", true);
+        if ((ak.cells || []).length >= 3) addTitle(c, "Holds the Underworld");
+        return;
+      }
       if (kind === "join") {
         const free = AKATSUKI_RINGS.filter((r) => !r.who || isDead(c, r.who) || !NAMED[r.who]);
         const ring = free.length ? pick(free) : pick(AKATSUKI_RINGS);
@@ -9775,6 +10013,64 @@ export default function ShinobiLife() {
           if (c.health <= 0) die(c, L, "was killed trying to assassinate " + K.name);
         }
       }
+      if (ctx.type === "summit") {
+        const s2 = c.summit;
+        if (!s2) { /* nothing to resolve into */ }
+        else {
+          const list = ctx.tgt.kind === "kage" ? s2.kages : s2.guards;
+          const t = list[ctx.tgt.i];
+          if (b.win && t && !t.dead) {
+            t.dead = true;
+            s2.kills.push({ kind: t.kind, name: t.name, title: t.title, vid: t.vid });
+            s2.alert += t.kind === "kage" ? 3 : 1;
+            c.kills += 1; c.wins += 1;
+            c.infamy = cl(c.infamy + (t.kind === "kage" ? 26 : 9));
+            c.bingo = "S";
+            c.health = cl(c.health - rr(6, 20));
+            if (t.id) {
+              killNamed(c, t.id, L, "was killed inside the hall at " + s2.site + ", at a summit they had called themselves");
+              killFeat(c, L, t.id);
+              if (NAMED[t.id] && NAMED[t.id].sig) learn(c, L, NAMED[t.id].sig);
+            } else if (t.kind === "kage") {
+              /* an unnamed seat still dies, and the village still has to fill it */
+              const ln = c.line && c.line[t.vid];
+              if (ln && ln.current) {
+                ln.past.push({ ...ln.current, to: c.year });
+                const nx = (ln.queue || []).shift() || { id: null, term: rr(12, 24) };
+                ln.current = { id: nx.id || null, name: nx.id && NAMED[nx.id] ? NAMED[nx.id].name : freshName(c, null), from: c.year, term: nx.term || rr(12, 24), player: false };
+                c.kages[t.vid] = { named: ln.current.id, name: ln.current.name, title: kageOrdinal(ln) + " " + kageWordFor(c, t.vid) };
+              }
+            }
+            if (t.kind === "kage") addTitle(c, "Killed a Kage at the summit");
+            /* the crew take some of the heat, and some of them do not come back */
+            const live = (s2.crew || []).filter((x) => x.alive);
+            if (live.length && roll(28)) {
+              const d = pick(live); d.alive = false;
+              P(L, d.name + " went down covering the door. Nobody is going back for them.", "b");
+            } else if (live.length) {
+              s2.alert = Math.max(0, s2.alert - 1);
+              P(L, "Your people are holding the corridor. It buys you the next one.", "g");
+            }
+            P(L, t.name + " is dead on the floor of the council chamber. " + (summitLive(s2).length
+              ? summitLive(s2).length + " seats still standing and all of them know where you are now."
+              : "Every seat at that table is empty."), "e");
+            if (!summitLive(s2).length) {
+              summitReport(c, L, false);
+              c.summit = null;
+              if (c.summitOpen) c.summitOpen.raided = true;
+              addTitle(c, "Emptied the Summit");
+              c.infamy = 100;
+            }
+          } else if (!b.win) {
+            const d = rr(22, 45); c.health = cl(c.health - d);
+            P(L, "It went wrong in the hall. You are out of the building and bleeding, and they have seen your face. \u2212" + d + " health.", "b");
+            summitReport(c, L, true);
+            c.summit = null;
+            if (c.summitOpen) c.summitOpen.raided = true;
+            if (c.health <= 0) die(c, L, "was killed inside the hall at a Kage Summit, which is at least a way to be remembered");
+          }
+        }
+      }
       if (ctx.type === "raid") {
         spend(c);
         if (b.win && ctx.id) { killNamed(c, ctx.id, L, "was killed by " + c.name + " defending the village"); killFeat(c, L, ctx.id); }
@@ -11364,18 +11660,25 @@ export default function ShinobiLife() {
      render this list in completely different shapes, and neither should be the
      place where "can I take students yet" is decided. */
   const acts = [
-    { id: "train", icon: "train", label: "Train", sub: "Pick a regimen", onClick: () => setModal("train"), disabled: c.actions < 1 || c.age < 5 },
-    { id: "mission", icon: "mission", label: c.rogue ? "Contracts" : "Missions", sub: c.rogue ? "Bounties and jobs" : "D through S rank", onClick: () => setModal("mission"), disabled: c.actions < 1 || c.rank < 2 },
-    { id: "jutsu", icon: "jutsu", label: "Study jutsu", sub: c.study ? "Working on " + c.study.name : "Choose what to learn", onClick: studyJutsu, disabled: c.actions < 1 || c.rank < 1, badge: c.study ? "\u2026" : null },
-    (c.rank >= 4 || c.students) && { id: "students", icon: "people", tone: T.gold, label: c.students ? (c.studentSquad || "Your cell") : "Take students", sub: c.students ? c.students.filter((x) => x.alive).length + " under you" : "A genin cell of your own", onClick: () => setModal("students"), disabled: c.actions < 1 },
-    { id: "shop", icon: "shop", label: "Shop", sub: "Gear, pills, tutors", onClick: () => setModal("shop"), badge: itemCount || null },
-    { id: "powers", icon: "powers", label: "Powers", sub: "Beast, eyes, gates", tone: T.epic, onClick: () => setModal("powers"), disabled: c.actions < 1 || !hasPowers },
-    { id: "path", icon: "path", label: "Ninja path", sub: "Exams, rank, village", onClick: () => setModal("path"), disabled: c.actions < 1, badge: canAcademy || canExam ? "!" : null },
-    isLeader(c) && { id: "rule", icon: "rule", tone: T.gold, label: eraOf(c).hideVillages ? "Rule the Clan" : "Rule the Village", sub: c.rankName, onClick: () => setModal("rule"), disabled: c.actions < 1 },
-    c.war && { id: "war", icon: "war", tone: T.blood, label: "The War", sub: (liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts \u00b7 vs " : "vs ") + (foeSummary(c.war, 2) || c.war.enemyName), onClick: () => setModal("war"), disabled: c.actions < 1 || c.rank < 2, badge: c.war.momentum + "%" },
-    { id: "bingo", icon: "bingo", label: "Bingo Book", sub: "Named shinobi of the age", tone: T.blood, onClick: () => setModal("bingo"), disabled: c.actions < 1 || c.rank < 2 },
-    eraOf(c).hideVillages && { id: "clans", icon: "clans", label: "The Clans", sub: "Rosters, heads, the broken", onClick: () => setModal("clans") },
-    { id: "myclan", icon: "clans", tone: c.myClan ? c.myClan.kg.colour : bornClan(c) ? T.epic : T.gold,
+    { id: "train", grp: "do", icon: "train", label: "Train", sub: "Pick a regimen", onClick: () => setModal("train"), disabled: c.actions < 1 || c.age < 5 },
+    { id: "mission", grp: "do", icon: "mission", label: c.rogue ? "Contracts" : "Missions", sub: c.rogue ? "Bounties and jobs" : "D through S rank", onClick: () => setModal("mission"), disabled: c.actions < 1 || c.rank < 2 },
+    { id: "jutsu", grp: "do", icon: "jutsu", label: "Study jutsu", sub: c.study ? "Working on " + c.study.name : "Choose what to learn", onClick: studyJutsu, disabled: c.actions < 1 || c.rank < 1, badge: c.study ? "\u2026" : null },
+    (c.rank >= 4 || c.students) && { id: "students", grp: "do", icon: "people", tone: T.gold, label: c.students ? (c.studentSquad || "Your cell") : "Take students", sub: c.students ? c.students.filter((x) => x.alive).length + " under you" : "A genin cell of your own", onClick: () => setModal("students"), disabled: c.actions < 1 },
+    { id: "shop", grp: "do", icon: "shop", label: "Shop", sub: "Gear, pills, tutors", onClick: () => setModal("shop"), badge: itemCount || null },
+    { id: "powers", grp: "do", icon: "powers", label: "Powers", sub: "Beast, eyes, gates", tone: T.epic, onClick: () => setModal("powers"), disabled: c.actions < 1 || !hasPowers },
+    { id: "path", grp: "do", icon: "path", label: "Ninja path", sub: "Exams, rank, village", onClick: () => setModal("path"), disabled: c.actions < 1, badge: canAcademy || canExam ? "!" : null },
+    isLeader(c) && { id: "rule", grp: "do", icon: "rule", tone: T.gold, label: eraOf(c).hideVillages ? "Rule the Clan" : "Rule the Village", sub: c.rankName, onClick: () => setModal("rule"), disabled: c.actions < 1 },
+    c.war && { id: "war", grp: "do", icon: "war", tone: T.blood, label: "The War", sub: (liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts \u00b7 vs " : "vs ") + (foeSummary(c.war, 2) || c.war.enemyName), onClick: () => setModal("war"), disabled: c.actions < 1 || c.rank < 2, badge: c.war.momentum + "%" },
+    /* every person who signed your death warrant, in one building, for one year */
+    ((c.summit || (c.summitOpen && !c.summitOpen.raided))) && c.rogue && c.age >= 14 && { id: "summitraid", grp: "do", icon: "war", tone: T.blood,
+      label: "The Kage Summit",
+      sub: c.summit ? (summitLive(c.summit).length + " seats still standing at " + c.summit.site)
+        : "All five of them at " + c.summitOpen.site + ", and every one signed your book",
+      onClick: () => summitAct("open"), disabled: c.actions < 1,
+      badge: c.summit ? c.summit.kills.length || "!" : "!" },
+    { id: "bingo", grp: "know", icon: "bingo", label: "Bingo Book", sub: "Named shinobi of the age", tone: T.blood, onClick: () => setModal("bingo"), disabled: c.actions < 1 || c.rank < 2 },
+    eraOf(c).hideVillages && { id: "clans", grp: "know", icon: "clans", label: "The Clans", sub: "Rosters, heads, the broken", onClick: () => setModal("clans") },
+    { id: "myclan", grp: "know", icon: "clans", tone: c.myClan ? c.myClan.kg.colour : bornClan(c) ? T.epic : T.gold,
       label: c.myClan ? "The " + c.myClan.name : isCelestialClan(c) ? "The Celestial Line" : bornClan(c) ? "The " + c.clan : "Found a Clan",
       sub: c.myClan ? c.myClan.kg.name + " \u00b7 " + kgStageName(c.myClan.kg)
         : isCelestialClan(c) ? "Not from here \u00b7 there is no roll of your blood"
@@ -11384,20 +11687,20 @@ export default function ShinobiLife() {
         : "No blood behind you \u2014 start your own",
       onClick: () => setModal("myclan"),
       badge: c.myClan && (c.myClan.kg.stage || 0) < 2 ? "\u2191" : c.clanHeadIsYou ? "HEAD" : null },
-    c.beast && { id: "beast", icon: "powers", tone: T.epic,
+    c.beast && { id: "beast", grp: "do", icon: "powers", tone: T.epic,
       label: c.beast.named ? (BEASTS.find((x) => x.id === c.beast.id) || {}).name : "The " + ((BEASTS.find((x) => x.id === c.beast.id) || {}).tails || "?") + "-Tails",
       sub: beastStageName(c) + " \u00b7 bond " + (c.beast.rel || 0),
       onClick: () => setModal("beast"), disabled: c.actions < 1,
       badge: (c.beast.rel || 0) <= 15 ? "!" : null },
-    (c.rogue || c.akatsuki) && { id: "akatsuki", icon: "bingo", tone: T.blood,
+    (c.rogue || c.akatsuki) && { id: "akatsuki", grp: "do", icon: "bingo", tone: T.blood,
       label: c.akatsuki ? "The Ring " + c.akatsuki.ring : "The Organisation",
       sub: c.akatsuki ? "Partnered with " + c.akatsuki.partner : canJoinAkatsuki(c) ? "They are looking at you" : "Ten rings, ten fingers",
       onClick: () => setModal("akatsuki"), disabled: c.actions < 1,
       badge: c.akatsuki ? c.akatsuki.ring : canJoinAkatsuki(c) ? "!" : null },
-    (c.rank >= 3 || c.daimyoSeat) && { id: "court", icon: "rule", tone: T.gold, label: c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Court", sub: c.daimyoSeat ? "You rule the country \u00b7 unrest " + (c.daimyoSeat.unrest || 20) : "Favour " + ((c.court && c.court.favour) || 0) + " \u00b7 the seat above the village", onClick: () => setModal("court"), disabled: c.actions < 1, badge: c.daimyoSeat ? "DAIMYO" : null },
-    { id: "villageroll", icon: "path", label: "The Village Roll", sub: "Who holds which rank, and who is strongest", onClick: () => setModal("villageroll") },
-    { id: "records", icon: "records", label: "The Records", sub: "Kage lines, eras, the world", onClick: () => setModal("records") },
-    { id: "bounty", icon: "bounty", label: "Bounty Board", sub: (ORGS[c.era] ? ORGS[c.era].n + " and " : "") + "missing-nin", onClick: () => setModal("bounty"), disabled: c.actions < 1 || c.rank < 2 },
+    (c.rank >= 3 || c.daimyoSeat) && { id: "court", grp: "do", icon: "rule", tone: T.gold, label: c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Court", sub: c.daimyoSeat ? "You rule the country \u00b7 unrest " + (c.daimyoSeat.unrest || 20) : "Favour " + ((c.court && c.court.favour) || 0) + " \u00b7 the seat above the village", onClick: () => setModal("court"), disabled: c.actions < 1, badge: c.daimyoSeat ? "DAIMYO" : null },
+    { id: "villageroll", grp: "know", icon: "path", label: "The Village Roll", sub: "Who holds which rank, and who is strongest", onClick: () => setModal("villageroll") },
+    { id: "records", grp: "know", icon: "records", label: "The Records", sub: "Kage lines, eras, the world", onClick: () => setModal("records") },
+    { id: "bounty", grp: "do", icon: "bounty", label: "Bounty Board", sub: (ORGS[c.era] ? ORGS[c.era].n + " and " : "") + "missing-nin", onClick: () => setModal("bounty"), disabled: c.actions < 1 || c.rank < 2 },
   ].filter(Boolean);
 
   return (
@@ -11680,6 +11983,7 @@ export default function ShinobiLife() {
               c.beast ? { k: "beast", n: (BEASTS.find((b) => b.id === c.beast.id) || {}).tails + "-Tails", i: "powers", on: () => setModal("beast"), tone: T.epic } : null,
               c.akatsuki ? { k: "akatsuki", n: "Ring " + c.akatsuki.ring, i: "bingo", on: () => setModal("akatsuki"), tone: T.blood } : null,
               c.war ? { k: "war", n: "The War", i: "war", on: () => setModal("war"), tone: T.blood } : null,
+              (c.summit || (c.summitOpen && !c.summitOpen.raided)) && c.rogue && c.age >= 14 ? { k: "summitraid", n: "The Summit", i: "war", on: () => summitAct("open"), tone: T.blood } : null,
               c.students ? { k: "students", n: c.studentSquad || "Your cell", i: "people", on: () => setModal("students"), tone: T.gold } : null,
               RITUALS.some((r2) => r2.needs(c)) ? { k: "rituals", n: "Rituals", i: "powers", on: () => setModal("rituals"), tone: T.blood } : null,
               { k: "look", n: "Appearance", i: "rule", on: () => setModal("look") },
@@ -11823,9 +12127,43 @@ export default function ShinobiLife() {
               <div style={{ color: T.dim }} className="text-xs">{c.actions} action{c.actions === 1 ? "" : "s"} left</div>
               <div className="flex gap-1">{[0, 1, 2, 3].map((i) => <span key={i} style={{ width: 6, height: 6, borderRadius: 99, background: i < c.actions ? accent : T.line }} />)}</div>
             </div>
-            <div className="sl-deck grid gap-2.5 mb-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-              {acts.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone} badge={a.badge} />)}
-            </div>
+            {/* The deck used to be one flat grid where a village census and a
+                war you are losing were the same size and the same weight. Two
+                groups now: the things that spend a year, and the things you
+                read. The urgent ones are lifted out above both. */}
+            {(() => {
+              const urgent = acts.filter((a) => !a.disabled && (a.id === "war" || a.id === "summitraid" || (a.badge === "!" && (a.id === "path" || a.id === "akatsuki"))));
+              const doing = acts.filter((a) => a.grp !== "know" && !urgent.includes(a));
+              const knowing = acts.filter((a) => a.grp === "know");
+              const Head = ({ t, n }) => (
+                <div className="flex items-center gap-2 mb-1.5 mt-1" style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ color: T.dim, fontSize: 9, letterSpacing: ".26em", fontWeight: 800 }}>{t}</div>
+                  <span style={{ flex: 1, height: 1, background: T.line }} />
+                  {n ? <div style={{ color: T.dim, fontSize: 9.5 }}>{n}</div> : null}
+                </div>
+              );
+              const grid = { display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" };
+              return (
+                <>
+                  {urgent.length ? (
+                    <div className="sl-deck mb-2.5" style={grid}>
+                      <Head t="NEEDS YOU NOW" />
+                      {urgent.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone || T.blood} badge={a.badge} />)}
+                    </div>
+                  ) : null}
+                  <div className="sl-deck mb-2.5" style={grid}>
+                    <Head t="THIS YEAR" n={c.actions + (c.actions === 1 ? " action" : " actions") + " left"} />
+                    {doing.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone} badge={a.badge} />)}
+                  </div>
+                  {knowing.length ? (
+                    <div className="sl-deck mb-2.5" style={grid}>
+                      <Head t="THE WORLD" />
+                      {knowing.map((a) => <AB key={a.id} icon={a.icon} label={a.label} sub={a.sub} onClick={a.onClick} disabled={a.disabled} tone={a.tone} badge={a.badge} />)}
+                    </div>
+                  ) : null}
+                </>
+              );
+            })()}
             <div className="sl-dock sl-safe-b grid grid-cols-4 gap-2"
               /* The scrim used to go from transparent to 94% black inside the
                  top third, which over a bright background painted a hard black
@@ -12488,6 +12826,101 @@ export default function ShinobiLife() {
           )}
         </Modal>
       )}
+
+      {/* ---------- THE SUMMIT: a board of targets, not a single fight ---------- */}
+      {modal === "summitraid" && c.summit && (() => {
+        const s2 = c.summit;
+        const heat = summitHeat(s2);
+        const heatWord = ["They do not know you are here.", "The room knows. Doors are being held.", "Every seat is on its feet and the guard has closed the hall.", "Open war inside the building. There is no quiet way out of this now."][heat];
+        const heatCol = [T.good, T.gold, T.bad, T.blood][heat];
+        const crewLive = (s2.crew || []).filter((x) => x.alive);
+        const Tile = ({ t, i, kind }) => {
+          const v = VILLAGES.find((x) => x.id === t.vid);
+          const col = t.dead ? T.dim : kind === "kage" ? T.blood : T.soft;
+          return (
+            <button key={kind + i} disabled={t.dead || c.actions < 1}
+              onClick={(e) => { if (!t.dead) { ripple(e); summitAct("strike", { kind, i }); } }}
+              style={{ position: "relative", overflow: "hidden", textAlign: "left", cursor: t.dead ? "default" : "pointer",
+                background: t.dead ? "rgba(255,255,255,.02)" : "linear-gradient(158deg," + T.s2 + " 0%," + T.s0 + " 34%, rgba(0,0,0,.34) 100%)",
+                border: "1px solid " + (t.dead ? "rgba(255,255,255,.05)" : (kind === "kage" ? T.blood + "55" : T.line)),
+                borderRadius: 12, padding: "10px 11px", opacity: t.dead ? .45 : 1 }}
+              className="sl-ab">
+              <div className="flex items-baseline justify-between gap-2">
+                <span style={{ fontFamily: SERIF, fontSize: 13.5, color: t.dead ? T.dim : T.text, textDecoration: t.dead ? "line-through" : "none" }} className="font-bold">{t.name}</span>
+                <span style={{ color: col, fontSize: 9.5, letterSpacing: ".14em", fontWeight: 800 }}>{t.dead ? "DOWN" : kind === "kage" ? "SEAT" : "GUARD"}</span>
+              </div>
+              <div style={{ color: T.dim, fontSize: 10.5, marginTop: 2 }}>
+                {t.title}{v ? " \u00b7 " + v.name : ""}
+              </div>
+              {!t.dead && (
+                <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+                  <span style={{ flex: 1, height: 3, background: "rgba(0,0,0,.5)", borderRadius: 99 }}>
+                    <span style={{ display: "block", width: cl(t.lvl) + "%", height: "100%", background: col, borderRadius: 99 }} />
+                  </span>
+                  <span style={{ color: T.dim, fontSize: 10, fontVariantNumeric: "tabular-nums" }}>{t.lvl}</span>
+                </div>
+              )}
+            </button>
+          );
+        };
+        return (
+          <Modal wide title="THE KAGE SUMMIT" accent={T.blood} onClose={() => setModal(null)}>
+            <div style={{ ...glass(T.blood) }} className="p-3.5 mb-3">
+              <div style={{ fontFamily: SERIF, fontSize: 19, lineHeight: 1.1 }} className="font-bold">{cap(s2.site)}</div>
+              <div style={{ color: T.dim, fontSize: 11.5, marginTop: 3 }}>Convened over {s2.agenda}.</div>
+              <div style={{ color: heatCol, fontSize: 11.5, marginTop: 8, fontWeight: 700 }}>{heatWord}</div>
+              <div className="flex gap-1.5 mt-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <span key={i} style={{ flex: 1, height: 4, borderRadius: 99,
+                    background: i <= heat ? [T.good, T.gold, T.bad, T.blood][heat] : "rgba(255,255,255,.08)" }} />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3 mt-3" style={{ fontSize: 10, letterSpacing: ".14em", color: T.dim }}>
+                <span>SEATS <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{summitLive(s2).length}/{s2.kages.length}</b></span>
+                <span>GUARD <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{summitGuards(s2).length}/{s2.guards.length}</b></span>
+                <span>DOWN <b style={{ color: T.blood, letterSpacing: 0, fontSize: 12 }}>{s2.kills.length}</b></span>
+                <span>WITH YOU <b style={{ color: T.gold, letterSpacing: 0, fontSize: 12 }}>{crewLive.length}</b></span>
+              </div>
+            </div>
+
+            {!s2.started && (
+              <>
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">HOW YOU GO IN</div>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  Alone is quieter and nobody else takes a cut of the blame. Others cost money, buy you a corridor when it turns, and some of them do not come out.
+                </div>
+                <Row label={crewLive.length ? "Bring another" : "Put word out for others"}
+                  sub={"Missing-nin who owe somebody or want the entry. " + money(120000 + (s2.crew || []).length * 80000) + ", and they can still say no."}
+                  right={(s2.crew || []).length + "/3"} onClick={() => summitAct("recruit")}
+                  disabled={(s2.crew || []).length >= 3 || c.ryo < 120000 + (s2.crew || []).length * 80000} tone={T.gold} />
+                {crewLive.length ? (
+                  <div style={{ color: T.soft, fontSize: 11.5, marginBottom: 10 }}>
+                    With you: {joinList(crewLive.map((x) => x.name))}.
+                  </div>
+                ) : null}
+              </>
+            )}
+
+            <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-3">THE TABLE</div>
+            <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+              {s2.kages.map((t, i) => <Tile key={"k" + i} t={t} i={i} kind="kage" />)}
+            </div>
+            <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">THE GUARD</div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+              {s2.guards.map((t, i) => <Tile key={"g" + i} t={t} i={i} kind="guard" />)}
+            </div>
+            <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-3">
+              Killing the guard first is slower and leaves fewer blades between you and the table. Going straight for a seat wakes the room.
+              {c.actions < 1 ? " You have no actions left this year." : ""}
+            </div>
+            <button onClick={() => summitAct("leave")}
+              style={{ background: T.panel2, border: "1px solid " + T.line, color: T.text, borderRadius: 10 }}
+              className="w-full mt-4 py-2.5 font-bold text-xs tracking-widest">
+              {s2.kills.length ? "GO OUT THE WAY YOU CAME IN" : "WALK AWAY FROM IT"}
+            </button>
+          </Modal>
+        );
+      })()}
 
       {modal === "shop" && (
         <Modal wide title="MERCHANT QUARTER" accent={accent} onClose={() => setModal(null)}>
