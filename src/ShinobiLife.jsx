@@ -929,7 +929,10 @@ function killFeat(c, L, id) {
 
 /* ============================ THE DEAD ============================ */
 const isDead = (c, id) => (c.dead || []).includes(id);
-const livingRoster = (c) => (c.roster || []).filter((x) => NAMED[x] && !isDead(c, x));
+/* somebody in the cells or struck off the roll is not on it. without this a
+   Kage you imprisoned yesterday is still the strongest name in the village. */
+const isHeld = (c, id) => !!id && ((c.held || []).includes(id));
+const livingRoster = (c) => (c.roster || []).filter((x) => NAMED[x] && !isDead(c, x) && !isHeld(c, x));
 const news = (c, txt) => newsItem(c, txt);
 
 /* ============================ TERROR STRIKES & ORGS ============================ */
@@ -1299,6 +1302,284 @@ function summitTick(c, L) {
   c.summitOpen = { site, agenda, from: c.year, until: c.year + 1, raided: false };
   newsItem(c, "The five have called a Kage Summit at " + site + ", over " + agenda + ". Every seat will be filled and every one of them is bringing guards.", "THE COURTS", true);
   P(L, "A Kage Summit has been called at " + site + "." + (c.rogue ? " Every person who signed your death warrant will be in one building." : ""), c.rogue ? "e" : "n");
+}
+
+/* ============================ THE TRIBUNAL ============================
+   A village runs on law nobody puts in the recruitment posters. Desertion.
+   Theft out of the armoury. A jonin who sold a mission roster over a border.
+   An ANBU who went past the writ in a room with no window. Somebody has to sit
+   and decide, and what they decide stays on a person for the rest of their life.
+
+   You can be that somebody. Three seats, each one trying people further up the
+   roll than the last. The docket fills from the actual register of your village
+   — the same people who appear on the Village Roll, plus the named, plus, at
+   the top seat, officers and a Kage. Every sentence lands somewhere real: the
+   prison register, an obituary, the Bingo Book, or a missing-nin walking out
+   of the gate who remembers exactly who put them there. */
+
+const BENCH_SEATS = [
+  { id: "magistrate", n: "Village Magistrate", court: "the lower court",
+    d: "The small hall behind the mission desk. Thefts, brawls, genin who walked off a post.",
+    rank: 3, standing: 38, heard: 0,
+    tries: ["Civilian", "Academy Student", "Genin", "Chunin"] },
+  { id: "tribunal", n: "Presiding Judge of the Tribunal", court: "the tribunal",
+    d: "The real court. Field officers, special jonin, jonin, and whatever ANBU hands up.",
+    rank: 4, standing: 58, heard: 6,
+    tries: ["Civilian", "Academy Student", "Genin", "Chunin", "Special Jonin", "Jonin", "ANBU"] },
+  { id: "high", n: "Chief Justice of the High Bench", court: "the high bench",
+    d: "Three seats, and yours is the middle one. Nobody in the village is above it, which is a sentence in itself.",
+    rank: 5, standing: 74, heard: 18,
+    tries: ["Civilian", "Academy Student", "Genin", "Chunin", "Special Jonin", "Jonin", "ANBU", "Jonin Commander", "Kage"] },
+];
+const benchSeat = (c) => (c && c.bench && c.bench.seat ? BENCH_SEATS.find((x) => x.id === c.bench.seat) : null);
+const onBench = (c) => !!benchSeat(c);
+
+/* sev is roughly how much of a life the charge is worth taking, 0-9 */
+const CHARGES = [
+  { id: "desert", n: "Desertion of post", sev: 3, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "left the line and did not come back until it was over",
+    pros: ["The post log has them signed on and nobody signed them off.", "Two people on the same watch put them at the gate and then not at the gate.", "They were found nine days later four countries away with a civilian pack."],
+    def: ["The order to hold was given by somebody who was already dead when they gave it.", "They carried a wounded chunin out and the log has no column for that.", "The rotation had them on watch forty hours without relief and the tower knew."],
+    guilty: "\"I was not going to die for a hill the map does not even name.\"",
+    clean: "\"I went where the fighting was. Nobody wrote it down because nobody was left to write it down.\"" },
+  { id: "armoury", n: "Theft from the village armoury", sev: 2, ranks: ["Academy Student", "Genin", "Chunin", "Special Jonin"],
+    line: "took sealed equipment out of the armoury and sold it",
+    pros: ["The quartermaster's count is short and their seal is on the last entry.", "Two of the missing blades turned up on a market stall in the next country with the village mark filed off.", "They paid off eleven months of family debt in one afternoon."],
+    def: ["The quartermaster's count has been short for six years and three other people have keys.", "They were the one who reported the shortfall.", "The blades on the stall were a batch the village decommissioned and sold itself."],
+    guilty: "\"You do not pay us enough to feed anybody. Take the rank, I have had it since I was twelve.\"",
+    clean: "\"I reported it. I am standing here because I reported it.\"" },
+  { id: "roster", n: "Selling a mission roster across a border", sev: 7, ranks: ["Chunin", "Special Jonin", "Jonin", "Jonin Commander"],
+    line: "sold the movements of their own village to a rival one",
+    pros: ["The ambush was waiting at a crossing only four people knew the squad would use.", "Their accounts hold a payment in a foreign denomination the same week.", "A courier was taken with a list in their handwriting."],
+    def: ["The crossing was in a standing order any chunin could read.", "The payment was a settlement from their late father's estate, filed with the tower.", "The handwriting comparison was made by somebody who wanted their post."],
+    guilty: "\"Four squads. I know what four squads is. I also know what my sister's treatment costs.\"",
+    clean: "\"Somebody sold that roster and it was not me, and when you find them I would like to be in the room.\"" },
+  { id: "comrade", n: "Killing a comrade in the field", sev: 8, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin", "ANBU"],
+    line: "killed one of their own squad and reported it as enemy action",
+    pros: ["The wound is from a blade issued to their own squad, at an angle that means it came from behind.", "The two of them had been pulled apart twice in the mess in one month.", "They came back with the body and no explanation anybody has been able to follow twice."],
+    def: ["The squad was fighting inside a mist jutsu and could not see their own hands.", "The blade pattern is standard issue in three villages, not one.", "They carried the body eleven miles rather than leave it, which is not what a murderer does."],
+    guilty: "\"They were going to file on me. You would have had me in this room either way.\"",
+    clean: "\"I have carried people out before. This is the first time anybody has called it a murder.\"" },
+  { id: "forbidden", n: "Use of a forbidden technique on a civilian", sev: 7, ranks: ["Chunin", "Special Jonin", "Jonin", "ANBU"],
+    line: "used a technique off the forbidden scroll on somebody with no training and no part in it",
+    pros: ["The coroner's note uses a word the village has not had to write down since the last war.", "Four people in the street describe the same seal sequence and none of them are shinobi.", "The scroll's seal was broken and re-set badly."],
+    def: ["The technique described does not exist in any scroll the village holds.", "They were the one who stopped it and the witnesses cannot tell two shinobi apart.", "The coroner has since withdrawn the note."],
+    guilty: "\"They saw my face. You would rather I let somebody who saw my face walk home?\"",
+    clean: "\"I stopped it. Ask the four people in the street what the person who stopped it looked like.\"" },
+  { id: "writ", n: "Interrogation past the writ", sev: 6, ranks: ["ANBU", "Jonin", "Special Jonin"],
+    line: "kept going in an interrogation room long after the writ had run out",
+    pros: ["The prisoner died on the third day and the writ was signed for one.", "The room's own log is missing the hours everybody remembers being there.", "A second interrogator asked to be reassigned and put the reason in writing."],
+    def: ["The writ was extended verbally by an officer who has since been killed.", "The prisoner was already dying when they were handed over.", "The log is missing because the department shreds logs, which is department policy."],
+    guilty: "\"It worked. You are all standing here because it worked. Write that down too.\"",
+    clean: "\"I asked for the extension in front of two people. One of them is dead and one of them is you.\"" },
+  { id: "coward", n: "Refusing an order under fire", sev: 4, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "would not move when they were told to move, and people died where they were standing",
+    pros: ["The squad went forward and they did not, and four of the squad did not come back.", "Their commanding officer gave the order three times on an open channel.", "They were found in a culvert two hours later without a mark on them."],
+    def: ["The order was to charge a fortified line with six people and no cover.", "They pulled two wounded out of that culvert, which is why they were in it.", "The officer who gave the order has given that order before, with the same result."],
+    guilty: "\"I was not going to walk into that. I am still not going to, and you can hang me for it.\"",
+    clean: "\"I was carrying somebody. You can ask them, they are outside.\"" },
+  { id: "smuggle", n: "Smuggling across a closed border", sev: 3, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "ran contraband through a border the tower had closed",
+    pros: ["Three crossings in a month, all of them logged as training runs.", "The customs house in the next country has their description and a nickname for them.", "They are carrying more money than their rank explains."],
+    def: ["The crossings were on a standing supply order the tower itself signed.", "The nickname belongs to somebody a head taller.", "The money is a family inheritance and the paperwork is in the file."],
+    guilty: "\"Medicine. It was medicine, and the tower closed the border on a country that needed it.\"",
+    clean: "\"I have crossed that border on orders eleven times. Somebody has counted three of them.\"" },
+  { id: "human", n: "Experimentation on living subjects", sev: 9, ranks: ["Special Jonin", "Jonin", "ANBU", "Jonin Commander"],
+    line: "kept people alive in a basement in order to find out what would happen to them",
+    pros: ["Eleven missing persons, and eleven files signed out by the same hand.", "What was found under the building is being described to this court by somebody who has stopped sleeping.", "They kept notes. The notes are numbered, and the numbers are people."],
+    def: ["The building was not theirs and the signatures are a department stamp anybody could use.", "The bodies predate their posting by four years.", "The notes are a translation of a captured foreign document, filed as intelligence."],
+    guilty: "\"You will use every page of it within ten years and you will not put my name on any of it.\"",
+    clean: "\"I found that room. I reported that room. Now I am the one standing in the dock for it.\"" },
+  { id: "strike", n: "Striking a superior officer", sev: 2, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "put a superior officer on the floor in front of their own squad",
+    pros: ["Six witnesses, one broken jaw, and an officer who will not look at the bench.", "They have been written up twice before for the same thing.", "They did not stop when the officer went down."],
+    def: ["The officer had just sent a genin cell into a corridor they knew was mined.", "The officer swung first and twenty people saw it.", "They stopped the moment somebody pulled them off, which is not what the report says."],
+    guilty: "\"I would do it again and you know exactly why, because you read the same after-action report I did.\"",
+    clean: "\"They came at me. I put my hands up. Everything after that is somebody else's account.\"" },
+  { id: "bounty", n: "Taking a bounty on your own village's shinobi", sev: 8, ranks: ["Chunin", "Special Jonin", "Jonin", "ANBU"],
+    line: "collected foreign money for the head of somebody from their own gate",
+    pros: ["A bounty station in a neutral country has their mark on a receipt.", "The dead man was on their own roll and they were the last to see him.", "The sum matches a book entry the tower has been reading for a month."],
+    def: ["The mark on the receipt is a standard hunter-nin seal used by four people.", "They brought the body home, which no bounty collector has ever done.", "The book entry is a payment for a legitimate escort contract."],
+    guilty: "\"He was going to turn anyway. I got paid for something that was going to happen for free.\"",
+    clean: "\"I carried him home. Look at the receipt and then look at the transport manifest.\"" },
+  { id: "fund", n: "Embezzling the mission fund", sev: 4, ranks: ["Chunin", "Special Jonin", "Jonin", "Jonin Commander"],
+    line: "took money out of the fund that pays the squads and covered it with paper",
+    pros: ["Nine months of a fund that only ever goes one direction.", "Three missions were paid for that nobody remembers running.", "Their house was rebuilt in a year on a Special Jonin's pay."],
+    def: ["The fund has been run out of the same office by four people and the books were a mess before them.", "The three missions were black and are not in the ledger by design.", "The house was rebuilt by their spouse's family and the deeds say so."],
+    guilty: "\"The fund pays for a tower extension and a garden. I redirected some of it to people who bleed.\"",
+    clean: "\"Audit the four people before me. I am the one who asked for the audit.\"" },
+  { id: "coup", n: "Conspiracy against the seat", sev: 9, ranks: ["Jonin", "ANBU", "Jonin Commander", "Kage"],
+    line: "moved against the seat itself, with other people, in writing",
+    pros: ["Eleven signatures, and theirs is the one at the top of the page.", "Two ANBU squads were moved without an order from the tower, by somebody who could move ANBU squads.", "The night it was meant to happen, they were not where they said they would be."],
+    def: ["The page is a petition for a council vote, which is legal, and eleven people signed a legal thing.", "The squads were moved on a standing counter-intelligence order signed by the previous Kage.", "They were with the bench's own clerk that night, who is willing to say so."],
+    guilty: "\"Somebody was going to. I would rather it was somebody who intended to hand it back.\"",
+    clean: "\"I signed a petition. If a petition is treason then half this room is in the dock with me.\"" },
+  { id: "massacre", n: "A killing inside a clan compound", sev: 9, ranks: ["Jonin", "ANBU", "Chunin", "Special Jonin"],
+    line: "went through a clan's own compound in a night and left it counting",
+    pros: ["The bodies are all from one house and the wounds are all from one hand.", "They were seen leaving through the compound's own gate before dawn.", "They have not denied it once since they were brought in."],
+    def: ["The compound had been feuding with two others for a decade and everybody there was armed.", "The person seen leaving was wearing a mask the clan itself issues.", "They have not denied it because they have not said anything at all."],
+    guilty: "\"You will not like the order that was given to me, and the person who gave it is not standing here.\"",
+    clean: "\"I will not answer that here. Ask the tower what I was doing that night and watch what happens.\"" },
+];
+
+const SENTENCES = [
+  { id: "dismiss", n: "Dismiss the case", sev: 0, d: "No charge to answer. They walk out with the record wiped.", free: true },
+  { id: "acquit", n: "Acquit", sev: 0, d: "Heard, found not proven, and that is on the record too.", free: true },
+  { id: "fine", n: "A fine and a mark on the file", sev: 1, d: "Money and a line in their record that follows them to every posting.", free: true },
+  { id: "strip", n: "Strip them of rank", sev: 2, d: "Back down the roll, publicly, and everybody they trained under knows by evening." },
+  { id: "labour", n: "Two years' hard labour", sev: 3, years: 2, d: "Not the cells. The quarries, the wall, the drainage under the village." },
+  { id: "p5", n: "Five years", sev: 4, years: 5, d: "Long enough that the people they graduated with will be jonin when they come out." },
+  { id: "p10", n: "Ten years", sev: 5, years: 10, d: "Long enough to come out to a village that has rearranged itself without them." },
+  { id: "p25", n: "Twenty-five years", sev: 7, years: 25, d: "A sentence nobody serves all of. They either die inside it or leave through a hole." },
+  { id: "seal", n: "Chakra sealed, then prison", sev: 7, years: 15, d: "Fifteen years, and they come out unable to do the only thing they were ever taught.", seal: true },
+  { id: "blood", n: "The Blood Prison", sev: 8, years: 99, d: "Hozuki Castle. The sentence has no number on it and nobody has ever been released from it by a court.", hard: true },
+  { id: "life", n: "Life, no appeal", sev: 8, years: 99, d: "The cells under the tower until they stop. No appeal means no appeal." },
+  { id: "exile", n: "Exile — struck from the roll", sev: 6, d: "Out of the gate with nothing. They are a missing-nin by nightfall, and they will remember who said it.", exile: true },
+  { id: "death", n: "Execution", sev: 9, d: "Carried out by the village, in the village's name, which from today means partly in yours.", death: true },
+];
+
+/* what the case actually warranted, once you know the truth of it */
+function deservedSev(cs) {
+  if (!cs) return 0;
+  const ch = CHARGES.find((x) => x.id === cs.charge);
+  if (!ch) return 0;
+  if (!cs.truth) return 0;
+  return cl(ch.sev + (cs.aggravated ? 1 : 0) - (cs.mitigated ? 2 : 0), 0, 9);
+}
+const sentenceOf = (id) => SENTENCES.find((x) => x.id === id);
+
+/* ---- the docket ----
+   defendants come off the real register of your village wherever possible, so
+   the person in the dock is somebody who was on the roll last year. */
+function benchRankPool(c, seat) {
+  return (seat.tries || []).filter((r) => r !== "Civilian");
+}
+function buildCase(c, seat) {
+  const b = c.bench;
+  const allowed = benchRankPool(c, seat);
+  const pool = CHARGES.filter((ch) => ch.ranks.some((r) => allowed.includes(r)));
+  const ch = pick(pool);
+  const canRank = ch.ranks.filter((r) => allowed.includes(r));
+  const rank = pick(canRank);
+  /* pull a real person off the roll at that rank if there is one */
+  let who = null;
+  const list = (c.roll && c.roll[c.village]) || [];
+  const onRoll = list.filter((x) => x.rank === rank);
+  if (rank === "Kage") {
+    /* the person in the hat, and only if it is not you — a court does not
+       invent a Kage, and you cannot be hauled in front of your own bench */
+    const k = c.kages && c.kages[c.village];
+    if (k && k.name !== c.name) who = { name: k.name, rank: "Kage", age: namedAge(c, k.named) || rr(38, 66), pw: 92, kage: true, named: k.named || null };
+    else {
+      const rest = seat.tries.filter((r) => r !== "Kage");
+      if (!rest.length) return null;
+      return buildCase(c, { ...seat, tries: rest });
+    }
+  } else if (rank === "ANBU") {
+    who = { name: freshName(c, null), rank: "ANBU", age: rr(19, 38), pw: rr(66, 86), anbu: true };
+  } else if (onRoll.length && roll(72)) {
+    const r = pick(onRoll);
+    who = { name: r.name, rank: r.rank, age: r.age, pw: r.pw, rollId: r.id };
+  }
+  if (!who) who = { name: freshName(c, null), rank, age: rr(14, 44), pw: rr(24, 84) };
+  const truth = roll(62);
+  b.caseNo = (b.caseNo || 0) + 1;
+  return {
+    no: b.caseNo, year: c.year, name: who.name, rank: who.rank, age: who.age, pw: who.pw,
+    rollId: who.rollId || null, kage: !!who.kage, anbu: !!who.anbu, named: who.named || null,
+    charge: ch.id, truth,
+    aggravated: truth && roll(26), mitigated: roll(30),
+    evidence: rr(26, 58),
+    plea: truth ? (roll(28) ? "guilty" : roll(30) ? "silent" : "not guilty") : (roll(14) ? "silent" : "not guilty"),
+    steps: [], facts: [],
+    pressure: buildPressure(c, ch, who),
+    done: false,
+  };
+}
+const PRESSURE_SRC = [
+  { who: "The tower", want: "free", txt: "The tower has let it be known that a conviction here would be inconvenient in a year it cannot afford inconvenience." },
+  { who: "The tower", want: "convict", txt: "The tower wants this one finished and wants it finished publicly." },
+  { who: "The council", want: "free", txt: "Two of the elders have found reasons to be in the corridor outside, which is how the council says things." },
+  { who: "The clans", want: "convict", txt: "The clans have sent somebody to sit at the back with their arms folded, which is the whole message." },
+  { who: "ANBU", want: "free", txt: "ANBU has requested the file be sealed and the request came back before you asked for it." },
+  { who: "The families", want: "convict", txt: "The families of the dead are outside the hall and they have been outside the hall since dawn." },
+  { who: "The daimyo", want: "convict", txt: "A clerk of the daimyo is taking notes at the side and not pretending otherwise." },
+  { who: "Nobody", want: null, txt: "Nobody has leaned on this one. It is you, the file, and whoever is in the dock." },
+];
+function buildPressure(c, ch, who) {
+  if (roll(34)) return { ...PRESSURE_SRC[PRESSURE_SRC.length - 1], strength: 0 };
+  const src = pick(PRESSURE_SRC.slice(0, PRESSURE_SRC.length - 1));
+  return { ...src, strength: rr(8, 26) };
+}
+/* the docket refills every year you hold a seat */
+function benchTick(c, L) {
+  const b = c.bench;
+  if (!b) return;
+  const seat = benchSeat(c);
+  /* ---- the prison register ticks whether or not you still sit ---- */
+  (b.prison || []).forEach((pr) => {
+    if (pr.status !== "serving") return;
+    pr.left -= 1;
+    pr.served = (pr.served || 0) + 1;
+    /* strong people in weak cells */
+    const esc = cl((pr.pw || 40) / 14 - (pr.sealed ? 6 : 0) + (pr.hard ? -3 : 0) + (pr.left > 12 ? 2 : 0), 0, 14);
+    if (roll(esc)) {
+      pr.status = "escaped"; pr.out = c.year;
+      if (pr.named) c.held = (c.held || []).filter((x) => x !== pr.named);
+      b.loose = (b.loose || []).concat([{ name: pr.name, rank: pr.rank, charge: pr.charge, grudge: cl(40 + pr.unjust * 12 + (pr.left || 0), 10, 100), since: c.year, pw: pr.pw }]);
+      P(L, pr.name + " is out of the cells. They did not go through the gate and nobody saw which way they went.", "b");
+      newsItem(c, pr.name + " has escaped custody in " + homeName(c) + ", " + pr.served + " years into a sentence handed down by " + (c.name || "the bench") + ". The hunter-nin have been given the file.", "NOTICES", true);
+      return;
+    }
+    if (pr.age && roll(pr.age > 58 ? 7 : 2)) {
+      pr.status = "died"; pr.out = c.year;
+      P(L, pr.name + " died in the cells, " + pr.served + " years into " + (pr.years >= 99 ? "a life sentence" : pr.years + " years") + ".", "b");
+      return;
+    }
+    if (pr.left <= 0) {
+      pr.status = "released"; pr.out = c.year;
+      if (pr.named) c.held = (c.held || []).filter((x) => x !== pr.named);
+      const bitter = pr.unjust >= 2;
+      if (bitter) b.grudges = (b.grudges || []).concat([{ name: pr.name, rank: pr.rank, why: "served " + pr.served + " years for something they did not do", since: c.year, pw: pr.pw }]);
+      P(L, pr.name + " has finished " + pr.served + " years and walked out of the gate. " + (bitter ? "They did not do it, and they know you know." : "They did not look up."), bitter ? "b" : "n");
+    }
+  });
+  /* somebody you exiled or somebody who got out comes back for you */
+  const hunters = (b.loose || []).concat(b.exiled || []);
+  if (hunters.length && roll(9)) {
+    const h = pick(hunters);
+    b.incoming = { name: h.name, rank: h.rank, pw: h.pw || 60, why: h.why || h.charge || "a sentence you passed", grudge: h.grudge || 60 };
+    P(L, "A message reached you before the person did. " + h.name + " is in the country and is not hiding it.", "b");
+    newsItem(c, "A name struck from " + homeName(c) + "'s roll has been seen inside its borders again. The bench that struck it has been advised to travel with people.", "NOTICES");
+  }
+  if (!seat) return;
+  b.years = (b.years || 0) + 1;
+  /* the docket */
+  const want = cl(1 + Math.floor((b.years || 1) / 3) + (c.war ? 2 : 0), 1, 4);
+  b.docket = (b.docket || []).filter((x) => !x.done && c.year - x.year <= 2);
+  while (b.docket.length < want) { const nc2 = buildCase(c, seat); if (!nc2) break; b.docket.push(nc2); }
+  /* ---- the one that does not come up by accident ----
+     Trying the person in the hat is the whole reason the high bench exists, and
+     leaving it to a one-in-fifty roll on the ordinary docket meant it simply
+     never happened. At the high bench it is its own event, announced, and it
+     only lands once at a time. */
+  if (seat.id === "high" && !b.docket.some((x) => x.rank === "Kage") && (!b.kageTried || c.year - b.kageTried >= 25)) {
+    const k = c.kages && c.kages[c.village];
+    if (k && k.name !== c.name && roll(16)) {
+      const cs = buildCase(c, { ...seat, tries: ["Kage"] });
+      if (cs.rank === "Kage") {
+        b.docket.push(cs);
+        P(L, "A file was put in front of you this morning with the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + "'s name on the front of it. The clerk did not stay in the room.", "e");
+        newsItem(c, "The high bench in " + homeName(c) + " has accepted a charge against the sitting " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + ". No court in any village has done this before and nobody is certain it can be undone.", "THE COURTS", true);
+      }
+    }
+  }
+  if (b.docket.length) P(L, "The clerk has put " + b.docket.length + " case" + (b.docket.length === 1 ? "" : "s") + " on your docket for the year.", "n");
+  /* a bench that is never wrong and a bench that is never lenient both get noticed */
+  if (b.heard >= 5 && b.years % 4 === 0) {
+    if (b.fair >= 74) newsItem(c, "The bench in " + homeName(c) + " has acquired a reputation nobody expected it to: people are asking to be tried there. " + c.name + " has heard " + b.heard + " cases.", "THE COURTS");
+    else if (b.fair <= 26) newsItem(c, "Defence advocates in " + homeName(c) + " have begun asking for cases to be moved away from " + c.name + "'s court. The tower has not answered them.", "THE COURTS");
+  }
 }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
@@ -2562,6 +2843,7 @@ function worldTick(c, L) {
   applyHistoricDeaths(c, L);
   naturalDeaths(c, L);
   summitTick(c, L);
+  benchTick(c, L);
   feudTick(c, L);
   incidentTick(c, L);
   timesTick(c);
@@ -2924,6 +3206,18 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.7", n: "Somebody Has To Decide What Happens To Them", items: [
+    "THE TRIBUNAL. A village runs on law nobody puts in the recruitment posters \u2014 desertion, theft out of the armoury, a jonin who sold a mission roster over a border, an ANBU who did not stop when the writ ran out. Somebody sits and decides, and what they decide stays on a person for the rest of their life. You can be that somebody",
+    "Three seats, each trying people further up the roll than the last. Village Magistrate takes thefts, brawls and genin who walked off a post. The Presiding Judge of the Tribunal takes field officers, special jonin, jonin and whatever ANBU hands up. The Chief Justice of the High Bench takes officers, Jonin Commanders \u2014 and the person in the hat",
+    "The docket fills from the real register of your village. The chunin in the dock was on the Village Roll last year, at that rank, at that age, and when you sentence them they come off it. Fourteen charges, from smuggling through to keeping people alive in a basement to find out what happens to them, each with its own prosecution, its own defence, and its own thing the defendant says \u2014 a different thing depending on whether they did it",
+    "You do not get told whether they did it. You get an evidence meter and six ways to move it: hear the prosecution, hear the defence, question them directly, call a witness, send for the service record, or spend your own standing having ANBU go and actually look. Witnesses lie. Records get sealed by departments rather than by towers. The meter is a reading of the file, not of the truth, and you can convict somebody who walked in innocent and never find out",
+    "Thirteen sentences, from dismissal through fines, stripping of rank, hard labour, terms of two to twenty-five years, chakra sealed before prison, the Blood Prison, life, exile, and execution. The heavy end is not available to a magistrate. Every one of them lands somewhere real",
+    "A prison register that runs on its own time. Sentences tick down year by year. Strong prisoners get out through holes; old ones die inside; the rest finish their term and walk out of the gate, and the ones who did not do it walk out knowing you know. You can pardon or commute anybody you put there, and the tower will ask why",
+    "Exile is not a tidy ending. Somebody struck off the roll is a missing-nin by nightfall, and missing-nin come back. So do escapees. One of them turns up inside your borders, not hiding, and you go and meet them or you do not travel alone again",
+    "Somebody leans on nearly every case. The tower wants it buried, the clans have sent somebody to sit at the back with their arms folded, the families have been outside the hall since dawn. Give them what they want and it pays. Defy them and they learn what kind of bench this is",
+    "Your fairness is tracked against what each case actually warranted, and the village forms an opinion. Sit fairly for long enough and people start asking to be tried in your hall. Sit badly and advocates start asking which day of the week they are listed on. The bench keeps its own record of every ruling you ever passed, by year, by name",
+    "And at the high bench, once a generation, a file lands on your desk with the Kage's name on the front and the clerk does not stay in the room. Convict them and the village has no head, four other villages ask separately what happened in that hall, the succession moves, and the Kage you sentenced comes off the roll \u2014 into a cell, out of the gate, or into the ground",
+  ] },
   { v: "10.6", n: "The Beast Had Somebody Else's Name", items: [
     "You could track down the Nine-Tails and end up fighting a man called Kenji Mori. Anything the game did not explicitly mark as a named character got handed a randomly generated human name, and the raw tailed beast was never marked \u2014 so every hunt put a stranger's name and a person's face on the thing you were there to seal, and the failure line read like you had lost to a jinchuriki. You now fight the beast: Shukaku is Shukaku, titled by its tails, and losing to it reads like losing to it",
     "An enemy village answering your challenge used to send an Akatsuki operative forward. Then another one. Then another, for as long as you kept asking. The champion call fell through to the era's enemy pool, which is a pool of rogues \u2014 missing-nin, Akatsuki, jinchuriki \u2014 so a village at war with you kept putting a criminal organisation's members in front of you as its representatives, and there was no end to them",
@@ -3711,7 +4005,7 @@ function newChar(name, gender, vid, clanName, eraId, otsuEye) {
     sixPaths: false, gates: 0, curse: 0, stats, health: 100, standing: 50, infamy: 0, ryo: rr(4000, 12000),
     jutsu: otsuBonusJutsu.slice(), otsu: otsuChakra, eyePaths: otsuEyePaths,
     titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
-    dutyLog: {}, scouted: 0, summit: null, summitOpen: null,
+    dutyLog: {}, scouted: 0, summit: null, summitOpen: null, bench: null,
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
     sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
@@ -6425,6 +6719,7 @@ export default function ShinobiLife() {
   const [kgName, setKgName] = useState("");
   const [clanKind, setClanKind] = useState("dojutsu");
   const [clanPower, setClanPower] = useState("read");
+  const [benchCase, setBenchCase] = useState(null);
   const [summitPick, setSummitPick] = useState([]);
   const [summitAgenda, setSummitAgenda] = useState("alliance");
   const [quest, setQuest] = useState(null);
@@ -8509,6 +8804,259 @@ export default function ShinobiLife() {
     });
     setModal(null);
   }
+  /* ---------- the bench ---------- */
+  function benchAct(kind, arg) {
+    if (kind === "open") { setModal("bench"); return; }
+    if (kind === "case") { setBenchCase(arg); return; }
+    if (kind === "back") { setBenchCase(null); return; }
+    if (kind === "take") {
+      commit((c, L) => {
+        spend(c);
+        if (!c.bench) c.bench = freshBench();
+        const seat = BENCH_SEATS.find((x) => x.id === arg);
+        if (!seat) return;
+        const b = c.bench;
+        if (c.rank < seat.rank || c.standing < seat.standing || b.heard < seat.heard) {
+          P(L, "They heard you out and then explained, at length, what the seat requires.", "b"); return;
+        }
+        const was = b.seat;
+        b.seat = seat.id;
+        c.standing = cl(c.standing + (seat.id === "high" ? 14 : 8));
+        addTitle(c, seat.n);
+        P(L, was ? "You have moved up to " + seat.court + ". The robes are heavier and so is everything else." : "You have been seated as " + seat.n + ". A clerk hands you a docket and does not wait to see your face.", "e");
+        newsItem(c, c.name + " has been seated as " + seat.n + " in " + homeName(c) + ". Every sentence passed in that hall from today carries their name on it.", "THE COURTS", seat.id === "high");
+        b.docket = (b.docket || []);
+        const want = seat.id === "high" ? 3 : 2;
+        while (b.docket.length < want) { const nc2 = buildCase(c, seat); if (!nc2) break; b.docket.push(nc2); }
+      });
+      return;
+    }
+    if (kind === "leave") {
+      commit((c, L) => {
+        const b = c.bench; if (!b || !b.seat) return;
+        b.seat = null; b.docket = [];
+        P(L, "You handed the robes back. The docket went to somebody who wanted it more, which is not a comfort.", "n");
+      });
+      setBenchCase(null); return;
+    }
+    /* ---- inside a hearing ---- */
+    if (kind === "hear") {
+      const step = arg;
+      commit((c, L) => {
+        const b = c.bench; if (!b) return;
+        const cs = (b.docket || []).find((x) => x.no === benchCase);
+        if (!cs || cs.done || cs.steps.includes(step)) return;
+        const ch = CHARGES.find((x) => x.id === cs.charge);
+        cs.steps.push(step);
+        const t = cs.truth;
+        /* each way of looking at it moves the evidence, and a guilty file moves
+           further under pressure than a clean one, but never reliably enough
+           that you can stop thinking about it */
+        if (step === "pros") {
+          const line = pick(ch.pros);
+          const w = t ? rr(9, 20) : rr(2, 11);
+          cs.evidence = cl(cs.evidence + w);
+          cs.facts.push({ t: "PROSECUTION", txt: line, w });
+        } else if (step === "def") {
+          const line = pick(ch.def);
+          const w = t ? -rr(2, 10) : -rr(9, 21);
+          cs.evidence = cl(cs.evidence + w);
+          cs.facts.push({ t: "DEFENCE", txt: line, w });
+        } else if (step === "ask") {
+          const line = t ? ch.guilty : ch.clean;
+          const w = t ? rr(6, 16) : -rr(6, 16);
+          cs.evidence = cl(cs.evidence + w);
+          cs.facts.push({ t: "THE DEFENDANT", txt: line, w });
+        } else if (step === "wit") {
+          const honest = roll(cl(50 + c.stats.int * 0.5, 20, 88));
+          const w = honest ? (t ? rr(8, 18) : -rr(8, 18)) : (t ? -rr(4, 12) : rr(4, 12));
+          cs.evidence = cl(cs.evidence + w);
+          cs.facts.push({ t: "WITNESS", txt: honest
+            ? pick(["The witness has nothing to gain and says the same thing twice, the same way.",
+                    "The witness is frightened of the room and not of the defendant, which tells you something.",
+                    "The witness answers what is asked, stops, and waits. Nobody coached this one."])
+            : pick(["The witness has an answer ready before the question is finished.",
+                    "The witness keeps looking at the back of the hall between sentences.",
+                    "The witness's account has improved since the written statement, in the places that needed improving."]), w });
+        } else if (step === "file") {
+          const clean2 = !t || roll(35);
+          const w = clean2 ? -rr(4, 12) : rr(4, 14);
+          cs.evidence = cl(cs.evidence + w);
+          cs.facts.push({ t: "THE SERVICE RECORD", txt: clean2
+            ? pick(["Eleven years, no marks, two commendations and one line about arriving late to a funeral.",
+                    "The record is dull in the way a good record is dull.",
+                    "Two officers wrote references without being asked to."])
+            : pick(["There is a sealed page in the file and the seal is the department's, not the tower's.",
+                    "This is the third time. The first two were settled inside the department.",
+                    "A transfer four years ago has no stated reason and the officer who signed it has retired abroad."]), w });
+        } else if (step === "anbu") {
+          if (c.standing < 30) { P(L, "You asked ANBU to verify it and ANBU did not answer.", "b"); cs.steps = cs.steps.filter((x) => x !== "anbu"); return; }
+          c.standing = cl(c.standing - 4);
+          /* the one thing that actually tells you */
+          cs.revealed = true;
+          cs.evidence = cl(t ? rr(72, 92) : rr(8, 28));
+          cs.facts.push({ t: "ANBU VERIFICATION", txt: t
+            ? "They went and looked. It happened, it happened the way the file says, and they will not be putting that in writing."
+            : "They went and looked. It did not happen. Somebody wanted it to have happened, and ANBU is more interested in that than in the defendant.", w: 0 });
+          P(L, "ANBU verified the file. It cost you four points of standing and somebody will remember you asked.", "n");
+        }
+      });
+      return;
+    }
+    if (kind === "rule") {
+      const sid = arg;
+      commit((c, L) => {
+        const b = c.bench; if (!b) return;
+        const cs = (b.docket || []).find((x) => x.no === benchCase);
+        if (!cs || cs.done) return;
+        const sen = sentenceOf(sid); if (!sen) return;
+        const ch = CHARGES.find((x) => x.id === cs.charge);
+        spend(c);
+        cs.done = true; cs.sentence = sid;
+        b.heard = (b.heard || 0) + 1;
+        /* whatever you decided, the village has now had its constitutional crisis
+           for this generation — trying the hat twice in ten years is not a court */
+        if (cs.kage) b.kageTried = c.year;
+        const deserved = deservedSev(cs);
+        const err = Math.abs(sen.sev - deserved);
+        const unjust = sen.sev > deserved ? Math.ceil((sen.sev - deserved) / 3) : 0;
+        /* the record */
+        if (sen.free) b.acquitted = (b.acquitted || 0) + 1; else b.convicted = (b.convicted || 0) + 1;
+        b.fair = cl((b.fair == null ? 50 : b.fair) + (err <= 1 ? rr(3, 7) : err <= 3 ? -rr(1, 4) : -rr(5, 11)));
+        b.fear = cl((b.fear || 0) + (sen.sev >= 7 ? rr(4, 9) : sen.sev >= 4 ? rr(1, 4) : -rr(0, 3)));
+        c.standing = cl(c.standing + (err <= 1 ? rr(2, 6) : -rr(1, 5)));
+        b.precedents = (b.precedents || []).concat([{ y: c.year, txt: cs.name + ", " + cs.rank + ", " + ch.n.toLowerCase() + " — " + sen.n.toLowerCase() + "." }]).slice(-40);
+
+        const who = cs.name + ", " + (cs.rank === "Kage" ? "the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage : cs.rank);
+        /* ---- what the sentence actually does to them ---- */
+        if (sen.death) {
+          b.executed = (b.executed || 0) + 1;
+          removeFromRoll(c, cs, L, "death");
+          P(L, "You passed sentence of death on " + cs.name + ". They were taken out through the side door and the hall did not move until they were gone.", "b");
+          newsItem(c, who + " has been executed in " + homeName(c) + " on a finding of " + ch.n.toLowerCase() + ", handed down by " + c.name + ".", "OBITUARIES", true);
+          if (!cs.truth) {
+            b.wrongDeaths = (b.wrongDeaths || 0) + 1;
+            P(L, "They did not do it. You will find that out in four or five years, the way everybody does.", "b");
+          }
+          if (cs.kage) kageCrisis(c, L, cs, "executed");
+        } else if (sen.exile) {
+          b.exiled = (b.exiled || 0) + 1;
+          removeFromRoll(c, cs, L, "exile");
+          b.exiled2 = (b.exiled2 || []);
+          b.exiledList = (b.exiledList || []).concat([{ name: cs.name, rank: cs.rank, pw: cs.pw, why: ch.n.toLowerCase(), since: c.year, grudge: cl(45 + unjust * 20, 10, 100) }]);
+          P(L, cs.name + " was walked to the gate and struck off the roll in front of it. They did not argue and they did not look back at you.", "b");
+          newsItem(c, who + " has been exiled from " + homeName(c) + " for " + ch.n.toLowerCase() + ". The name goes into the Bingo Book at the bottom page tonight.", "BINGO BOOK", true);
+          if (cs.kage) kageCrisis(c, L, cs, "exiled");
+        } else if (sen.years) {
+          removeFromRoll(c, cs, L, "prison");
+          b.prison = (b.prison || []).concat([{
+            name: cs.name, rank: cs.rank, age: cs.age, pw: cs.pw, charge: ch.n, named: cs.named || null,
+            years: sen.years, left: sen.years, served: 0, since: c.year, status: "serving",
+            sealed: !!sen.seal, hard: !!sen.hard, unjust, sentence: sen.n,
+          }]);
+          P(L, "You sentenced " + cs.name + " to " + sen.n.toLowerCase() + ". The clerk wrote it down before you had finished saying it.", "n");
+          if (sen.hard || sen.years >= 25 || cs.rank === "Kage" || cs.rank === "Jonin Commander") {
+            newsItem(c, who + " has been sentenced to " + sen.n.toLowerCase() + " in " + homeName(c) + " for " + ch.n.toLowerCase() + ". " + c.name + " presided.", "THE COURTS", true);
+          }
+          if (cs.kage) kageCrisis(c, L, cs, "imprisoned");
+        } else if (sen.id === "strip") {
+          demoteOnRoll(c, cs);
+          P(L, "You took " + cs.name + "'s rank off them in open court. They stood the whole time.", "n");
+        } else {
+          P(L, sen.id === "fine"
+            ? "A fine, and a line in the file that will be read by every officer they ever serve under."
+            : "You found it not proven. " + cs.name + " walked out of the hall the same rank they walked in as.", "n");
+          if (cs.kage) {
+            P(L, "You found against the charge and the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + " walked out of your hall still wearing the hat. Half the village thinks you were bought. The other half thinks you were right, and neither half will say so out loud.", "n");
+            newsItem(c, "The high bench in " + homeName(c) + " has cleared the sitting " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + ". The people who brought the charge have not been seen since the finding.", "THE COURTS", true);
+          }
+          if (cs.truth && sen.free) {
+            b.walked = (b.walked || 0) + 1;
+            if (roll(45)) newsItem(c, "A finding of not proven in " + homeName(c) + " has been met the way those findings usually are. The families were in the hall.", "THE COURTS");
+          }
+        }
+        /* pressure answered or defied */
+        const pr = cs.pressure;
+        if (pr && pr.want) {
+          const gave = (pr.want === "convict") === !sen.free;
+          if (gave) { c.standing = cl(c.standing + Math.round(pr.strength / 3)); }
+          else {
+            c.standing = cl(c.standing - Math.round(pr.strength / 2));
+            b.defied = (b.defied || 0) + 1;
+            P(L, pr.who + " wanted the other outcome. " + pr.who + " now knows what kind of bench this is.", pr.want === "free" ? "g" : "n");
+          }
+        }
+        if (b.heard === 10) addTitle(c, "Ten years on the bench");
+        if (b.heard >= 25 && b.fair >= 70) addTitle(c, "The fair hand");
+        if (b.executed >= 5) addTitle(c, "The hanging judge");
+      });
+      setBenchCase(null);
+      return;
+    }
+    if (kind === "pardon" || kind === "commute") {
+      commit((c, L) => {
+        const b = c.bench; if (!b) return;
+        const pr = (b.prison || [])[arg]; if (!pr || pr.status !== "serving") return;
+        spend(c);
+        if (kind === "pardon") {
+          pr.status = "pardoned"; pr.out = c.year;
+          if (pr.named) c.held = (c.held || []).filter((x) => x !== pr.named);
+          c.standing = cl(c.standing - rr(2, 6));
+          P(L, "You pardoned " + pr.name + " with " + Math.max(0, pr.left) + " years still to run. Somebody in the tower has already asked why.", "g");
+          newsItem(c, pr.name + " has been pardoned in " + homeName(c) + " by " + c.name + ", " + pr.served + " years into " + pr.sentence.toLowerCase() + ".", "THE COURTS");
+        } else {
+          const cut = Math.max(1, Math.round(pr.left / 2));
+          pr.left -= cut;
+          P(L, "You cut " + cut + " years off " + pr.name + "'s sentence. It is not mercy exactly and they will not take it as mercy.", "n");
+        }
+      });
+      return;
+    }
+    if (kind === "face") {
+      const b = c.bench; const inc = b && b.incoming;
+      if (!inc) return;
+      setModal(null);
+      setTimeout(() => startBattle("missing", { type: "bench", name: inc.name }, 0,
+        inc.name + " was waiting where you were going to be, which means somebody told them where you were going to be.",
+        { name: inc.name, title: "Sentenced by you" }), 120);
+      return;
+    }
+  }
+  function freshBench() {
+    return { seat: null, years: 0, heard: 0, convicted: 0, acquitted: 0, executed: 0, exiled: 0,
+             fair: 50, fear: 0, docket: [], prison: [], precedents: [], caseNo: 0 };
+  }
+  /* somebody sentenced is off the roll — the register should not still be promoting them */
+  function removeFromRoll(c, cs, L, how) {
+    if (cs.rollId && c.roll && c.roll[c.village]) {
+      c.roll[c.village] = c.roll[c.village].filter((x) => x.id !== cs.rollId);
+    }
+    /* a named character does not keep standing on the roll with a title while
+       they are in a cell, in exile, or in the ground */
+    if (cs.named) {
+      if (how === "death") killNamed(c, cs.named, L, "was executed by order of " + (c.name || "the court") + "'s bench");
+      else c.held = (c.held || []).concat([cs.named]);
+    }
+  }
+  function demoteOnRoll(c, cs) {
+    if (!cs.rollId || !c.roll || !c.roll[c.village]) return;
+    const r = c.roll[c.village].find((x) => x.id === cs.rollId);
+    if (!r) return;
+    const i = ROLL_RANKS.indexOf(r.rank);
+    if (i > 0) r.rank = ROLL_RANKS[i - 1];
+  }
+  /* sentencing the person in the hat is not a normal day at work */
+  function kageCrisis(c, L, cs, what) {
+    c.standing = cl(c.standing - rr(6, 16));
+    c.bench.crisis = (c.bench.crisis || 0) + 1;
+    P(L, "You have just " + what + " the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + ". There is no procedure for the next part and everybody in the hall knows it.", "e");
+    newsItem(c, "A SITTING KAGE HAS BEEN " + what.toUpperCase() + " BY THEIR OWN VILLAGE'S COURT. " + homeName(c) + " has no head and four other villages have asked, separately, what exactly happened in that hall.", "THE COURTS", true);
+    if (c.kages && c.kages[c.village] && c.kages[c.village].name === cs.name) {
+      const nx = c.line && c.line.length ? c.line.shift() : null;
+      c.kages[c.village] = nx || { name: freshName(c, null), title: "Acting " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage };
+    }
+  }
+
   function courtAct(kind, arg) {
     commit((c, L) => {
       spend(c);
@@ -9924,6 +10472,27 @@ export default function ShinobiLife() {
               c.wonWarpath = true;
               newsItem(c, "THE FIVE GREAT NATIONS ARE GONE. There is no council left to convene, no Kage left to summon it, and no army left to send. History does not have a next chapter written for this.", "THE COURTS", true);
             }
+          }
+        }
+      }
+      if (ctx.type === "bench") {
+        spend(c);
+        const bn = c.bench;
+        if (bn) {
+          const nm = ctx.name;
+          if (b.win) {
+            c.kills += 1; c.wins += 1; c.standing = cl(c.standing + rr(4, 10));
+            bn.loose = (bn.loose || []).filter((x) => x.name !== nm);
+            bn.exiledList = (bn.exiledList || []).filter((x) => x.name !== nm);
+            bn.incoming = null;
+            P(L, nm + " came for the bench and the bench held. Whatever they thought was owed them is settled now, in the way these things settle.", "e");
+            newsItem(c, nm + ", struck from " + homeName(c) + "'s roll by its own court, was killed inside its borders by " + c.name + ".", "OBITUARIES");
+          } else {
+            const d = rr(22, 48); c.health = cl(c.health - d);
+            bn.incoming = null;
+            c.standing = cl(c.standing - rr(3, 8));
+            P(L, nm + " left you alive on purpose, which is worse than the alternative and is meant to be. \u2212" + d + " health.", "b");
+            if (c.health <= 0) die(c, L, "was killed by " + nm + ", who had been sentenced in their own court");
           }
         }
       }
@@ -11785,6 +12354,15 @@ export default function ShinobiLife() {
       sub: c.akatsuki ? "Partnered with " + c.akatsuki.partner : canJoinAkatsuki(c) ? "They are looking at you" : "Ten rings, ten fingers",
       onClick: () => setModal("akatsuki"), disabled: c.actions < 1,
       badge: c.akatsuki ? c.akatsuki.ring : canJoinAkatsuki(c) ? "!" : null },
+    /* the hall behind the mission desk, where what happens to people is decided */
+    (c.rank >= 3 || (c.bench && (c.bench.seat || (c.bench.prison || []).length))) && !eraOf(c).hideVillages && villageExists(c, c.village) && {
+      id: "bench", grp: "do", icon: "rule", tone: T.gold,
+      label: c.bench && c.bench.seat ? (BENCH_SEATS.find((x) => x.id === c.bench.seat) || {}).n : "The Tribunal",
+      sub: c.bench && c.bench.seat
+        ? ((c.bench.docket || []).filter((x) => !x.done).length || "no") + " case" + ((c.bench.docket || []).filter((x) => !x.done).length === 1 ? "" : "s") + " listed \u00b7 " + (c.bench.heard || 0) + " heard"
+        : "Somebody decides what happens to them",
+      onClick: () => benchAct("open"), disabled: c.actions < 1,
+      badge: c.bench && c.bench.incoming ? "!" : (c.bench && c.bench.seat && (c.bench.docket || []).filter((x) => !x.done).length) || null },
     (c.rank >= 3 || c.daimyoSeat) && { id: "court", grp: "do", icon: "rule", tone: T.gold, label: c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Court", sub: c.daimyoSeat ? "You rule the country \u00b7 unrest " + (c.daimyoSeat.unrest || 20) : "Favour " + ((c.court && c.court.favour) || 0) + " \u00b7 the seat above the village", onClick: () => setModal("court"), disabled: c.actions < 1, badge: c.daimyoSeat ? "DAIMYO" : null },
     { id: "villageroll", grp: "know", icon: "path", label: "The Village Roll", sub: "Who holds which rank, and who is strongest", onClick: () => setModal("villageroll") },
     { id: "records", grp: "know", icon: "records", label: "The Records", sub: "Kage lines, eras, the world", onClick: () => setModal("records") },
@@ -15027,6 +15605,222 @@ export default function ShinobiLife() {
             ))}
             <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">THE WAY OUT</div>
             <Row label="Take the ring off" sub="Nobody leaves and nobody says that out loud. Your partner is the one they will send." right="Power check" onClick={() => akatsukiAct("leave")} disabled={c.actions < 1} tone={T.blood} />
+          </Modal>
+        );
+      })()}
+
+      {modal === "bench" && (() => {
+        const b = c.bench || { seat: null, docket: [], prison: [], fair: 50, heard: 0 };
+        const seat = benchSeat(c);
+        const cs = seat && benchCase != null ? (b.docket || []).find((x) => x.no === benchCase && !x.done) : null;
+        const ch = cs ? CHARGES.find((x) => x.id === cs.charge) : null;
+        const serving = (b.prison || []).filter((x) => x.status === "serving");
+        const past = (b.prison || []).filter((x) => x.status !== "serving");
+        const STEPS = [
+          { id: "pros", n: "Hear the prosecution", d: "What the village says happened, and what it has to show for saying it." },
+          { id: "def", n: "Hear the defence", d: "The other account. Sometimes there is one." },
+          { id: "ask", n: "Question the defendant", d: "Put it to them directly and watch what they do with it." },
+          { id: "wit", n: "Call a witness", d: "Somebody who was there, or somebody who has been told they were there." },
+          { id: "file", n: "Send for the service record", d: "Everything the village already wrote down about this person." },
+          { id: "anbu", n: "Have ANBU verify it", d: "They will actually go and look. It costs you standing and it is remembered." },
+        ];
+        /* what the evidence is telling you, without telling you the answer */
+        const ev = cs ? cs.evidence : 0;
+        const read = ev >= 80 ? "The file is overwhelming." : ev >= 62 ? "The weight of it is against them."
+          : ev >= 45 ? "It could go either way and everybody in the hall knows it."
+          : ev >= 26 ? "There is not much here." : "There is almost nothing here at all.";
+        const evCol = ev >= 62 ? T.blood : ev >= 45 ? T.gold : T.good;
+
+        return (
+          <Modal wide title={seat ? seat.n.toUpperCase() : "THE TRIBUNAL"} accent={T.gold} onClose={() => { setBenchCase(null); setModal(null); }}>
+            {/* ------------- a hearing in progress ------------- */}
+            {cs && ch ? (
+              <>
+                <button onClick={() => benchAct("back")} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }}
+                  className="px-3 py-1.5 text-xs font-bold mb-3">{"← the docket"}</button>
+                <div style={{ ...glass(T.gold) }} className="p-3.5 mb-3">
+                  <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold">CASE {cs.no} {"·"} {cs.year} AH</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.1 }} className="font-bold mt-1">{ch.n}</div>
+                  <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 6 }}>
+                    The village says {cs.name} {ch.line}.
+                  </div>
+                </div>
+
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">THE DOCK</div>
+                <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 12 }} className="p-3 mb-3">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{cs.name}</span>
+                    <span style={{ color: cs.rank === "Kage" ? T.blood : T.gold, fontSize: 10, letterSpacing: ".14em", fontWeight: 800 }}>{cs.rank.toUpperCase()}</span>
+                  </div>
+                  <div style={{ color: T.dim, fontSize: 11 }} className="mt-1">
+                    Age {cs.age} {"·"} power {cs.pw} {"·"} pleads {cs.plea === "guilty" ? "guilty" : cs.plea === "silent" ? "nothing at all" : "not guilty"}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mb-1">
+                  <span style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">THE EVIDENCE</span>
+                  <span style={{ color: evCol, fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ev}</span>
+                </div>
+                <span style={{ display: "block", height: 5, background: "rgba(0,0,0,.5)", borderRadius: 99 }} className="mb-1">
+                  <span style={{ display: "block", width: ev + "%", height: "100%", background: evCol, borderRadius: 99 }} />
+                </span>
+                <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }} className="mb-3">{read}{cs.revealed ? " ANBU has been and looked." : ""}</div>
+
+                {cs.pressure && (
+                  <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid " + T.line, borderLeft: "3px solid " + (cs.pressure.want ? T.blood : T.line), borderRadius: 10 }} className="p-3 mb-3">
+                    <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">FROM OUTSIDE THE HALL</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{cs.pressure.txt}</div>
+                  </div>
+                )}
+
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">THE HEARING</div>
+                {STEPS.map((st) => (
+                  <Row key={st.id} label={st.n} sub={st.d}
+                    right={cs.steps.includes(st.id) ? "Heard" : "Hear"}
+                    onClick={() => benchAct("hear", st.id)}
+                    disabled={cs.steps.includes(st.id) || (st.id === "anbu" && c.standing < 30)} />
+                ))}
+
+                {cs.facts.length > 0 && (
+                  <>
+                    <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">WHAT THE HALL HAS HEARD</div>
+                    {cs.facts.map((f, i) => (
+                      <div key={i} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-2.5 mb-2">
+                        <div className="flex justify-between items-baseline gap-2">
+                          <span style={{ color: f.t === "DEFENCE" ? T.good : f.t === "PROSECUTION" ? T.blood : T.gold, letterSpacing: ".16em", fontSize: 9 }} className="font-bold">{f.t}</span>
+                          {f.w ? <span style={{ color: f.w > 0 ? T.blood : T.good, fontSize: 10, fontWeight: 700 }}>{f.w > 0 ? "+" : ""}{f.w}</span> : null}
+                        </div>
+                        <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 3 }}>{f.txt}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-1 mt-4">THE SENTENCE</div>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  Nobody can make you pass the right one. The record keeps both what you did and what it was worth.
+                </div>
+                {SENTENCES.map((sn) => {
+                  /* the high bench can end anybody; the lower ones cannot */
+                  const heavy = sn.sev >= 7 || sn.death || sn.exile;
+                  const locked = (heavy && seat.id === "magistrate") || (sn.death && seat.id !== "high" && cs.rank !== "Genin" && sn.sev >= 9 && seat.id === "magistrate");
+                  return (
+                    <Row key={sn.id} label={sn.n} sub={sn.d}
+                      right={locked ? "Not your bench" : sn.years ? (sn.years >= 99 ? "Life" : sn.years + "y") : "Rule"}
+                      onClick={() => benchAct("rule", sn.id)} disabled={locked || c.actions < 1}
+                      tone={sn.death ? T.blood : sn.free ? T.good : null} />
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                {/* ------------- the bench itself ------------- */}
+                {seat ? (
+                  <div style={{ ...glass(T.gold) }} className="p-3.5 mb-3">
+                    <div style={{ fontFamily: SERIF, fontSize: 19, lineHeight: 1.1 }} className="font-bold">{seat.n}</div>
+                    <div style={{ color: T.dim, fontSize: 11.5, marginTop: 3 }}>{seat.d}</div>
+                    <div className="flex flex-wrap gap-3 mt-3" style={{ fontSize: 10, letterSpacing: ".14em", color: T.dim }}>
+                      <span>HEARD <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{b.heard || 0}</b></span>
+                      <span>CONVICTED <b style={{ color: T.blood, letterSpacing: 0, fontSize: 12 }}>{b.convicted || 0}</b></span>
+                      <span>ACQUITTED <b style={{ color: T.good, letterSpacing: 0, fontSize: 12 }}>{b.acquitted || 0}</b></span>
+                      <span>IN THE CELLS <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{serving.length}</b></span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <span style={{ color: T.dim, fontSize: 10, letterSpacing: ".14em" }}>FAIRNESS</span>
+                      <span style={{ flex: 1, height: 4, background: "rgba(0,0,0,.5)", borderRadius: 99 }}>
+                        <span style={{ display: "block", width: cl(b.fair == null ? 50 : b.fair) + "%", height: "100%", background: (b.fair || 50) >= 62 ? T.good : (b.fair || 50) >= 38 ? T.gold : T.blood, borderRadius: 99 }} />
+                      </span>
+                      <span style={{ color: T.dim, fontSize: 10 }}>{cl(b.fair == null ? 50 : b.fair)}</span>
+                    </div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginTop: 6 }}>
+                      {(b.fair || 50) >= 74 ? "They say you read the file before you read the room."
+                        : (b.fair || 50) >= 50 ? "You are thought of as a bench that can be argued in front of."
+                        : (b.fair || 50) >= 30 ? "Advocates have started asking which day of the week they are listed on."
+                        : "People in this village have stopped expecting the hall to be about what happened."}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">
+                    Somebody decides what happens to a chunin who walked off a post, a jonin who sold a roster, an ANBU who did not stop.
+                    It is not the Kage and it is not the council. It is whoever will sit in the hall and hear it.
+                  </p>
+                )}
+
+                {b.incoming && (
+                  <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.blood + "66", borderRadius: 12 }} className="p-3 mb-3">
+                    <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold mb-1">SOMEBODY HAS COME BACK</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>
+                      {b.incoming.name} is in the country. {b.incoming.why ? "They were " + b.incoming.why + " and they were sentenced by you." : "You sentenced them."} They are not hiding.
+                    </div>
+                    <Row label="Go and meet them" sub="They will not stop coming and the village cannot post a guard on you for ever." right="Fight" onClick={() => benchAct("face")} tone={T.blood} />
+                  </div>
+                )}
+
+                {/* the docket */}
+                {seat && (
+                  <>
+                    <div style={{ color: T.gold, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-3">THE DOCKET</div>
+                    {(b.docket || []).filter((x) => !x.done).length === 0 && (
+                      <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Nothing listed. The clerk will have more by next year; they always do.</div>
+                    )}
+                    {(b.docket || []).filter((x) => !x.done).map((x) => {
+                      const ch2 = CHARGES.find((y) => y.id === x.charge);
+                      return <Row key={x.no} label={x.name + " · " + x.rank}
+                        sub={ch2.n + (x.steps.length ? " · part heard" : "") + (x.pressure && x.pressure.want ? " · somebody is watching this one" : "")}
+                        right={"Case " + x.no} onClick={() => benchAct("case", x.no)} disabled={c.actions < 1} tone={x.rank === "Kage" ? T.blood : null} />;
+                    })}
+                  </>
+                )}
+
+                {/* taking a seat */}
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE SEATS</div>
+                {BENCH_SEATS.map((sq) => {
+                  const held = seat && seat.id === sq.id;
+                  const idx = BENCH_SEATS.indexOf(sq);
+                  const have = seat ? BENCH_SEATS.indexOf(seat) : -1;
+                  const ok = c.rank >= sq.rank && c.standing >= sq.standing && (b.heard || 0) >= sq.heard;
+                  return <Row key={sq.id} label={sq.n}
+                    sub={sq.d + " — needs " + rankLabel(c, sq.rank) + ", standing " + sq.standing + (sq.heard ? ", " + sq.heard + " cases heard" : "")}
+                    right={held ? "Yours" : idx <= have ? "Behind you" : ok ? "Take it" : "Locked"}
+                    onClick={() => benchAct("take", sq.id)}
+                    disabled={held || idx <= have || !ok || c.actions < 1}
+                    tone={ok && !held && idx > have ? T.gold : null} />;
+                })}
+                {seat && <Row label="Give up the bench" sub="Hand the robes back. The docket goes to somebody else and so does the blame." right="Stand down" onClick={() => benchAct("leave")} />}
+
+                {/* the register */}
+                {(serving.length > 0 || past.length > 0) && (
+                  <>
+                    <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE PRISON REGISTER</div>
+                    {serving.map((pr, i) => (
+                      <Row key={"s" + i} label={pr.name + " · " + pr.rank}
+                        sub={pr.charge + " · " + pr.sentence.toLowerCase() + " · " + pr.served + " served" + (pr.years >= 99 ? "" : ", " + Math.max(0, pr.left) + " to run") + (pr.sealed ? " · chakra sealed" : "") + (pr.unjust ? " · they did not do it" : "")}
+                        right={seat ? "Pardon" : ""} onClick={() => benchAct("pardon", (b.prison || []).indexOf(pr))}
+                        disabled={!seat || c.actions < 1} tone={pr.unjust ? T.blood : null} />
+                    ))}
+                    {past.slice(-8).reverse().map((pr, i) => (
+                      <Row key={"p" + i} label={pr.name + " · " + pr.rank}
+                        sub={pr.charge + " · " + (pr.status === "escaped" ? "escaped in " + pr.out : pr.status === "died" ? "died inside in " + pr.out : pr.status === "pardoned" ? "pardoned in " + pr.out : "released in " + pr.out)}
+                        right="" disabled />
+                    ))}
+                  </>
+                )}
+
+                {/* what you have already decided */}
+                {(b.precedents || []).length > 0 && (
+                  <>
+                    <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE RECORD OF THIS BENCH</div>
+                    <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3">
+                      {(b.precedents || []).slice(-12).reverse().map((pd, i) => (
+                        <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginBottom: 5 }}>
+                          <span style={{ color: T.dim, fontSize: 10.5 }}>{pd.y} AH{"  "}</span>{pd.txt}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </Modal>
         );
       })()}
