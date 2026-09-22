@@ -1648,7 +1648,176 @@ function mindDelve(c, L, cs) {
   return [];
 }
 
-const ALL_CHARGES = CHARGES.concat(CHARGES_MORE).concat(CHARGES_EXTREME);
+/* ---- the third drawer of the ordinary docket ----
+   Twenty-four charges was enough that a long career on the bench started to
+   hear the same five cases in rotation. These are the rest of what a village
+   actually puts in front of a court. */
+const CHARGES_MORE2 = [
+  { id: "exams", n: "Cheating the Chunin Exams", sev: 2, ranks: ["Genin", "Chunin"],
+    line: "passed the written paper with answers that were not theirs to have",
+    pros: ["Their paper matches the proctor's key down to a crossed-out mistake the key also has.", "A proctor has been dismissed and named them in the dismissal hearing.", "They finished the paper in eleven minutes and cannot explain question four now."],
+    def: ["The first test is designed to be cheated on, and the proctors say so in the briefing.", "The proctor who named them was dismissed for lying and has named six people since.", "They cannot explain question four because question four was about a technique they have never seen, which is the point."],
+    guilty: "\"Everybody in that room was cheating. I was just the one who was good at it.\"",
+    clean: "\"I sat that paper honestly and failed it the year before. Ask to see that one.\"" },
+  { id: "answers", n: "Selling Academy exam answers", sev: 3, ranks: ["Chunin", "Special Jonin"],
+    line: "sold the graduation exam to children whose parents could afford it",
+    pros: ["Nine graduates this year cannot perform the clone they were graded on.", "Their instructor's key has been copied and the copy is in a family's house.", "Their account took nine deposits in the week before the exam."],
+    def: ["The key is kept in a drawer that four instructors and a cleaner open daily.", "The nine graduates have since been retested and six of them passed.", "The deposits are private tutoring fees, which are legal and declared."],
+    guilty: "\"Those children were going to be killed on their first C-rank regardless. I made some money off a system that was already doing that.\"",
+    clean: "\"I tutor. I have tutored for eight years. Half the jonin in this village learned the clone from me for money.\"" },
+  { id: "drunk", n: "Drunk on watch", sev: 3, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "was on the wall that night and in no condition to see anything come over it",
+    pros: ["The relief found them asleep with a bottle, and the wall section they held is where the intruders came in.", "Two civilians saw them in a bar with forty minutes of their shift left.", "They failed the medics' check an hour after being relieved."],
+    def: ["The intruders came in over a section two hundred yards from theirs.", "The bar is where the rotation hands over and they were meeting their relief.", "The medics' check was run on the wrong person and the log has the wrong name."],
+    guilty: "\"Eleven nights straight. You try eleven nights on that wall without something to get you through the twelfth.\"",
+    clean: "\"I was tired. I was not drunk. Check the wall log for who was actually on the north section.\"" },
+  { id: "duel", n: "An unsanctioned duel", sev: 4, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "settled a grievance with another shinobi by fighting them, and the other one did not get up",
+    pros: ["The other party is in the hospital with an injury the medics describe as deliberate.", "It was arranged in advance, in writing, and the writing survives.", "Four people watched and nobody stopped it, because they were told not to."],
+    def: ["The other party arranged it, in writing, and the writing is in their hand.", "It was a spar that went wrong, and spars go wrong every week in this village.", "The other party is awake and has refused to give evidence against them."],
+    guilty: "\"He knew what he was saying about my brother. He knew what would happen when he said it.\"",
+    clean: "\"We spar every week. He slipped. I carried him to the hospital. That is the whole of it.\"" },
+  { id: "clansecret", n: "Leaking a clan's secret technique", sev: 5, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "taught a technique their clan has held for three hundred years to somebody outside it",
+    pros: ["A shinobi of another house performed it in the exams, and nobody outside the clan could have taught them.", "They were paid, and the payment is in the other house's accounts.", "The clan elders have brought it themselves, which they have never done before."],
+    def: ["The technique was published in a war-era manual the tower itself released.", "The other shinobi's mother was of the clan and taught her own child, which clan law permits.", "The elders brought it because the defendant voted against them in council."],
+    guilty: "\"A technique that can save lives sat in a locked room for three hundred years. I unlocked the room.\"",
+    clean: "\"That technique is in a manual in the library. Go and get it. It is on the third shelf.\"" },
+  { id: "heir", n: "Abducting a clan heir", sev: 7, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "took a clan's heir out of the compound at night, and the heir has not been fully accounted for since",
+    pros: ["The heir was found at the border with them, sedated, heading toward a country that wants that bloodline.", "The compound's guard was drugged with something they had signed out.", "They had been in that country three times that year on no mission anybody can find."],
+    def: ["The heir went willingly, and says so, and is sixteen.", "The sedative was issued to half their squad for a mission that week.", "The three trips were black missions and the tower will not confirm them in a court."],
+    guilty: "\"Somebody offered me enough to buy my mother out of debt twice over. The child was not going to be hurt.\"",
+    clean: "\"She asked me to take her out. She is sixteen and she asked me, and I was trying to talk her out of it at that border.\"" },
+  { id: "forgery", n: "Forging the Kage's seal", sev: 6, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "put the Kage's seal on an order the Kage never gave",
+    pros: ["An order moved a squad, and the tower has no record of issuing it.", "The seal impression has a flaw the real seal does not have.", "A seal-carver in the lower market has identified them as a customer."],
+    def: ["Orders under the Kage's seal are applied by six clerks and one of them has gone missing.", "The flaw is in the wax, not the seal, and the wax is the tower's own.", "The seal-carver has identified four other people as customers this month."],
+    guilty: "\"The order was right. Ask the squad whether it was right. I just did not have time to wait for the tower to agree.\"",
+    clean: "\"I have never been inside the room where that seal is kept. Check who has.\"" },
+  { id: "contract", n: "Stealing a summoning contract", sev: 5, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "took a summoning scroll that was not theirs and signed it in their own blood",
+    pros: ["The scroll went missing from a dead jonin's effects and turned up with their name freshly on it.", "The summons have been seen answering them and the summons are not happy about it.", "The family of the dead jonin has brought the charge."],
+    def: ["The dead jonin left it to them in a letter, and the letter is in the file.", "Summoning contracts choose, and this one chose.", "The family wanted to sell the scroll and had no right to."],
+    guilty: "\"He was dead. The scroll was going to go into a vault. The toads deserved somebody who was going to use them.\"",
+    clean: "\"He gave it to me. He was my sensei. Read his letter.\"" },
+  { id: "arson", n: "Setting fire to the village", sev: 4, ranks: ["Academy Student", "Genin", "Chunin"],
+    line: "started a fire that took a block of the lower village before it was put out",
+    pros: ["The fire started in three places at once, and fire does not do that on its own.", "They were seen running from the second site with their hands burned.", "They have a grievance with the landlord of every building that went up."],
+    def: ["The three sites share a gas line the village has known about for years.", "Their hands were burned because they went into the second building for a family.", "Half the district has a grievance with that landlord, which is why the district is on fire in the first place."],
+    guilty: "\"Those buildings killed eleven people over the winter with the cold. I killed none with the fire.\"",
+    clean: "\"I went into the fire. I did not start it. There is a family alive who will tell you which way I was running.\"" },
+  { id: "custody", n: "Killing a prisoner in custody", sev: 6, ranks: ["Chunin", "Jonin", "ANBU"],
+    line: "killed a prisoner in the cells who had not yet been tried",
+    pros: ["The prisoner was due to testify against a clan the next morning.", "They were the only guard on that corridor between midnight and dawn.", "The death is being recorded as a fall down stairs in a cell block with no stairs."],
+    def: ["The prisoner attacked them with a smuggled blade and the blade is in evidence.", "Two other guards had keys to that corridor that night.", "They reported the death themselves within minutes."],
+    guilty: "\"That man killed six children and was going to trade his way out of it by morning. I saved you a hearing.\"",
+    clean: "\"He came at me with a blade I had searched him for twice. Somebody gave it to him after I searched him.\"" },
+  { id: "fightring", n: "Running an illegal fight ring", sev: 4, ranks: ["Chunin", "Special Jonin"],
+    line: "took bets on genin fighting each other in a basement for money",
+    pros: ["A genin is in the hospital with injuries from a fight nobody sanctioned.", "The ledger of bets is in their handwriting.", "Nine genin have admitted to fighting and named them as the organiser."],
+    def: ["The genin arranged the fights themselves and they were only ever a spectator.", "The ledger belongs to a civilian bookmaker who has fled.", "The nine genin were told they would be expelled unless they named somebody."],
+    guilty: "\"Those children were going to fight anyway. At least in my basement somebody was there to stop it.\"",
+    clean: "\"I went to stop it. I was the one who stopped it. Ask which adult came down those stairs and shut it down.\"" },
+  { id: "throw", n: "Throwing a mission for money", sev: 5, ranks: ["Genin", "Chunin", "Jonin"],
+    line: "let a mission fail on purpose because somebody paid them to",
+    pros: ["The escort was ambushed at the only point on the route where their position was out of sight.", "Their share of a foreign merchant house's profits rose the same season.", "The client is dead and their family is in the hall."],
+    def: ["The ambush point was chosen by the mission desk, not by them.", "The merchant house payments are dividends from shares their grandfather bought.", "They took two wounds trying to reach the client."],
+    guilty: "\"The client was selling weapons to both sides. I let a war be one shipment shorter.\"",
+    clean: "\"I have the scars from that road. Look at them before you look at my accounts.\"" },
+  { id: "hoard", n: "Hoarding rations during a famine", sev: 4, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "kept back village rations during the hungry winter and sold them on",
+    pros: ["Their storehouse had a full season's grain in it when the district was starving.", "Three families died in the street outside it.", "The ration office's count was short by exactly the amount found."],
+    def: ["The storehouse was a strategic reserve they were ordered to hold, in writing.", "They opened it the day the order was rescinded and the date is in the file.", "The ration count was short across four districts, not one."],
+    guilty: "\"The army needed to eat first. That was the order and I am the one who carried it out.\"",
+    clean: "\"I was ordered to hold it. I held it. I opened it the hour I was allowed to.\"" },
+  { id: "harbour", n: "Hiding a missing-nin", sev: 5, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
+    line: "kept a listed missing-nin in their house and fed them for a month",
+    pros: ["The missing-nin was taken out of their cellar by hunter-nin.", "They lied to two patrols about who was staying with them.", "The missing-nin has named them as the reason they came back."],
+    def: ["The missing-nin is their brother and was dying.", "They were going to hand him over once he could walk, and there is a letter to the tower saying so, undelivered.", "The missing-nin has named everybody he has ever met."],
+    guilty: "\"He is my brother. Arrest me for it every day and I will do it every day.\"",
+    clean: "\"I wrote to the tower. The letter is in my desk. Nobody came to collect it.\"" },
+  { id: "dignitary", n: "An unsanctioned assassination", sev: 7, ranks: ["Jonin", "ANBU"],
+    line: "killed a foreign official on a trip nobody at the tower authorised",
+    pros: ["A minister of a neighbouring country is dead and the wound is a technique taught here.", "They were out of the village the week it happened with no mission on file.", "The neighbouring country has sent a formal protest naming them."],
+    def: ["The technique is taught in three villages and was used in two wars.", "They were out of the village on leave, visiting family, as filed.", "The protest names them because they were the last foreign shinobi the minister met with."],
+    guilty: "\"That man was going to start a war. You are all alive this year because I did something you would not sign.\"",
+    clean: "\"I was at my mother's. She will tell you. So will the three people who were at her table.\"" },
+  { id: "genjutsu", n: "Using genjutsu on civilians for profit", sev: 4, ranks: ["Chunin", "Special Jonin"],
+    line: "put civilians under genjutsu and had them sign things they would never have signed",
+    pros: ["Four deeds transferred to them in a year, from owners who remember nothing of signing.", "A sensor found residue on one of the owners a week after.", "They have no legitimate source for the money they now have."],
+    def: ["The deeds were bought at a fair price and the money was paid.", "The residue is from a medical genjutsu used in the hospital.", "The owners have family who want the land back and are prepared to say anything."],
+    guilty: "\"They were going to sell to somebody. I simply skipped the part where they argued.\"",
+    clean: "\"I paid for every one of those. The receipts are in the file and I signed them in front of a notary.\"" },
+  { id: "vote", n: "Tampering with a council vote", sev: 6, ranks: ["Jonin", "Jonin Commander"],
+    line: "bought, frightened or forged their way to a council result",
+    pros: ["Three elders changed their votes overnight and one of them has since resigned.", "A ballot was cast in the name of an elder who was in the hospital.", "Two elders have described being visited the night before."],
+    def: ["Elders change votes overnight every session; it is called lobbying.", "The hospitalised elder cast a proxy vote, which the rules permit.", "The visits were social, and they are old friends."],
+    guilty: "\"Half this council has been bought since before I was born. I simply outbid them once.\"",
+    clean: "\"I lobbied. That is legal. If lobbying is a crime then empty the council chamber.\"" },
+  { id: "crypt", n: "Robbing a clan crypt", sev: 6, ranks: ["Chunin", "Special Jonin", "ANBU"],
+    line: "went into a clan crypt and came out with something that was buried with the dead",
+    pros: ["The crypt was opened with a seal-breaker only three departments have.", "Eyes are missing from two of the interred and one of those pairs has been sold.", "They were seen near the crypt the night it was opened."],
+    def: ["The seal-breaker's log shows it in the department's safe that night.", "The eyes were taken decades ago, before the defendant was born.", "They walk past the crypt every night; it is on their way home."],
+    guilty: "\"The dead do not need them. The living were paying well for them.\"",
+    clean: "\"I live on that road. I have walked past that crypt every night for twelve years.\"" },
+  { id: "blackmail", n: "Blackmailing a council elder", sev: 5, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "held something over an elder and made the elder pay for it, every month, for years",
+    pros: ["The elder has come forward and brought four years of ledgers.", "The payments stop the week they were arrested.", "What they held is real and they have admitted to having it."],
+    def: ["The elder was paying a debt, and the debt is in writing.", "The payments stopped because the debt was paid.", "They admitted to having the information; they never admitted to using it."],
+    guilty: "\"I know what he did to my squad. He pays me every month to not tell you. Now I have told you anyway.\"",
+    clean: "\"He owed me money. He paid it back. Look at the loan agreement, it is in his handwriting.\"" },
+  { id: "map", n: "Negligence that cost a squad", sev: 4, ranks: ["Chunin", "Special Jonin", "Jonin"],
+    line: "sent a squad out on a route they had not checked, and the route killed them",
+    pros: ["The map they issued was ten years out of date and they had the new one on their desk.", "Four people are dead at a crossing that washed out two springs ago.", "They were warned about that crossing in writing by the squad leader."],
+    def: ["The map was the only one the tower issued; the new one had not been approved.", "They were told the crossing was repaired and the repair was signed off.", "The squad leader's warning arrived the day after the squad left."],
+    guilty: "\"I had forty missions that week. I did not check that one. That is the truth and it is not an excuse.\"",
+    clean: "\"The crossing was signed as repaired. Ask who signed it. It was not me.\"" },
+];
+
+/* ---- how it came to be in front of you ----
+   The same charge arriving the same way every time is most of why the docket
+   reads like a rota. Every case now arrives by some particular road, and the
+   road is shown in the hall. */
+const HOW_TO_COURT = [
+  "A squadmate filed it, and asked for a transfer the same afternoon.",
+  "It came in as an anonymous letter under the clerk's door, in handwriting nobody has matched.",
+  "An audit found it. Nobody was looking; the auditors were checking something else.",
+  "They were caught in the act by a patrol that was not supposed to be on that street.",
+  "A civilian walked into the tower and would not leave until somebody wrote it down.",
+  "It surfaced during somebody else's trial, when that defendant traded a name for a lighter sentence.",
+  "ANBU handed it over sealed, with a note saying they would prefer a court did this one.",
+  "Their own clan brought it, which the clan has never done before and will not explain.",
+  "A foreign village complained formally, and the tower needs to be seen doing something.",
+  "They turned themselves in. Nobody in the hall knows what to do with that.",
+  "A dying jonin named them in the hospital, in front of two medics and a chaplain.",
+  "The mission desk flagged it after the fourth report in a row did not add up.",
+  "A sensor on the wall caught chakra where there should not have been any.",
+  "Their own sensei brought it, and asked to sit at the back while it was heard.",
+  "A rival brought it. Everybody knows it is a rival. That does not make it untrue.",
+  "Their spouse brought it, and has not been home since.",
+  "An Academy student saw something and told an instructor, who could not leave it alone.",
+  "It came up in the Yamanaka wing, from a prisoner's memory rather than any witness.",
+  "The daimyo's office forwarded it with no covering letter at all.",
+  "A merchants' guild brought it, with a ledger and three advocates.",
+  "It was in the Shinobi Times before it was on the docket, which is its own problem.",
+  "A hunter-nin brought them in from the border, which is not normally how anything starts.",
+  "An elder raised it in council, and the council voted to send it here rather than deal with it.",
+  "It has been sitting in a drawer for four years and somebody finally opened the drawer.",
+];
+
+/* how the defendant said what they said — the same answer reads differently
+   out of a different face */
+const DEMEANOUR = [
+  "They said it to the floor.", "They said it straight to you, and did not blink.",
+  "They said it to the back of the hall, where their family was.", "They said it quietly enough that the clerk asked them to repeat it.",
+  "They laughed once before saying it, and nobody else did.", "They had clearly said it to themselves a hundred times already.",
+  "Their hands did not stop moving the whole time.", "They looked at their advocate before answering, and their advocate looked away.",
+  "They said it as though they were reading it off a wall.", "They were crying and did not seem to notice.",
+  "They stood to say it, which nobody had asked them to do.", "They said it and then sat down before you had dismissed them.",
+];
+
+const ALL_CHARGES = CHARGES.concat(CHARGES_MORE).concat(CHARGES_MORE2).concat(CHARGES_EXTREME);
 
 const SENTENCES = [
   { id: "dismiss", n: "Dismiss the case", sev: 0, d: "No charge to answer. They walk out with the record wiped.", free: true },
@@ -1736,10 +1905,14 @@ function buildCase(c, seat) {
      year, which is the entire reason they land the way they do. */
   const extremeOk = seat.id !== "magistrate" && !(b.extremeYear && c.year - b.extremeYear < 12);
   const useExtreme = extremeOk && roll(7);
-  const src = useExtreme ? CHARGES_EXTREME : CHARGES.concat(CHARGES_MORE);
-  const pool = src.filter((ch) => ch.ranks.some((r) => allowed.includes(r)));
-  if (!pool.length) return null;
-  const ch = pick(pool);
+  const src = useExtreme ? CHARGES_EXTREME : CHARGES.concat(CHARGES_MORE).concat(CHARGES_MORE2);
+  const fits = src.filter((ch) => ch.ranks.some((r) => allowed.includes(r)));
+  if (!fits.length) return null;
+  /* a charge you heard in the last several cases goes to the bottom of the pile */
+  const recent = b.recent || [];
+  const fresh = fits.filter((ch) => !recent.includes(ch.id));
+  const ch = pick(fresh.length ? fresh : fits);
+  b.recent = recent.concat([ch.id]).slice(-10);
   if (useExtreme) b.extremeYear = c.year;
   const canRank = ch.ranks.filter((r) => allowed.includes(r));
   const rank = pick(canRank);
@@ -1770,6 +1943,7 @@ function buildCase(c, seat) {
     no: b.caseNo, year: c.year, name: who.name, rank: who.rank, age: who.age, pw: who.pw,
     rollId: who.rollId || null, kage: !!who.kage, anbu: !!who.anbu, named: who.named || null,
     charge: ch.id, truth, extreme: !!ch.rare,
+    how: (() => { const rh = b.recentHow || []; const opts = HOW_TO_COURT.filter((h) => !rh.includes(h)); const h = pick(opts.length ? opts : HOW_TO_COURT); b.recentHow = rh.concat([h]).slice(-8); return h; })(),
     /* a charge can mean something else entirely depending on who is carrying it */
     escalated: !!(ch.escalate && ch.escalate.ranks.includes(who.rank)),
     /* and sometimes they are over the border before anybody reaches the gate */
@@ -3543,6 +3717,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.11", n: "Not The Same Five Cases In Rotation", items: [
+    "Twenty more ordinary charges, forty-four in all before the extraordinary ones. Cheating the Chunin Exams, selling the Academy graduation paper, drunk on watch the night something came over the wall, an unsanctioned duel where the other one did not get up, teaching a clan's three-hundred-year-old technique to an outsider, abducting a clan heir, forging the Kage's seal, stealing a dead sensei's summoning contract, setting fire to the lower village, killing a prisoner before they could testify, running genin fight nights in a basement, throwing an escort for money, hoarding grain in the hungry winter, hiding a missing-nin brother in the cellar, an assassination nobody at the tower signed, genjutsu on civilians who then signed away their land, buying a council vote, robbing a clan crypt for its eyes, blackmailing an elder, and sending a squad over a crossing that washed out two springs ago",
+    "Every case now arrives by a particular road, shown in the hall under the charge: a squadmate who filed it and asked for a transfer the same afternoon, an anonymous letter under the clerk's door, a dying jonin naming them in front of two medics and a chaplain, their own sensei asking to sit at the back while it is heard, their spouse, an Academy student who told an instructor, a prisoner's memory in the Yamanaka wing, a drawer nobody opened for four years. Twenty-four of them, and the same one does not come round twice in quick succession",
+    "The docket will not hand you a charge you heard in your last several cases. It was perfectly capable of listing desertion three years running, and did",
+    "The defendant's answer comes with how they gave it \u2014 to the floor, straight at you without blinking, to the back of the hall where their family was, crying without seeming to notice \u2014 so the same words out of two different people do not read as the same moment",
+  ] },
   { v: "10.10", n: "The Book Was Only Ever Reading Itself", items: [
     "Listing somebody in the Bingo Book did nothing. The book was a pure view of the named roster plus the era's bosses, with no way for anything in the game to add a line to it \u2014 so the court's rider, the exile walked to the gate and the S-rank hunter order all printed \u201cthe name goes into the Bingo Book tonight\u201d and then no name went into the Bingo Book, that night or ever. It holds entries now. Anybody you list appears in the book under LISTED OUT OF your village, with the charge, the year, your name as the bench that did it, and a bounty scaled to what you took off them",
     "The tier is worked out from the sentence rather than picked: an exile lands at A or B, a hunter order is S by definition, and a rider on a heavy term follows the term. If the hunter-nin later find them, the entry closes",
@@ -9255,7 +9435,7 @@ export default function ShinobiLife() {
           cs.evidence = cl(cs.evidence + w);
           cs.facts.push({ t: "DEFENCE", txt: line, w });
         } else if (step === "ask") {
-          const line = t ? ch.guilty : ch.clean;
+          const line = (t ? ch.guilty : ch.clean) + " " + pick(DEMEANOUR);
           const w = t ? rr(6, 16) : -rr(6, 16);
           cs.evidence = cl(cs.evidence + w);
           cs.facts.push({ t: "THE DEFENDANT", txt: line, w });
@@ -16239,6 +16419,9 @@ export default function ShinobiLife() {
                   <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 6 }}>
                     The village says {cs.name} {ch.line}.
                   </div>
+                  {cs.how ? (
+                    <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5, marginTop: 6, fontStyle: "italic" }}>{cs.how}</div>
+                  ) : null}
                 </div>
 
                 {cs.escalated && ch.note && (
