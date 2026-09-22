@@ -1380,6 +1380,13 @@ const CHARGES = [
     clean: "\"I was carrying somebody. You can ask them, they are outside.\"" },
   { id: "smuggle", n: "Smuggling across a closed border", sev: 3, ranks: ["Genin", "Chunin", "Special Jonin", "Jonin"],
     line: "ran contraband through a border the tower had closed",
+    /* a genin with medicine in a pack is a customs matter. somebody who holds a
+       specialist's clearance and knows where the tower's own seals are thin is
+       running a route, and a route is a military asset in somebody else's hands. */
+    escalate: { ranks: ["Special Jonin", "Jonin", "Jonin Commander"], sev: 8,
+      n: "Espionage \u2014 running a closed border",
+      line: "held a working route through a sealed border and did not tell the village it existed",
+      note: "This is not a customs charge. Somebody at this rank does not carry contraband, they hold a route \u2014 tunnels, bought guards, middlemen \u2014 and a route through a closed border is a military asset that is currently not the village's. The tower has listed it as espionage and the tower is not wrong to." },
     pros: ["Three crossings in a month, all of them logged as training runs.", "The customs house in the next country has their description and a nickname for them.", "They are carrying more money than their rank explains."],
     def: ["The crossings were on a standing supply order the tower itself signed.", "The nickname belongs to somebody a head taller.", "The money is a family inheritance and the paperwork is in the file."],
     guilty: "\"Medicine. It was medicine, and the tower closed the border on a country that needed it.\"",
@@ -1543,6 +1550,104 @@ const CHARGES_EXTREME = [
     clean: "\"An order pulled me off that wall. Find the order. Somebody in this room knows exactly where it is.\"" },
 ];
 
+/* ---- how a village kills its own, by rank ----
+   The sentence is one word. Carrying it out is a different procedure for every
+   rank, and the difference is almost entirely about what the body knows. An
+   ANBU carries village layout, passwords, leader schedules and the names of
+   people it was quieter to kill than to arrest; a genin carries a headband.
+   So one of them vanishes off a roster and is ash before the hour is out, and
+   the other goes home to their parents. */
+const EXECUTIONS = {
+  "ANBU": {
+    style: "The ghost execution", secret: true, burn: true,
+    where: "in a chamber under the roots of the village that is not on any plan of it",
+    by: "a masked team from their own department, none of whom will ever be named",
+    log: [
+      "There was no hall and no hearing that anybody can point to. They were taken down under the roots of the village, into a chamber that is not on any plan of it.",
+      "The executioners were masked and from their own department. Nobody in that room saw another face, including yours.",
+      "Hunter-nin took the body before it had finished cooling and burned it with a Fire Style technique developed for exactly this. There was no blood left, and no hair, and nothing for a Yamanaka or a grave-robber or a foreign buyer to read.",
+    ],
+    after: "The agent simply stops appearing on the active roster. The village is never told there was an execution, because the village was never told there was an agent.",
+  },
+  "Jonin": {
+    style: "The high-security execution", secret: false, burn: true, witnesses: true, suppress: true,
+    where: "inside a sealed military facility with the clan heads required to attend",
+    by: "the village's own executioner, under barrier jutsu",
+    log: [
+      "Their chakra was suppressed first, with sealing tags and a barrier team standing by. You do not walk a jonin into a room and hope.",
+      "It was done inside a sealed facility with the clan heads and the military command required to be in it. They were required because the point of them being there was that they should have to watch.",
+      "Hunter-nin cremated the body under guard. An elite jonin's techniques and whatever is in their blood do not leave the village in a coffin.",
+    ],
+    after: "It was not public and everybody knew by evening anyway. That is the intended effect: a reminder to the rest of the elite that the law reaches up as far as it reaches down.",
+  },
+  "Special Jonin": {
+    style: "The high-security execution", secret: false, burn: true, suppress: true,
+    where: "inside a sealed military facility",
+    by: "the village's own executioner, under barrier jutsu",
+    log: [
+      "Chakra suppressed, barrier team in the room, and a specialist's death done by specialists.",
+      "Hunter-nin burned the body afterwards. A special jonin is a narrow and very deep set of skills plus whatever classified work they were attached to, and none of that leaves the village.",
+    ],
+    after: "The tower posted the finding and not the method, which is the most anybody gets.",
+  },
+  "Chunin": {
+    style: "The formal disciplinary execution", secret: false, burn: false, strip: true, family: true,
+    where: "inside the prison walls, before a panel and a division commander",
+    by: "the prison's own executioner",
+    log: [
+      "They were stripped of the flak jacket and the headband in front of the panel first. That part takes longer than people expect and is meant to.",
+      "It was quick and it was procedural, which is what a chunin's execution is: the regular ranks being shown that the regular rules are real.",
+      "A sensor went over the body for seals and tracking marks and found none, so it was released to the family for a private burial.",
+    ],
+    after: "There will be a funeral with nobody official at it.",
+  },
+  "Genin": {
+    style: "The reluctant execution", secret: true, burn: false, family: true, shame: true,
+    where: "quietly, inside the prison, with almost nobody told",
+    by: "their own squad leader, who asked to do it rather than let a stranger",
+    log: [
+      "Their own jonin squad leader asked to carry it out rather than let a stranger do it. You let them. They did not thank you.",
+      "It was done quietly and the village was not told, because a village that executes its children has to explain how it got children into that position.",
+      "The body went home to the parents. The family keeps the name and the name keeps the stain, which is a sentence of its own on people who did nothing.",
+    ],
+    after: "Somewhere in the tower a file was opened on how a fourteen-year-old got that far without one person stopping it. It will not be finished.",
+  },
+  "Academy Student": {
+    style: "The reluctant execution", secret: true, burn: false, family: true, shame: true,
+    where: "quietly, with almost nobody told",
+    by: "somebody who volunteered so that it would not be given to somebody who wanted it",
+    log: [
+      "There is no procedure for this rank because the procedure assumes a soldier. Somebody volunteered so that it would not fall to somebody who wanted it.",
+      "The body went home. The Academy has not commented and will not.",
+    ],
+    after: "Two instructors resigned within the month and neither gave a reason.",
+  },
+};
+const executionOf = (rank) => EXECUTIONS[rank] || EXECUTIONS["Jonin"];
+
+/* ---- the mind-delve ----
+   The Yamanaka go in and come out with the truth and with everybody else's
+   names. It is not a hearing, it is the opposite of one, and using it on
+   somebody who turns out to be clean is a thing you did to a person. */
+function mindDelve(c, L, cs) {
+  const ch = ALL_CHARGES.find((x) => x.id === cs.charge);
+  cs.delved = true;
+  cs.revealed = true;
+  cs.evidence = cl(cs.truth ? rr(88, 99) : rr(1, 8));
+  if (cs.truth) {
+    /* the network: a closed border is useless if one person still knows a way through */
+    const n = rr(1, 3);
+    cs.network = [];
+    for (let i = 0; i < n; i++) cs.network.push(freshName(c, null));
+    P(L, "The Yamanaka went in. It took four days and they came out with all of it: " + (ch ? ch.n.toLowerCase() : "the whole thing") + ", exactly as charged, and " + (cs.network.length === 1 ? "one other name" : cs.network.length + " other names") + " — " + joinList(cs.network) + ".", "e");
+    P(L, "Every tunnel, every bought guard, every middleman. The border is worth something again, which it was not this morning.", "g");
+    return cs.network;
+  }
+  P(L, "The Yamanaka went in and found nothing, because there was nothing in there to find. They did not do it.", "b");
+  P(L, "Four days of somebody walking through the inside of an innocent person's head. They will not be the same and the file will not say why.", "b");
+  return [];
+}
+
 const ALL_CHARGES = CHARGES.concat(CHARGES_MORE).concat(CHARGES_EXTREME);
 
 const SENTENCES = [
@@ -1596,10 +1701,17 @@ const RIDERS = [
 ];
 const riderSev = (ids) => (ids || []).reduce((a, id) => a + ((RIDERS.find((r) => r.id === id) || {}).sev || 0), 0);
 
+/* a charge reads differently depending on who is answering it */
+function chargeOf(cs) {
+  const ch = ALL_CHARGES.find((x) => x.id === (cs || {}).charge);
+  if (!ch) return null;
+  if (cs && cs.escalated && ch.escalate) return { ...ch, ...ch.escalate };
+  return ch;
+}
 /* what the case actually warranted, once you know the truth of it */
 function deservedSev(cs) {
   if (!cs) return 0;
-  const ch = ALL_CHARGES.find((x) => x.id === cs.charge);
+  const ch = chargeOf(cs);
   if (!ch) return 0;
   if (!cs.truth) return 0;
   return cl(ch.sev + (cs.aggravated ? 1 : 0) - (cs.mitigated ? 2 : 0), 0, 9);
@@ -1654,6 +1766,10 @@ function buildCase(c, seat) {
     no: b.caseNo, year: c.year, name: who.name, rank: who.rank, age: who.age, pw: who.pw,
     rollId: who.rollId || null, kage: !!who.kage, anbu: !!who.anbu, named: who.named || null,
     charge: ch.id, truth, extreme: !!ch.rare,
+    /* a charge can mean something else entirely depending on who is carrying it */
+    escalated: !!(ch.escalate && ch.escalate.ranks.includes(who.rank)),
+    /* and sometimes they are over the border before anybody reaches the gate */
+    fled: !!(ch.escalate && ch.escalate.ranks.includes(who.rank) && truth && roll(34)),
     aggravated: truth && roll(26), mitigated: roll(30),
     evidence: rr(26, 58),
     plea: truth ? (roll(28) ? "guilty" : roll(30) ? "silent" : "not guilty") : (roll(14) ? "silent" : "not guilty"),
@@ -1688,6 +1804,17 @@ function benchTick(c, L) {
     pr.left -= 1;
     pr.served = (pr.served || 0) + 1;
     /* strong people in weak cells */
+    /* somebody in a foreign facility is not guarded by people who answer to you */
+    if (pr.foreign && roll(6)) {
+      pr.status = "taken"; pr.out = c.year;
+      if (pr.named) c.held = (c.held || []).filter((x) => x !== pr.named);
+      P(L, pr.name + " has been taken out of the Blood Prison by people who were not breaking in so much as collecting. Everything they know about this village left with them.", "b");
+      newsItem(c, "A " + pr.rank.toLowerCase() + " of " + homeName(c) + ", held at Hozuki Castle under a sentence from its own court, is no longer at Hozuki Castle. The Hidden Grass says the paperwork is in order.", "WAR", true);
+      c.standing = cl(c.standing - rr(8, 18));
+      b.fair = cl(b.fair - rr(2, 6));
+      b.loose = (b.loose || []).concat([{ name: pr.name, rank: pr.rank, charge: pr.charge, grudge: 70, since: c.year, pw: pr.pw }]);
+      return;
+    }
     const esc = cl((pr.pw || 40) / 14 - (pr.sealed ? 6 : 0) + (pr.hard ? -3 : 0) + (pr.left > 12 ? 2 : 0), 0, 14);
     if (roll(esc)) {
       pr.status = "escaped"; pr.out = c.year;
@@ -1713,6 +1840,29 @@ function benchTick(c, L) {
       const bitter = pr.unjust >= 2;
       if (bitter) b.grudges = (b.grudges || []).concat([{ name: pr.name, rank: pr.rank, why: "served " + pr.served + " years for something they did not do", since: c.year, pw: pr.pw }]);
       P(L, pr.name + " has finished " + pr.served + " years and walked out of the gate. " + (bitter ? "They did not do it, and they know you know." : "They did not look up."), bitter ? "b" : "n");
+    }
+  });
+  /* the squads that went out after the ones who made it over the border */
+  (b.hunts || []).forEach((h) => {
+    if (h.done) return;
+    h.years += 1;
+    const odds = cl(26 + h.years * 9 - (h.pw || 60) / 5, 6, 76);
+    if (roll(odds)) {
+      h.done = true; h.out = c.year; h.result = "killed";
+      P(L, "The hunter-nin found " + h.name + ". It took " + h.years + " year" + (h.years === 1 ? "" : "s") + " and two countries, and what came back was a confirmation and the property, not a body.", "g");
+      newsItem(c, h.name + ", listed S-rank out of " + homeName(c) + ", has been killed in foreign territory. The country it happened in has lodged a protest that everybody expects to go nowhere.", "OBITUARIES", true);
+      return;
+    }
+    if (roll(7)) {
+      h.done = true; h.out = c.year; h.result = "lost";
+      P(L, "The squad that went after " + h.name + " has not reported in eleven months. The department has stopped describing them as overdue.", "b");
+      b.loose = (b.loose || []).concat([{ name: h.name, rank: h.rank, charge: h.charge, grudge: 85, since: c.year, pw: h.pw }]);
+      return;
+    }
+    if (h.years >= 9) {
+      h.done = true; h.out = c.year; h.result = "cold";
+      P(L, h.name + "'s file has gone cold. The order stands and nobody is working it, which is how these end.", "n");
+      b.loose = (b.loose || []).concat([{ name: h.name, rank: h.rank, charge: h.charge, grudge: 70, since: c.year, pw: h.pw }]);
     }
   });
   /* somebody you exiled or somebody who got out comes back for you */
@@ -3385,6 +3535,15 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.9", n: "A Village Kills Its Own Differently Depending On What The Body Knows", items: [
+    "Execution is one word and six procedures. An ANBU gets the ghost execution: a chamber under the roots of the village that is not on any plan of it, a masked team out of their own department, and hunter-nin burning the body with a Fire Style technique developed for exactly that before it has finished cooling \u2014 no blood, no hair, nothing for a Yamanaka or a grave-robber or a foreign buyer to read. It never reaches the paper. The agent simply stops appearing on the active roster, and the village is never told there was an execution because the village was never told there was an agent",
+    "A jonin has their chakra suppressed with sealing tags and a barrier team in the room first, because you do not walk a jonin into that and hope. It is done inside a sealed facility with the clan heads and the military command required to attend \u2014 required, because the point is that they should have to watch \u2014 and hunter-nin cremate the body under guard. A chunin is stripped of the flak jacket and the headband in front of the panel, which takes longer than people expect and is meant to, and afterwards a sensor goes over the body for seals and tracking marks and it goes home to the family. A genin is done quietly by their own squad leader, who asks to do it rather than let a stranger, and goes home to their parents with the family name carrying the stain",
+    "A special jonin is executed locally and burned, never sent abroad. Which is now a real decision, because the Blood Prison is Hozuki Castle, run by the Hidden Grass, in their country, under their guard. Send somebody who holds this village's classified tactical work there and they are an asset sitting in a building you do not control \u2014 and sometimes people arrive who are not breaking in so much as collecting",
+    "Nobody at rank is put down before the Yamanaka have been inside their head. It happens automatically before any execution: the village has to be certain they acted alone, because mind-control by a foreign handler and a quiet payment from an elder inside the tower are not defences the court hears, they are things the tower has to know either way. Sometimes it comes back with a handler who has been in there for years. Sometimes it comes back with a name above your bench, and you are told politely that it will be handled",
+    "You can also send them to Torture and Interrogation during the hearing, before you decide anything. It is not a hearing, it is the opposite of one, and it gives you the truth outright \u2014 and every other name. A closed border is useless while one person still knows a way through, so the delve maps the tunnels, the bought guards and the middlemen, and those names land on your own docket the same year. If they turn out to be clean, four days of somebody walking through the inside of an innocent person's head is a thing you did to a person, and the bench wears it",
+    "Smuggling by a special jonin or above is not a customs charge any more. Somebody at that rank does not carry contraband, they hold a route, and a route through a sealed border is a military asset that is currently not the village's \u2014 so it is listed as espionage, at eight severity instead of three, with the reasoning shown in the hall",
+    "And sometimes they were over the border before anybody reached the gate. The dock is empty, there is nobody to sentence, and what you can sign instead is the other thing: listed S-rank in absentia, straight to the top page of the Bingo Book, and an elite hunter-nin squad into foreign territory without asking that country first. The squads are tracked year by year on their own register \u2014 found and killed, the file gone cold, or the squad that went out after them not reporting in eleven months, which is how somebody ends up loose and knowing exactly whose signature sent them",
+  ] },
   { v: "10.8", n: "And Also", items: [
     "Hard labour and stripped of rank are two decisions, and a court makes both of them in the same breath. So they are two controls now. Eight riders sit above the sentence list and attach to whatever you pass: strip them of rank, seal their chakra, a fine against everything they hold, barred from ANBU and field command for life, struck from the clan register, the name published in the Bingo Book, exile on release, and the family's stipend stopped",
     "Every rider shows up on the sentence buttons as you toggle it, so you read the whole thing before you say it \u2014 \u201ctwo years' hard labour and strip them of rank and struck from the clan register\u201d \u2014 and the whole thing goes into the bench's permanent record, exactly as passed. Riders that cannot apply to a sentence quietly stand down rather than pretending, and sealing chakra or ordering exile on release needs a higher bench than a magistrate's",
@@ -9044,7 +9203,7 @@ export default function ShinobiLife() {
         const b = c.bench; if (!b) return;
         const cs = (b.docket || []).find((x) => x.no === benchCase);
         if (!cs || cs.done || cs.steps.includes(step)) return;
-        const ch = ALL_CHARGES.find((x) => x.id === cs.charge);
+        const ch = chargeOf(cs);
         cs.steps.push(step);
         const t = cs.truth;
         /* each way of looking at it moves the evidence, and a guilty file moves
@@ -9087,6 +9246,30 @@ export default function ShinobiLife() {
             : pick(["There is a sealed page in the file and the seal is the department's, not the tower's.",
                     "This is the third time. The first two were settled inside the department.",
                     "A transfer four years ago has no stated reason and the officer who signed it has retired abroad."]), w });
+        } else if (step === "ti") {
+          /* not a hearing. the opposite of one. */
+          const net = mindDelve(c, L, cs);
+          c.standing = cl(c.standing + (cs.truth ? rr(2, 6) : -rr(4, 10)));
+          b.delves = (b.delves || 0) + 1;
+          if (!cs.truth) { b.fair = cl((b.fair == null ? 50 : b.fair) - rr(6, 14)); b.tortured = (b.tortured || 0) + 1; }
+          cs.facts.push({ t: "TORTURE AND INTERROGATION", txt: cs.truth
+            ? "Four days in the Yamanaka wing. It is in there, all of it, and so are " + (net.length === 1 ? "one other name" : net.length + " other names") + "."
+            : "Four days in the Yamanaka wing and there was nothing in there. Somebody walked through the inside of a clean person's head on your authority.", w: 0 });
+          /* the network goes on your own docket, because a closed border is
+             useless while one person still knows a way through */
+          if (net.length) {
+            const seat2 = benchSeat(c);
+            net.forEach((nm) => {
+              const nc3 = buildCase(c, seat2);
+              if (!nc3) return;
+              nc3.name = nm; nc3.charge = cs.charge; nc3.escalated = false; nc3.fled = false;
+              nc3.truth = true; nc3.evidence = rr(62, 84); nc3.named = null; nc3.rollId = null;
+              nc3.fromNetwork = cs.name;
+              b.docket.push(nc3);
+            });
+            P(L, "Their names are on your docket now. The village wants every tunnel, every bought guard and every middleman, and it wants them this year.", "n");
+            newsItem(c, "The Torture and Interrogation Force has mapped a route through a closed border out of " + homeName(c) + " and handed the court " + net.length + " more name" + (net.length === 1 ? "" : "s") + ".", "THE COURTS");
+          }
         } else if (step === "anbu") {
           if (c.standing < 30) { P(L, "You asked ANBU to verify it and ANBU did not answer.", "b"); cs.steps = cs.steps.filter((x) => x !== "anbu"); return; }
           c.standing = cl(c.standing - 4);
@@ -9101,6 +9284,23 @@ export default function ShinobiLife() {
       });
       return;
     }
+    if (kind === "hunt") {
+      commit((c, L) => {
+        const b = c.bench; if (!b) return;
+        const cs = (b.docket || []).find((x) => x.no === benchCase);
+        if (!cs || cs.done) return;
+        const ch = chargeOf(cs);
+        spend(c);
+        cs.done = true; cs.sentence = "hunt";
+        b.heard = (b.heard || 0) + 1;
+        b.convicted = (b.convicted || 0) + 1;
+        b.hunts = (b.hunts || []).concat([{ name: cs.name, rank: cs.rank, pw: cs.pw, charge: ch.n, since: c.year, years: 0 }]);
+        b.precedents = (b.precedents || []).concat([{ y: c.year, txt: cs.name + ", " + cs.rank + ", " + ch.n.toLowerCase() + " \u2014 tried in absentia, S-rank, hunter-nin dispatched." }]).slice(-40);
+        P(L, "You listed " + cs.name + " S-rank in absentia and signed the hunter order. A squad went out the same night, in foreign territory, without asking that country first.", "e");
+        newsItem(c, cs.name + " of " + homeName(c) + " has been entered in the Bingo Book at S-rank and is to be killed on sight. The village has not explained what was taken across the border and has not been asked twice.", "BINGO BOOK", true);
+      });
+      setBenchRiders([]); setBenchCase(null); return;
+    }
     if (kind === "rule") {
       const sid = arg;
       commit((c, L) => {
@@ -9108,7 +9308,7 @@ export default function ShinobiLife() {
         const cs = (b.docket || []).find((x) => x.no === benchCase);
         if (!cs || cs.done) return;
         const sen = sentenceOf(sid); if (!sen) return;
-        const ch = ALL_CHARGES.find((x) => x.id === cs.charge);
+        const ch = chargeOf(cs);
         spend(c);
         cs.done = true; cs.sentence = sid;
         b.heard = (b.heard || 0) + 1;
@@ -9133,12 +9333,44 @@ export default function ShinobiLife() {
         /* ---- what the sentence actually does to them ---- */
         if (sen.death) {
           b.executed = (b.executed || 0) + 1;
+          const ex = executionOf(cs.rank);
+          /* ---- the mind-delve comes first, and it is not optional ----
+             Nobody at rank is put down before the village has confirmed they
+             acted alone. Being mind-controlled by a foreign handler or bought
+             by an elder inside the tower is not a defence the court hears, it
+             is a thing the tower has to know either way. */
+          if (!cs.delved && cs.rank !== "Academy Student") {
+            P(L, "Before it was carried out they went to the Torture and Interrogation Force, because nobody at that rank is put down until the village is certain they acted alone.", "n");
+            const net = mindDelve(c, L, cs);
+            if (cs.truth && roll(18)) {
+              P(L, "And they did not act alone. The delve came back with a handler in another country who has been inside their head for years. It changes nothing about this afternoon. It changes a great deal about the file.", "e");
+              newsItem(c, "The Torture and Interrogation Force in " + homeName(c) + " has confirmed foreign influence in a case already closed by execution. The tower has not said which case.", "THE COURTS");
+            } else if (cs.truth && roll(12)) {
+              P(L, "The delve found somebody inside the tower who paid them. That name is above your bench and you have been told, politely, that it will be handled.", "b");
+              b.buried = (b.buried || 0) + 1;
+            }
+            if (net && net.length) P(L, "It also came back with " + joinList(net) + ", which is now somebody's problem and probably yours.", "n");
+          }
           removeFromRoll(c, cs, L, "death");
-          P(L, "You passed sentence of death on " + cs.name + ". They were taken out through the side door and the hall did not move until they were gone.", "b");
-          newsItem(c, who + " has been executed in " + homeName(c) + " on a finding of " + ch.n.toLowerCase() + ", handed down by " + c.name + ".", "OBITUARIES", true);
+          P(L, ex.style + ". Carried out " + ex.where + ", by " + ex.by + ".", "b");
+          ex.log.forEach((line) => P(L, line, "b"));
+          P(L, ex.after, "n");
+          /* a secret execution is secret. it does not go in the paper. */
+          if (ex.secret) {
+            b.quiet = (b.quiet || 0) + 1;
+            newsItem(c, cs.rank === "ANBU"
+              ? "An operative has been removed from " + homeName(c) + "'s active roster. No reason is recorded, no hearing is recorded, and the roster is the only document that changed."
+              : "A name has quietly left " + homeName(c) + "'s register. The tower has issued nothing and been asked nothing.", "NOTICES");
+          } else {
+            newsItem(c, who + " has been executed in " + homeName(c) + " on a finding of " + ch.n.toLowerCase() + ", handed down by " + c.name + "." + (ex.witnesses ? " The clan heads and the military command were required to attend." : ""), "OBITUARIES", true);
+          }
+          if (ex.family) b.stained = (b.stained || []).concat([cs.name]);
           if (!cs.truth) {
             b.wrongDeaths = (b.wrongDeaths || 0) + 1;
-            P(L, "They did not do it. You will find that out in four or five years, the way everybody does.", "b");
+            P(L, cs.delved
+              ? "The delve had already told you they did not do it, and you signed it anyway. Everybody in that chamber watched you do that."
+              : "They did not do it. You will find that out in four or five years, the way everybody does.", "b");
+            if (ex.burn) P(L, "And there is nothing left to exhume, which is the part that will keep you awake.", "b");
           }
           if (cs.kage) kageCrisis(c, L, cs, "executed");
         } else if (sen.exile) {
@@ -9157,6 +9389,15 @@ export default function ShinobiLife() {
             sealed: !!sen.seal, hard: !!sen.hard, unjust, sentence: sen.n,
           }]);
           P(L, "You sentenced " + cs.name + " to " + sen.n.toLowerCase() + ". The clerk wrote it down before you had finished saying it.", "n");
+          /* Hozuki Castle is run by the Hidden Grass. An elite carrying
+             classified tactical work and a marketable bloodline is, once they
+             are inside it, an asset sitting in somebody else's country. */
+          if (sen.hard && ["Special Jonin", "Jonin", "ANBU", "Jonin Commander", "Kage"].includes(cs.rank)) {
+            const held2 = (b.prison || [])[(b.prison || []).length - 1];
+            if (held2) held2.foreign = true;
+            P(L, "The Blood Prison is run by the Hidden Grass, in their country, under their guard. You have just put somebody who knows this village's tactical work inside a building the village does not control.", "b");
+            b.abroad = (b.abroad || 0) + 1;
+          }
           if (sen.hard || sen.years >= 25 || cs.rank === "Kage" || cs.rank === "Jonin Commander") {
             newsItem(c, who + " has been sentenced to " + sen.n.toLowerCase() + " in " + homeName(c) + " for " + ch.n.toLowerCase() + ". " + c.name + " presided.", "THE COURTS", true);
           }
@@ -15899,7 +16140,7 @@ export default function ShinobiLife() {
         const b = c.bench || { seat: null, docket: [], prison: [], fair: 50, heard: 0 };
         const seat = benchSeat(c);
         const cs = seat && benchCase != null ? (b.docket || []).find((x) => x.no === benchCase && !x.done) : null;
-        const ch = cs ? ALL_CHARGES.find((x) => x.id === cs.charge) : null;
+        const ch = cs ? chargeOf(cs) : null;
         const serving = (b.prison || []).filter((x) => x.status === "serving");
         const past = (b.prison || []).filter((x) => x.status !== "serving");
         const STEPS = [
@@ -15909,6 +16150,7 @@ export default function ShinobiLife() {
           { id: "wit", n: "Call a witness", d: "Somebody who was there, or somebody who has been told they were there." },
           { id: "file", n: "Send for the service record", d: "Everything the village already wrote down about this person." },
           { id: "anbu", n: "Have ANBU verify it", d: "They will actually go and look. It costs you standing and it is remembered." },
+          { id: "ti", n: "Hand them to Torture and Interrogation", d: "The Yamanaka go into their head and come out with the truth and with everybody else's names. It is not a hearing. If they turn out to be clean, that is a thing you did to a person." },
         ];
         /* what the evidence is telling you, without telling you the answer */
         const ev = cs ? cs.evidence : 0;
@@ -15940,15 +16182,24 @@ export default function ShinobiLife() {
                   </div>
                 </div>
 
-                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">THE DOCK</div>
+                {cs.escalated && ch.note && (
+                  <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.blood + "66", borderLeft: "3px solid " + T.blood, borderRadius: 10 }} className="p-3 mb-3">
+                    <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">CHARGED UP</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{ch.note}</div>
+                  </div>
+                )}
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">{cs.fled ? "THE DOCK IS EMPTY" : "THE DOCK"}</div>
                 <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 12 }} className="p-3 mb-3">
                   <div className="flex items-baseline justify-between gap-2">
                     <span style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{cs.name}</span>
                     <span style={{ color: cs.rank === "Kage" ? T.blood : T.gold, fontSize: 10, letterSpacing: ".14em", fontWeight: 800 }}>{cs.rank.toUpperCase()}</span>
                   </div>
                   <div style={{ color: T.dim, fontSize: 11 }} className="mt-1">
-                    Age {cs.age} {"·"} power {cs.pw} {"·"} pleads {cs.plea === "guilty" ? "guilty" : cs.plea === "silent" ? "nothing at all" : "not guilty"}
+                    Age {cs.age} {"·"} power {cs.pw} {"·"} {cs.fled ? "over the border before anybody reached the gate" : "pleads " + (cs.plea === "guilty" ? "guilty" : cs.plea === "silent" ? "nothing at all" : "not guilty")}
                   </div>
+                  {cs.fromNetwork ? (
+                    <div style={{ color: T.gold, fontSize: 10.5, marginTop: 4 }}>Named by {cs.fromNetwork} under the delve.</div>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-2 mb-1">
@@ -15972,7 +16223,7 @@ export default function ShinobiLife() {
                   <Row key={st.id} label={st.n} sub={st.d}
                     right={cs.steps.includes(st.id) ? "Heard" : "Hear"}
                     onClick={() => benchAct("hear", st.id)}
-                    disabled={cs.steps.includes(st.id) || (st.id === "anbu" && c.standing < 30)} />
+                    disabled={cs.steps.includes(st.id) || (st.id === "anbu" && c.standing < 30) || (st.id === "ti" && BENCH_SEATS.indexOf(seat) < 1)} />
                 ))}
 
                 {cs.facts.length > 0 && (
@@ -15990,6 +16241,22 @@ export default function ShinobiLife() {
                   </>
                 )}
 
+                {cs.fled ? (
+                  <>
+                    <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-1 mt-4">THERE IS NOBODY TO SENTENCE</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs mb-3">
+                      {cs.name} was across the border before anybody reached the gate, and whatever they were carrying went with them.
+                      A sentence needs somebody standing in the hall. What you can sign is the other thing.
+                    </div>
+                    <Row label="List them S-rank and send the hunter-nin"
+                      sub="Tried in absentia, into the Bingo Book at the top page, and an elite squad goes into foreign territory without asking that country first. They are to be killed and the property recovered."
+                      right="Sign the order" onClick={() => benchAct("hunt")} disabled={c.actions < 1} tone={T.blood} />
+                    <Row label="Leave it to the diplomats"
+                      sub="No order, no squad, no incident in somebody else's country. The route stays open and whoever holds it knows the village blinked."
+                      right="Dismiss" onClick={() => benchAct("rule", "dismiss")} disabled={c.actions < 1} />
+                  </>
+                ) : (
+                <>
                 <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-1 mt-4">THE SENTENCE</div>
                 <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
                   Nobody can make you pass the right one. The record keeps both what you did and what it was worth.
@@ -16036,6 +16303,22 @@ export default function ShinobiLife() {
                       tone={sn.death || sn.vanish ? T.blood : sn.free ? T.good : extra ? T.gold : null} />
                   );
                 })}
+                {(() => {
+                  /* what the execution will actually look like for this rank */
+                  const ex = executionOf(cs.rank);
+                  return (
+                    <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3 mt-3">
+                      <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">IF IT COMES TO THE LAST ONE</div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>
+                        {ex.style} for a {cs.rank.toLowerCase()}: {ex.where}, by {ex.by}.
+                        {ex.secret ? " Nothing is announced." : ""}{ex.burn ? " Hunter-nin burn the body afterwards; nothing is left to read." : ex.family ? " The body goes home to the family." : ""}
+                        {" They go to the Yamanaka wing first either way, because nobody at rank is put down until the village is certain they acted alone."}
+                      </div>
+                    </div>
+                  );
+                })()}
+                </>
+                )}
               </>
             ) : (
               <>
@@ -16098,9 +16381,9 @@ export default function ShinobiLife() {
                       <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Nothing listed. The clerk will have more by next year; they always do.</div>
                     )}
                     {(b.docket || []).filter((x) => !x.done).map((x) => {
-                      const ch2 = ALL_CHARGES.find((y) => y.id === x.charge);
+                      const ch2 = chargeOf(x);
                       return <Row key={x.no} label={x.name + " · " + x.rank}
-                        sub={ch2.n + (x.steps.length ? " · part heard" : "") + (x.pressure && x.pressure.want ? " · somebody is watching this one" : "")}
+                        sub={ch2.n + (x.fled ? " · already over the border" : "") + (x.extreme ? " · the hall will be closed" : "") + (x.steps.length ? " · part heard" : "") + (x.pressure && x.pressure.want ? " · somebody is watching this one" : "")}
                         right={"Case " + x.no} onClick={() => benchAct("case", x.no)} disabled={c.actions < 1} tone={x.rank === "Kage" ? T.blood : null} />;
                     })}
                   </>
@@ -16140,6 +16423,19 @@ export default function ShinobiLife() {
                   </>
                 )}
 
+                {(b.hunts || []).length > 0 && (
+                  <>
+                    <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">HUNTER ORDERS</div>
+                    {(b.hunts || []).slice(-8).reverse().map((h, i) => (
+                      <Row key={"h" + i} label={h.name + " \u00b7 " + h.rank}
+                        sub={h.charge + " \u00b7 " + (!h.done ? "S-rank, squad in the field, " + h.years + " year" + (h.years === 1 ? "" : "s") + " out"
+                          : h.result === "killed" ? "found and killed in " + h.out
+                          : h.result === "lost" ? "the squad did not come back \u2014 " + h.out
+                          : "the file went cold in " + h.out)}
+                        right="" disabled tone={!h.done ? T.blood : null} />
+                    ))}
+                  </>
+                )}
                 {/* what you have already decided */}
                 {(b.precedents || []).length > 0 && (
                   <>
