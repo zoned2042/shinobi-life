@@ -1658,8 +1658,10 @@ const SENTENCES = [
   { id: "probation", n: "Probation under an officer's watch", sev: 2, d: "Three years of somebody signing for them every month. No field work, no travel, no privacy.", free: true, probation: true },
   { id: "reserve", n: "Reduced to the reserve list", sev: 2, d: "Off the active roll and onto the list nobody is ever called off. A career ended without a cell.", reserve: true },
   { id: "strip", n: "Strip them of rank", sev: 2, d: "Back down the roll, publicly, and everybody they trained under knows by evening." },
-  { id: "labour1", n: "One year's hard labour", sev: 2, years: 1, d: "A short one. The quarries until next winter and then back to whatever is left of their life." },
-  { id: "labour", n: "Two years' hard labour", sev: 3, years: 2, d: "Not the cells. The quarries, the wall, the drainage under the village." },
+  { id: "labour1", n: "One year's hard labour", sev: 2, years: 1, d: "A short one. The quarries until next winter and then back to whatever is left of their life.", labour: true },
+  { id: "labour", n: "Two years' hard labour", sev: 3, years: 2, d: "Not the cells. The quarries, the wall, the drainage under the village.", labour: true },
+  { id: "labour5", n: "Five years' hard labour", sev: 4, years: 5, d: "Five years of the quarries. People come out of that unable to stand straight and unable to go back to the work they were trained for.", labour: true },
+  { id: "labour10", n: "Ten years' hard labour", sev: 6, years: 10, d: "Ten years on the wall and under it. Most of a working life, spent, and the village gets the wall.", labour: true },
   { id: "penance", n: "The penal unit", sev: 4, years: 4, d: "Four years in the units that go first and are not replaced. Some of them come back and none of them come back the same.", penal: true },
   { id: "p5", n: "Five years", sev: 4, years: 5, d: "Long enough that the people they graduated with will be jonin when they come out." },
   { id: "p10", n: "Ten years", sev: 5, years: 10, d: "Long enough to come out to a village that has rearranged itself without them." },
@@ -1682,6 +1684,8 @@ const SENTENCES = [
    they are two different controls. Every rider adds to what you took off the
    person, which is counted against what the case was actually worth. */
 const RIDERS = [
+  { id: "rlabour", n: "and hard labour", d: "Not the cells. The quarries, the wall, and the drainage under the village, every day of it.", sev: 1,
+    ok: (sen) => !!sen.years && !sen.hard },
   { id: "rstrip", n: "and strip them of rank", d: "Down the roll, publicly, on top of whatever else you just said.", sev: 1,
     ok: (sen, cs) => !sen.free && cs.rank !== "Civilian" && cs.rank !== "Academy Student" },
   { id: "rseal", n: "and seal their chakra", d: "They keep their life and lose the only thing anybody ever trained them to do.", sev: 2, seat: 1,
@@ -1849,6 +1853,7 @@ function benchTick(c, L) {
     const odds = cl(26 + h.years * 9 - (h.pw || 60) / 5, 6, 76);
     if (roll(odds)) {
       h.done = true; h.out = c.year; h.result = "killed";
+      (c.booked || []).forEach((x) => { if (x.name === h.name) x.dead = true; });
       P(L, "The hunter-nin found " + h.name + ". It took " + h.years + " year" + (h.years === 1 ? "" : "s") + " and two countries, and what came back was a confirmation and the property, not a body.", "g");
       newsItem(c, h.name + ", listed S-rank out of " + homeName(c) + ", has been killed in foreign territory. The country it happened in has lodged a protest that everybody expects to go nowhere.", "OBITUARIES", true);
       return;
@@ -1892,9 +1897,12 @@ function benchTick(c, L) {
      leaving it to a one-in-fifty roll on the ordinary docket meant it simply
      never happened. At the high bench it is its own event, announced, and it
      only lands once at a time. */
-  if (seat.id === "high" && !b.docket.some((x) => x.rank === "Kage") && (!b.kageTried || c.year - b.kageTried >= 25)) {
+  if (seat.id === "high" && !b.docket.some((x) => x.rank === "Kage") && (!b.kageTried || c.year - b.kageTried >= 45)) {
     const k = c.kages && c.kages[c.village];
-    if (k && k.name !== c.name && roll(16)) {
+    /* Putting a name the histories actually kept in the dock is not a thing a
+       village does. Once in a career, if that, and only when nothing else is
+       already listed against somebody the world has heard of. */
+    if (k && k.name !== c.name && roll(4)) {
       const cs = buildCase(c, { ...seat, tries: ["Kage"] });
       if (cs.rank === "Kage") {
         b.docket.push(cs);
@@ -3535,6 +3543,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.10", n: "The Book Was Only Ever Reading Itself", items: [
+    "Listing somebody in the Bingo Book did nothing. The book was a pure view of the named roster plus the era's bosses, with no way for anything in the game to add a line to it \u2014 so the court's rider, the exile walked to the gate and the S-rank hunter order all printed \u201cthe name goes into the Bingo Book tonight\u201d and then no name went into the Bingo Book, that night or ever. It holds entries now. Anybody you list appears in the book under LISTED OUT OF your village, with the charge, the year, your name as the bench that did it, and a bounty scaled to what you took off them",
+    "The tier is worked out from the sentence rather than picked: an exile lands at A or B, a hunter order is S by definition, and a rider on a heavy term follows the term. If the hunter-nin later find them, the entry closes",
+    "Hard labour is a rider as well as a sentence, so any term you pass can be served in the quarries \u2014 \u201cten years, and hard labour\u201d \u2014 rather than only the fixed two-year one. And the fixed terms go further: one, two, five and ten years of it, because ten years on the wall and under it is most of a working life and the village gets the wall",
+    "A name the histories actually kept almost never reaches your docket now. Trying the person in the hat was landing about once every twenty-five years, which for a thing no court in any village has ever done is roughly twenty-five times too often. It is a quarter as likely per year and needs forty-five years between, so it is a once-in-a-career event if it happens at all",
+  ] },
   { v: "10.9", n: "A Village Kills Its Own Differently Depending On What The Body Knows", items: [
     "Execution is one word and six procedures. An ANBU gets the ghost execution: a chamber under the roots of the village that is not on any plan of it, a masked team out of their own department, and hunter-nin burning the body with a Fire Style technique developed for exactly that before it has finished cooling \u2014 no blood, no hair, nothing for a Yamanaka or a grave-robber or a foreign buyer to read. It never reaches the paper. The agent simply stops appearing on the active roster, and the village is never told there was an execution because the village was never told there was an agent",
     "A jonin has their chakra suppressed with sealing tags and a barrier team in the room first, because you do not walk a jonin into that and hope. It is done inside a sealed facility with the clan heads and the military command required to attend \u2014 required, because the point is that they should have to watch \u2014 and hunter-nin cremate the body under guard. A chunin is stripped of the flak jacket and the headband in front of the panel, which takes longer than people expect and is meant to, and afterwards a sensor goes over the body for seals and tracking marks and it goes home to the family. A genin is done quietly by their own squad leader, who asks to do it rather than let a stranger, and goes home to their parents with the family name carrying the stain",
@@ -4352,7 +4366,7 @@ function newChar(name, gender, vid, clanName, eraId, otsuEye) {
     sixPaths: false, gates: 0, curse: 0, stats, health: 100, standing: 50, infamy: 0, ryo: rr(4000, 12000),
     jutsu: otsuBonusJutsu.slice(), otsu: otsuChakra, eyePaths: otsuEyePaths,
     titles: [], missions: 0, sMissions: 0, kills: 0, wins: 0, beastsSealed: [],
-    dutyLog: {}, scouted: 0, summit: null, summitOpen: null, bench: null,
+    dutyLog: {}, scouted: 0, summit: null, summitOpen: null, bench: null, booked: [],
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
     sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
@@ -5211,6 +5225,27 @@ function checkEpithet(c, L) {
 }
 
 /* ---------- your own page in the book ---------- */
+/* ---- names this playthrough put in the book ----
+   The Bingo Book used to be a pure view of the named roster plus the era's
+   bosses, so nothing in the game could ever add to it. Every line that said a
+   name had been entered in it \u2014 the court's own rider, an exile walked to the
+   gate, a hunter order \u2014 printed and then did nothing at all. It holds
+   entries now, and they show up in the book with the reason and the bounty. */
+function bookName(c, e) {
+  if (!c || !e || !e.name) return false;
+  if (!c.booked) c.booked = [];
+  if (c.booked.some((x) => x.name === e.name)) return false;
+  c.booked.push({
+    name: e.name, rank: e.rank || null, tier: e.tier || "C",
+    why: e.why || "listed by order of a court", year: c.year,
+    by: e.by || (c.name || "the bench"), vid: c.village,
+    bounty: e.bounty != null ? e.bounty : ({ S: 1200000, A: 480000, B: 160000, C: 45000 }[e.tier || "C"] || 45000),
+    pw: e.pw || null, dead: false,
+  });
+  return true;
+}
+const bookedOf = (c) => ((c && c.booked) || []).filter((x) => !x.dead);
+
 const BINGO_TIERS = [
   { r: "C", at: 20, d: "a nuisance with a name" },
   { r: "B", at: 40, d: "approach with a squad" },
@@ -9296,6 +9331,7 @@ export default function ShinobiLife() {
         b.convicted = (b.convicted || 0) + 1;
         b.hunts = (b.hunts || []).concat([{ name: cs.name, rank: cs.rank, pw: cs.pw, charge: ch.n, since: c.year, years: 0 }]);
         b.precedents = (b.precedents || []).concat([{ y: c.year, txt: cs.name + ", " + cs.rank + ", " + ch.n.toLowerCase() + " \u2014 tried in absentia, S-rank, hunter-nin dispatched." }]).slice(-40);
+        bookName(c, { name: cs.name, rank: cs.rank, tier: "S", pw: cs.pw, why: ch.n.toLowerCase() + ", tried in absentia", by: c.name });
         P(L, "You listed " + cs.name + " S-rank in absentia and signed the hunter order. A squad went out the same night, in foreign territory, without asking that country first.", "e");
         newsItem(c, cs.name + " of " + homeName(c) + " has been entered in the Bingo Book at S-rank and is to be killed on sight. The village has not explained what was taken across the border and has not been asked twice.", "BINGO BOOK", true);
       });
@@ -9379,6 +9415,7 @@ export default function ShinobiLife() {
           b.exiled2 = (b.exiled2 || []);
           b.exiledList = (b.exiledList || []).concat([{ name: cs.name, rank: cs.rank, pw: cs.pw, why: ch.n.toLowerCase(), since: c.year, grudge: cl(45 + unjust * 20, 10, 100) }]);
           P(L, cs.name + " was walked to the gate and struck off the roll in front of it. They did not argue and they did not look back at you.", "b");
+          bookName(c, { name: cs.name, rank: cs.rank, tier: took >= 7 ? "A" : "B", pw: cs.pw, why: ch.n.toLowerCase() + ", exiled", by: c.name });
           newsItem(c, who + " has been exiled from " + homeName(c) + " for " + ch.n.toLowerCase() + ". The name goes into the Bingo Book at the bottom page tonight.", "BINGO BOOK", true);
           if (cs.kage) kageCrisis(c, L, cs, "exiled");
         } else if (sen.years) {
@@ -9459,8 +9496,10 @@ export default function ShinobiLife() {
               c.standing = cl(c.standing - rr(2, 6));
             }
             if (r === "rbook") {
-              P(L, "The name goes into the Bingo Book tonight. Every village on the continent will have the file by the end of the month.", "b");
-              newsItem(c, cs.name + " of " + homeName(c) + " has been entered in the Bingo Book by order of its own court.", "BINGO BOOK");
+              const tier = took >= 8 ? "S" : took >= 6 ? "A" : took >= 3 ? "B" : "C";
+              bookName(c, { name: cs.name, rank: cs.rank, tier, pw: cs.pw, why: ch.n.toLowerCase(), by: c.name });
+              P(L, "The name goes into the Bingo Book tonight at " + tier + "-rank. Every village on the continent will have the file by the end of the month.", "b");
+              newsItem(c, cs.name + " of " + homeName(c) + " has been entered in the Bingo Book at " + tier + "-rank by order of its own court.", "BINGO BOOK");
             }
             if (r === "rexile") { if (held && held.name === cs.name) held.exileAfter = true; P(L, "And exile on release. They will serve every year of it and then be walked to the gate anyway.", "b"); }
             if (r === "rfamily") {
@@ -14698,7 +14737,27 @@ export default function ShinobiLife() {
                 </div>
               </div>
             )}
-            {!list.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Every name in this book is dead, retired, or you.</div>}
+            {/* names this village's own court put in the book */}
+            {bookedOf(c).length > 0 && (
+              <>
+                <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">LISTED OUT OF {homeName(c).toUpperCase()}</div>
+                {bookedOf(c).slice().reverse().map((e, i) => (
+                  <div key={"bk" + i} style={{ background: T.panel2, border: "1px solid " + T.line, borderLeft: "3px solid " + T.blood, borderRadius: 10 }} className="p-3 mb-2">
+                    <div className="flex justify-between items-baseline gap-3">
+                      <div>
+                        <div className="text-sm font-bold">{e.name}{e.rank ? " \u00b7 " + e.rank : ""}</div>
+                        <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-0.5">
+                          {cap(e.why)}. Listed {e.year} AH by {e.by}. Bounty {money(e.bounty)}.
+                        </div>
+                      </div>
+                      <div style={{ color: T.blood, fontSize: 11, whiteSpace: "nowrap" }} className="font-bold">{e.tier}-rank</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE NAMES OF THE AGE</div>
+              </>
+            )}
+            {!list.length && !bookedOf(c).length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Every name in this book is dead, retired, or you.</div>}
             {list.map((id) => {
               const nm = NAMED[id];
               if (!nm) return null;
