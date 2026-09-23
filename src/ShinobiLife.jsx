@@ -2374,6 +2374,13 @@ function vaultTick(c, L) {
 }
 
 /* ---- who can be indicted: every name on the five rolls ---- */
+/* somebody with no recorded birth year still has an age: derived from their
+   name so it never changes between looks, and it grows with the calendar */
+function steadyAge(c, name, lo, span, since) {
+  let h = 0; const t = String(name || "");
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return lo + (h % span) + Math.max(0, (c.year || 0) - (since || c.year || 0));
+}
 function indictRoster(c, vid) {
   const r = villageRoll(c, vid);
   if (!r) return [];
@@ -2384,7 +2391,9 @@ function indictRoster(c, vid) {
     row.people.forEach((pp) => {
       if (pp.you) return;
       const isKage = row.rank === "Kage";
-      out.push({ name: pp.name, rank: isKage && k ? k.title : row.rank, pw: pp.pw || 50, age: pp.age || null, from: vid,
+      const seatFrom = isKage && c.line && c.line[vid] && c.line[vid].current ? c.line[vid].current.from : null;
+      const age = pp.age || (isKage ? steadyAge(c, pp.name, 34, 22, seatFrom) : steadyAge(c, pp.name, 22, 30, null));
+      out.push({ name: pp.name, rank: isKage && k ? k.title : row.rank, pw: pp.pw || 50, age, from: vid,
         named: pp.named || (isKage && k ? k.named : null) || null, kage: isKage });
     });
   });
@@ -16291,7 +16300,7 @@ export default function ShinobiLife() {
               return (
                 <div key={id} className="mb-2">
                   <Row label={namedName(c, id) + " · " + namedTitle(c, id) + (mine ? " · your organisation" : "")}
-                    sub={(namedVillage(id) ? vName2(namedVillage(id)) : isAkatsukiId(id) ? "the Akatsuki" : "no village") + " · " + namedRank(c, id) + (namedAge(c, id) ? " · age " + namedAge(c, id) : "") + " · power " + nm.lvl + " — " + nm.desc}
+                    sub={(namedVillage(id) ? vName2(namedVillage(id)) : isAkatsukiId(id) ? "the Akatsuki" : "no village") + " · " + namedRank(c, id) + " · age " + (AGELESS.includes(id) ? "unknowable" : namedAge(c, id) || steadyAge(c, nm.name, 24, 30, null)) + " · power " + nm.lvl + " — " + nm.desc}
                     right={mine ? "One of yours" : "Lvl " + nm.lvl + " · ~" + Math.round(odds) + "%"}
                     onClick={() => huntNamed(id)} disabled={mine || c.actions < 1}
                     tone={mine ? null : odds < 25 ? T.blood + "55" : null} />
