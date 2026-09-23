@@ -1297,7 +1297,7 @@ function summitTick(c, L) {
   if (c.summitOpen || c.summit) return;
   const seats = VILLAGES.filter((v) => GREAT_VILLAGES.includes(v.id) && villageExists(c, v.id) && c.kages[v.id]);
   if (seats.length < 3) return;
-  if (!roll(9)) return;
+  if (!roll(accordOn(c, "summits") ? 20 : 9)) return;
   const site = pick(SUMMIT_SITES), agenda = pick(SUMMIT_AGENDAS);
   c.summitOpen = { site, agenda, from: c.year, until: c.year + 1, raided: false };
   newsItem(c, "The five have called a Kage Summit at " + site + ", over " + agenda + ". Every seat will be filled and every one of them is bringing guards.", "THE COURTS", true);
@@ -2166,6 +2166,351 @@ function benchTick(c, L) {
     if (b.fair >= 74) newsItem(c, "The bench in " + homeName(c) + " has acquired a reputation nobody expected it to: people are asking to be tried there. " + c.name + " has heard " + b.heard + " cases.", "THE COURTS");
     else if (b.fair <= 26) newsItem(c, "Defence advocates in " + homeName(c) + " have begun asking for cases to be moved away from " + c.name + "'s court. The tower has not answered them.", "THE COURTS");
   }
+}
+
+/* ============================ THE IRON SCALES ============================
+   Not on any path. Not on any menu. The Land of Iron has always been the one
+   place the five would all agree to stand in, and Mifune has always kept a
+   seat in the hall under Tetsu for somebody who belongs to none of them.
+   You find the door, or you never know it was there.
+
+   Unlike the village bench there is no single fairness bar. There are five
+   pans, one per great nation, and each holds that nation's faith in you. Rule
+   against a nation and its pan goes light; let it go light enough and it
+   walks out, and a court that three nations have walked out of is not a court.
+   Above them all sits the Land of Iron's own patience with you, which is what
+   keeps you in the chair. */
+
+const IRON = "#9fb4c7";           /* the colour of the hall: cold steel, not gold */
+const ironNations = (c) => GREAT_VILLAGES.filter((v) => villageExists(c, v));
+const ironHas = (c) => !!(c && c.iron && c.iron.seated);
+
+/* Mifune does not give advice. He says things, and you work out afterwards
+   that they were advice. */
+const MIFUNE = [
+  "A blade that favours the hand that paid for it is not a blade. It is a handle.",
+  "The envoy who speaks longest has usually been sent to fill the time.",
+  "Both of them are lying. The question is only which lie the world can live with.",
+  "When two nations agree on a fact, check whether they are both afraid of the same thing.",
+  "A treaty is a promise written by people who did not expect to keep it.",
+  "Iron does not take sides. It only takes the shape it is struck into.",
+  "The one who asks this hall for mercy has usually been merciful before. The one who asks for justice, usually not.",
+  "Look at who is not in the room.",
+  "The first account is the one they prepared. The second is the one they believe.",
+  "A samurai who draws to settle an argument has already lost it.",
+];
+
+/* every case has two parties. a party is a nation (id) or something the world has no village for */
+const IRON_EXTERNAL = {
+  iron: "the Land of Iron", toads: "the Toads of Mount Myoboku", snakes: "the Snakes of Ryuchi Cave",
+  slugs: "the Slugs of Shikkotsu Forest", guild: "the Wave Country shipping guild", akatsuki: "the Akatsuki",
+  dead: "the families of the reanimated dead", beast: "a tailed beast", daimyo: "a daimyo",
+};
+const partyLabel = (p) => (p.id && VILLAGES.find((v) => v.id === p.id) ? VILLAGES.find((v) => v.id === p.id).name : p.label || IRON_EXTERNAL[p.ext] || "a party");
+
+/* ---- the kinds of dispute the five bring to the one place none of them own ----
+   right: which side the facts actually favour. for: evidence lines, keyed by the
+   side they help. special: the ruling particular to this kind of case, and
+   when it is the correct one. */
+const IRON_CASES = [
+  { id: "border", nations: 2, w: 12,
+    t: (a, b) => "The valley between " + a + " and " + b,
+    sum: (a, b) => a + " and " + b + " both claim the same valley, and the stones marking it have been moved at least twice in living memory.",
+    lines: {
+      a: ["A survey sealed by both Kage forty years ago puts the line on the eastern ridge, which makes it theirs.", "The villagers in the valley pay their rice tax to them and always have.", "The other side's markers were cut this spring. The chisel marks are fresh."],
+      b: ["The eastern ridge moved in the landslide of the Third War; the survey describes a ridge that is no longer there.", "Their dead are buried in that valley, going back further than the other village existed.", "The rice tax was extracted at swordpoint, and three farmers have testified to it."],
+    },
+    special: { id: "divide", n: "Divide the valley", d: "Draw a new line down the river. Neither gets all of it and both can say they won something.", fits: "both" } },
+  { id: "envoy", nations: 2, w: 10,
+    t: (a, b) => "The death of " + a + "'s envoy in " + b,
+    sum: (a, b) => a + " says its envoy was murdered inside " + b + "'s walls. " + b + " says the envoy was caught doing something no envoy is sent to do.",
+    lines: {
+      a: ["The envoy held a sealed writ of passage, and it was found still sealed on the body.", "The only witnesses to the 'attack' are the guards who did the killing.", "The envoy's sealing kit was the diplomatic kind, not the kind you take a child with."],
+      b: ["A child of the ruling clan was found drugged in the envoy's rooms.", "The envoy's escort crossed the border two days before the envoy did, which no escort does.", "The writ of passage covered the city, not the compound the envoy was found in."],
+    },
+    special: { id: "exchange", n: "Order a formal exchange of apologies", d: "No finding of guilt. Both Kage apologise in writing, in the same words, on the same day.", fits: "both" } },
+  { id: "extradition", nations: 2, w: 9,
+    t: (a, b) => a + " demands a missing-nin from " + b,
+    sum: (a, b) => a + " wants a missing-nin handed over. " + b + " has been sheltering them, and says the charges are political.",
+    lines: {
+      a: ["The missing-nin killed a squad on the way out of the gate. The bodies were not political.", "They took a forbidden scroll with them and it has not been returned.", "Three other villages have the same name in their books."],
+      b: ["The 'charges' were filed the day after the missing-nin testified against an elder.", "The squad they killed had been sent to kill them first, on no written order.", "They have lived quietly in a fishing town for nine years and taught its children to read."],
+    },
+    special: { id: "custody", n: "Take them into samurai custody", d: "Neither village gets them. The Land of Iron holds them until somebody brings the court a better case.", fits: "neither" } },
+  { id: "host", nations: 2, w: 8, beast: true,
+    t: (a, b, x) => "Custody of " + x,
+    sum: (a, b, x) => a + " says " + x + " is theirs by birth and by the Kage's division. " + b + " holds the host now, and does not intend to give them back.",
+    lines: {
+      a: ["The division of the beasts at the first summit gave that one to them, and the treaty still stands.", "The host was born inside their walls to one of their own families.", "The other village took the host during a war that ended with no terms about it."],
+      b: ["The host came over the border on foot, alone, at eleven, asking for somewhere safe.", "The original village sealed that beast into a child without the family's consent.", "The host has a family here now, and a squad, and has asked this court to be left where they are."],
+    },
+    special: { id: "choose", n: "Let the host choose", d: "It is the host's body and the host's life. Ask them, in this hall, in front of both envoys, and rule by the answer.", fits: "b" } },
+  { id: "warcrimes", nations: 2, w: 7, war: true,
+    t: (a, b) => a + " accuses " + b + "'s field commander",
+    sum: (a, b) => "In the last fighting between them, a village of " + a + "'s civilians was burned. " + a + " names " + b + "'s field commander. " + b + " says it was an accident of war.",
+    lines: {
+      a: ["The order to burn it survives, in the commander's hand.", "There were no shinobi in the village, and the commander's own scouts had reported as much.", "Survivors describe the commander standing at the treeline watching."],
+      b: ["The village was being used as a supply depot, and the stores were found in the ashes.", "The fire started from a Fire Style technique the accusing side's own jonin were using.", "The 'order' is on paper the commander's unit was not issued until a year later."],
+    },
+    special: { id: "both", n: "Find both armies at fault", d: "Nobody at that treeline behaved like a soldier. Name both commanders and bar both from field command.", fits: "both" } },
+  { id: "reparations", nations: 2, w: 7,
+    t: (a, b) => a + " v. " + b + ": the unpaid reparations",
+    sum: (a, b) => b + " signed terms after the last war and has not paid a single instalment. " + a + " wants the court to compel it.",
+    lines: {
+      a: ["The terms are signed, sealed and witnessed by the Daimyo of both lands.", "The other side has built a new tower since the war ended, with money it says it does not have.", "Nine instalments are due and none have been paid."],
+      b: ["The terms were signed under occupation with enemy shinobi in the council room.", "Half the sum was for damage the other side did to itself retreating.", "They have paid, in kind, in grain, during a famine, and have the receipts."],
+    },
+    special: { id: "halve", n: "Halve the debt and enforce the rest", d: "Rewrite the terms at half. Pay it, in full, on time, with the Land of Iron counting it.", fits: "both" } },
+  { id: "ceasefire", nations: 2, w: 0, running: true,
+    t: (a, b) => "A ceasefire between " + a + " and " + b,
+    sum: (a, b) => a + " has come to the court asking for the fighting with " + b + " to stop. " + b + " has come to explain why it should not.",
+    lines: {
+      a: ["Their border towns have been evacuated twice this year and the harvest is in the ground, unpicked.", "They have offered to withdraw first and let the samurai walk the line.", "The war began over an insult, and the person who gave it is already dead."],
+      b: ["The other side broke the last ceasefire within a month, and the graves are still new.", "They are asking for peace because they are losing, not because they want it.", "Their 'withdrawal' was offered for a line that leaves them holding the pass."],
+    },
+    special: { id: "cease", n: "Order a ceasefire", d: "Both sides stand down on the day the ruling is read. The samurai walk the line. Whoever breaks it breaks it against the Land of Iron.", fits: "a" } },
+  /* ---- the things the world has no village for ---- */
+  { id: "contract", ext: ["toads", "snakes"], w: 5,
+    t: () => "The Toads of Mount Myoboku v. the Snakes of Ryuchi Cave",
+    sum: () => "A summoner signed with the Toads and then, the same year, with the Snakes. Both clans say the other has no right to them. Neither will fight for anybody until this is settled.",
+    lines: {
+      a: ["The toad contract was signed first, and in blood, which is the older law.", "The snakes' contract was signed under a genjutsu, and the summoner remembers none of it.", "The toads have fought for this summoner's family for four generations."],
+      b: ["The toad contract lapsed when the summoner's teacher died, and was never renewed.", "The summoner went to the snakes themselves, awake, and says so.", "The toads have not answered this summoner's call in six years."],
+    },
+    special: { id: "void", n: "Void both contracts", d: "The summoner belongs to neither. Nobody in any hall likes this ruling, including the summoner.", fits: "neither" } },
+  { id: "beastright", ext: ["beast", null], nations: 1, w: 3, beast: true,
+    t: (a, b, x) => x + " petitions the court",
+    sum: (a, b, x) => "Through its host, " + x + " has asked this court for something no court has been asked: to be recognised as a being with its own will, and released. " + b + " holds the seal and opposes it.",
+    lines: {
+      a: ["It has spoken through its host for a month, calmly, and asked for nothing but a hearing.", "It has not tried to break the seal once, which it could have.", "Its brothers were free once, for longer than any village has existed."],
+      b: ["The last time a beast of its size was free, a village of three thousand stopped existing.", "The host is a child, and the child is terrified of what it is saying.", "Every village on the continent has told this court privately what it will do if it says yes."],
+    },
+    special: { id: "recognise", n: "Recognise it, and keep the seal", d: "It is a person. It stays sealed. The host and the beast are to be spoken to, not used, and this court will hear from them again.", fits: "both" } },
+  { id: "samurai", ext: ["iron", null], nations: 1, w: 5,
+    t: (a, b) => "The Land of Iron v. " + b,
+    sum: (a, b) => "Four samurai are dead on a neutral road and " + b + "'s shinobi were the last to pass them. The Land of Iron brings the case, in its own hall, before its own judge. You.",
+    lines: {
+      a: ["The wounds are a technique " + "that village teaches its genin.", "The shinobi did not report the bodies, which they passed within the hour.", "The samurai had stopped the shinobi at that post the week before and turned them back."],
+      b: ["The road was also used that day by two missing-nin from a third country.", "The shinobi did report it, to the next samurai post, and that post's log has gone missing.", "The samurai at that post had been taking payment to let smugglers through."],
+    },
+    special: { id: "recuse", n: "Say out loud that you cannot judge your own house", d: "Hand it to a panel of the four other nations. Mifune will not like it. The four will remember that you did it.", fits: "b" } },
+  { id: "guild", ext: ["guild", null], nations: 1, w: 4,
+    t: (a, b) => "The shipping guild v. " + b,
+    sum: (a, b) => "A shipping guild says " + b + "'s shinobi destroyed its monopoly by building a bridge. " + b + " says the guild had been starving an island for a decade.",
+    lines: {
+      a: ["The guild held a signed charter for the crossing, from the daimyo.", "The bridge was built by shinobi on a mission, which makes it a military act.", "Forty guild employees are out of work."],
+      b: ["The guild's charter was bought, and the daimyo who sold it is in exile for it.", "The island had one child in five dying before the bridge.", "The guild's 'employees' were mostly hired swords."],
+    },
+    special: { id: "toll", n: "Keep the bridge, and put a toll on it for ten years", d: "The island keeps its bridge. The guild gets a share of the toll until it can find honest work.", fits: "b" } },
+  { id: "daimyo", ext: ["daimyo", null], nations: 1, w: 4,
+    t: (a, b) => b + " v. its own daimyo",
+    sum: (a, b) => b + " accuses the daimyo of its own land of taking money from a rival village to hold back its mission fund in a war year.",
+    lines: {
+      a: ["The mission fund was cut because the treasury was empty, and the treasury's books are open.", "The daimyo has lost two sons to that village's wars and has no reason to wish it harm.", "The 'rival money' was a trade loan, declared."],
+      b: ["The treasury was not empty. The daimyo built a summer palace that year.", "A courier from the rival village was seen at the palace four times.", "The fund was cut by exactly the sum the courier carried."],
+    },
+    special: { id: "regent", n: "Keep the daimyo, appoint a regent over the treasury", d: "The daimyo keeps the seat and loses the keys. A regent the village approves counts every coin.", fits: "both" } },
+  { id: "dead", ext: ["dead", null], nations: 1, w: 3,
+    t: (a, b) => "The families of the dead v. " + b,
+    sum: (a, b) => b + " used Impure World Reincarnation in the last war, and brought back other villages' heroes to fight their own people. The families have come to the one court none of the villages own.",
+    lines: {
+      a: ["Fourteen of the dead were brought back and made to kill their own grandchildren.", "The technique needs a living sacrifice for every body, and the sacrifices were prisoners of war.", "The village has not apologised, and has not destroyed the scroll."],
+      b: ["The reanimator was a missing-nin the village had disowned years before.", "The village's own dead were used the same way, and its families are in this hall too.", "The scroll was destroyed. The ashes were sent to the court and are on the table."],
+    },
+    special: { id: "ban", n: "Outlaw the technique across all five", d: "Nobody is found guilty. The technique is. Any village that uses it again answers to this court.", fits: "both" } },
+  { id: "akatsuki", ext: ["akatsuki", null], nations: 0, w: 3, era: 4,
+    t: () => "The Five Nations v. the Akatsuki",
+    sum: () => "An organisation of missing-nin from every one of the five villages is taking the tailed beasts one by one. The five want it named, and outlawed, by the one court none of them control.",
+    lines: {
+      a: ["Its members are listed in every village's book already.", "It has taken hosts from three villages this decade.", "It has a leader, a treasury and a statue that is not decoration."],
+      b: ["Two of the villages hired it, at different times, to do work they would not sign.", "Its founding was a response to a war the five started.", "Naming it outlaw by all five makes every member a target in every country, including the ones who are trying to leave."],
+    },
+    special: { id: "outlaw", n: "Declare the Akatsuki outlaws of all five nations", d: "Every member listed in every book, in every country, by every village, with the Land of Iron's seal on it.", fits: "a" } },
+];
+
+/* ---- world law ----
+   Once the five trust the Scales enough, the Scales can write something down
+   that binds all of them. Each nation votes with its faith in you, bent by what
+   it actually thinks of the idea. */
+const IRON_ACCORDS = [
+  { id: "children", n: "The Children's Accord", d: "No shinobi under fourteen is sent to a front by any of the five.", lean: { kiri: -14, kumo: -4 }, peace: 1 },
+  { id: "charter", n: "The Jinchuriki Charter", d: "A host is a person, not a weapon. No host is transferred, sold or sealed without their own word.", lean: { kumo: -10, iwa: -6, konoha: 4 }, peace: 0 },
+  { id: "neutral", n: "Iron Neutrality", d: "No war is fought on neutral ground, and every road through the Land of Iron is open to all five.", lean: { iwa: -6 }, peace: 2 },
+  { id: "summits", n: "The Summit Cycle", d: "The five Kage meet every five years whether any of them wants to or not.", lean: { suna: 4 }, peace: 1 },
+  { id: "forbidden", n: "The Convention on Forbidden Techniques", d: "Impure World Reincarnation and bloodline harvesting are outlawed by all five.", lean: { konoha: -4, kiri: 6 }, peace: 0 },
+  { id: "prisoners", n: "The Prisoner Exchange Protocol", d: "Prisoners of war are exchanged within a year of terms being signed. Nobody is kept as a bargaining chip.", lean: { iwa: 4, kumo: -4 }, peace: 1 },
+  { id: "stations", n: "The Closing of the Bounty Stations", d: "No village pays a stranger for a head. Bounties are settled between villages or not at all.", lean: { suna: -8, kiri: 4 }, peace: 1 },
+];
+const accordOn = (c, id) => !!(c.iron && (c.iron.accords || []).includes(id));
+/* how much quieter the world is for having a court in it */
+function ironPeace(c) {
+  if (!c.iron || !c.iron.seated && !(c.iron.accords || []).length) return 0;
+  const acc = (c.iron.accords || []).reduce((a, id) => a + ((IRON_ACCORDS.find((x) => x.id === id) || {}).peace || 0), 0);
+  const ns = ironNations(c);
+  const avg = c.iron.seated && ns.length ? ns.reduce((a, v) => a + (c.iron.trust[v] || 50), 0) / ns.length : 50;
+  return acc * 2 + (avg >= 70 ? 3 : avg >= 55 ? 1 : 0);
+}
+
+function ironInit(c) {
+  const trust = {};
+  GREAT_VILLAGES.forEach((v) => (trust[v] = rr(48, 62)));
+  if (c.village && trust[c.village] != null) trust[c.village] = cl(trust[c.village] + 10);
+  return { seated: false, since: null, trust, walked: [], favour: 60, docket: [], caseNo: 0, heard: 0, right: 0,
+           ledger: [], accords: [], failed: [], defiance: null, bribes: 0, exposed: 0, renown: 0, offered: false };
+}
+
+/* who the door opens for */
+function ironWorthy(c) {
+  if (eraOf(c).hideVillages || ironNations(c).length < 3) return { ok: false, why: "There are not five nations yet. There is nothing in this hall to judge, and the hall knows it." };
+  if (c.rogue) return { ok: false, why: "The Scales do not seat somebody half the world is hunting. Mifune said it without looking up." };
+  if (c.rank >= 6 || c.founded) return { ok: false, why: "You wear a hat. The Scales do not seat somebody who is already a party to everything that will ever come through that door." };
+  if (c.age < 25) return { ok: false, why: "Come back when you have been badly wrong about something that mattered. The Scales have no use for anybody who has not." };
+  const judge = c.bench && c.bench.heard >= 6;
+  if (c.standing < 55 && !judge) return { ok: false, why: "Nobody outside your own village knows your name yet. The Scales need a name all five will sit still for." };
+  return { ok: true };
+}
+
+/* ---- a dispute ---- */
+function buildIronCase(c) {
+  const I = c.iron;
+  const ns = ironNations(c).filter((v) => !(I.walked || []).includes(v));
+  const running = ((c.world && c.world.wars) || []).filter((w) => w.years > 0 && ns.includes(w.a) && ns.includes(w.b));
+  const pool = IRON_CASES.filter((k) => {
+    if (k.era != null && eraIndex(c) < k.era) return false;
+    if (k.running) return running.length > 0;
+    if (k.beast && !BEASTS.some((b) => c.world && c.world.hosts && c.world.hosts[b.id] && c.world.hosts[b.id].alive && !c.world.hosts[b.id].you)) return false;
+    return (k.nations || 0) <= ns.length;
+  });
+  if (!pool.length) return null;
+  /* a running war nearly always gets to the court first */
+  const recent = I.recent || [];
+  let kind = running.length && roll(55) ? IRON_CASES.find((k) => k.id === "ceasefire") : null;
+  if (!kind) {
+    const fresh = pool.filter((k) => !recent.includes(k.id) && k.w > 0);
+    const src = fresh.length ? fresh : pool.filter((k) => k.w > 0);
+    const bag = src.flatMap((k) => Array(k.w).fill(k));
+    kind = pick(bag);
+  }
+  if (!kind) return null;
+  I.recent = recent.concat([kind.id]).slice(-5);
+  let a, b, beastId = null, war = null;
+  if (kind.id === "ceasefire") {
+    war = pick(running);
+    const aFirst = roll(50);
+    a = { id: aFirst ? war.a : war.b }; b = { id: aFirst ? war.b : war.a };
+  } else if (kind.nations === 2 || (kind.nations === undefined && !kind.ext)) {
+    const x = pick(ns); const y = pick(ns.filter((v) => v !== x));
+    a = { id: x }; b = { id: y };
+  } else if (kind.ext && kind.ext[1] === null) {
+    a = { ext: kind.ext[0] }; b = { id: pick(ns) };
+  } else if (kind.ext) {
+    a = { ext: kind.ext[0] }; b = { ext: kind.ext[1] };
+  } else { a = { id: pick(ns) }; b = { id: pick(ns.filter((v) => v !== a.id)) }; }
+  if (kind.beast) {
+    const held = BEASTS.filter((bb) => c.world.hosts[bb.id] && c.world.hosts[bb.id].alive && !c.world.hosts[bb.id].you);
+    const bb = kind.id === "host"
+      ? (held.find((h) => c.world.hosts[h.id].village === b.id) || pick(held))
+      : (held.find((h) => c.world.hosts[h.id].village === b.id) || pick(held));
+    beastId = bb.id;
+    if (kind.id === "host") {
+      /* the claimant is the village the beast was originally divided to, if that is somebody else */
+      const holder = c.world.hosts[bb.id].village;
+      if (holder && ns.includes(holder)) b = { id: holder };
+      const orig = bb.v && ns.includes(bb.v) && bb.v !== b.id ? bb.v : pick(ns.filter((v) => v !== b.id));
+      a = { id: orig };
+    } else {
+      const holder = c.world.hosts[bb.id].village;
+      if (holder && ns.includes(holder)) b = { id: holder };
+    }
+  }
+  const al = partyLabel(a), bl = partyLabel(b);
+  const bx = beastId != null ? beastLabel(c, BEASTS.find((x) => x.id === beastId)) : null;
+  /* which way the facts actually lean */
+  const rightPool = kind.special.fits === "both" ? ["a", "b", "both", "both"] : kind.special.fits === "neither" ? ["a", "b", "neither"] : ["a", "b", "b", "a"];
+  I.caseNo = (I.caseNo || 0) + 1;
+  const cs = {
+    no: I.caseNo, year: c.year, kind: kind.id, a, b,
+    title: kind.t(al, bl, bx), sum: kind.sum(al, bl, bx),
+    right: pick(rightPool), beam: rr(-12, 12), heard: [], notes: [],
+    beast: beastId, war: war ? { a: war.a, b: war.b } : null,
+    home: a.id === c.village || b.id === c.village,
+    envelope: roll(22) ? { from: roll(50) ? "a" : "b", amount: rr(90, 420) * 1000 } : null,
+    done: false,
+  };
+  /* external parties do not send envelopes unless they are a guild or a daimyo */
+  if (cs.envelope && ((cs.envelope.from === "a" && a.ext && !["guild", "daimyo"].includes(a.ext)) || (cs.envelope.from === "b" && b.ext && !["guild", "daimyo"].includes(b.ext)))) cs.envelope = null;
+  return cs;
+}
+
+/* the year, seen from the hall under Tetsu */
+function ironTick(c, L) {
+  const I = c.iron;
+  if (!I) return;
+  /* the hint: somebody from the Land of Iron has been watching */
+  if (!c.ironToken && !I.seated && ironWorthy(c).ok) {
+    const judged = c.bench && c.bench.heard >= 10 && (c.bench.fair == null ? 50 : c.bench.fair) >= 62;
+    if ((judged && roll(35)) || (c.standing >= 78 && c.rank >= 4 && c.age >= 30 && roll(3))) {
+      c.ironToken = c.year;
+      P(L, judged
+        ? "A samurai in plain grey sat at the back of your hall today and left before the verdict. On the bench afterwards: a small iron token, stamped with one word. Tetsu."
+        : "A samurai courier stopped you on the road, handed you a small iron token stamped with one word — Tetsu — and rode off before you could ask what it was for.", "e");
+    }
+  }
+  if (!I.seated) return;
+  const ns = ironNations(c);
+  /* things that end a seat on their own */
+  if (c.rank >= 6 || c.founded) { ironEnd(c, L, "hat"); return; }
+  if (c.rogue) { ironEnd(c, L, "rogue"); return; }
+  I.years = (I.years || 0) + 1;
+  c.ryo += 60000 + (I.renown || 0) * 1500;
+  /* faith drifts home toward the middle; walked-out nations drift back slowly */
+  ns.forEach((v) => {
+    const t = I.trust[v] == null ? 50 : I.trust[v];
+    I.trust[v] = cl(t + (t < 50 ? 1 : t > 70 ? -1 : 0));
+    if ((I.walked || []).includes(v) && I.trust[v] >= 38 && roll(30)) {
+      I.walked = I.walked.filter((x) => x !== v);
+      P(L, vName2(v) + " has sent its envoy back to the hall under Tetsu. Nobody said anything about the empty chair.", "g");
+    }
+  });
+  /* an unanswered defiance costs the court its teeth */
+  /* a full year to answer it: the tick after the ruling is not the year after it */
+  if (I.defiance && c.year - I.defiance.year >= 2) {
+    ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 4)));
+    I.favour = cl(I.favour - 8);
+    P(L, vName2(I.defiance.nation) + " ignored the Scales for a year and nothing happened to it. Every other nation noticed.", "b");
+    newsItem(c, vName2(I.defiance.nation) + " has openly defied a ruling of the Iron Scales for a full year without consequence. Envoys of the other four are said to be reconsidering what their own signatures are worth.", "THE COURTS", true);
+    I.defiance = null;
+  }
+  /* an envelope you kept can surface */
+  if (I.bribes > I.exposed && roll(9)) {
+    I.exposed += 1;
+    ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 14)));
+    I.favour = cl(I.favour - 22);
+    P(L, "Somebody kept a copy of the receipt. The whole continent now knows the Scales can be bought, and exactly how much you cost.", "b");
+    newsItem(c, "THE IRON SCALES WERE PAID. A receipt in the Arbiter's hand has surfaced in three capitals at once. The Land of Iron has not commented.", "THE COURTS", true);
+  }
+  if (I.favour <= 0) { ironEnd(c, L, "favour"); return; }
+  const walked = (I.walked || []).filter((v) => ns.includes(v));
+  if (walked.length >= 3) { ironEnd(c, L, "collapse"); return; }
+  /* the docket */
+  I.docket = (I.docket || []).filter((x) => !x.done && c.year - x.year <= 2);
+  const want = cl(1 + Math.floor((I.years || 0) / 4), 1, 3);
+  let n = 0;
+  while (I.docket.length < want && n++ < 6) { const cs = buildIronCase(c); if (cs) I.docket.push(cs); }
+  if (I.docket.length) P(L, "The hall under Tetsu has " + I.docket.length + " dispute" + (I.docket.length === 1 ? "" : "s") + " waiting for you.", "n");
+}
+
+function ironEnd(c, L, why) {
+  const I = c.iron; if (!I || !I.seated) return;
+  I.seated = false; I.docket = []; I.defiance = null; I.ended = c.year; I.endedWhy = why;
+  const line = {
+    hat: ["You took a hat, and the Scales do not seat a hat. Mifune came for the token himself, and bowed, and did not say anything else.", "The Arbiter of the Iron Scales has become a Kage and stepped down from the hall under Tetsu, as the hall requires."],
+    rogue: ["You are a missing-nin now. The token was gone from your pack the next morning and nobody saw who took it.", "The Arbiter of the Iron Scales has been removed. The Land of Iron will not say why and does not have to."],
+    favour: ["Mifune asked you to walk with him, and at the gate he asked for the token back. There was no argument to have.", "The Land of Iron has dismissed its Arbiter. The hall under Tetsu is empty, and the five are pretending not to be relieved."],
+    collapse: ["Three of the five chairs have been empty for a year. A court that most of the world has walked out of is not a court, and the doors of the hall under Tetsu were closed this morning.", "THE IRON SCALES HAVE COLLAPSED. Three of the five great nations have abandoned the court at Tetsu and the Land of Iron has closed the hall."],
+  }[why] || ["The seat is empty.", "The hall under Tetsu is empty."];
+  P(L, line[0], "b");
+  newsItem(c, line[1], "THE COURTS", true);
 }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
@@ -3513,6 +3858,8 @@ function worldTick(c, L) {
   naturalDeaths(c, L);
   summitTick(c, L);
   benchTick(c, L);
+  if (!c.iron) c.iron = ironInit(c);
+  ironTick(c, L);
   feudTick(c, L);
   incidentTick(c, L);
   timesTick(c);
@@ -3565,7 +3912,7 @@ function worldTick(c, L) {
   w.wars = w.wars.filter((x) => x.years > 0);
 
   /* --- new wars --- */
-  if (w.wars.length < 2 && others.length >= 2 && roll(14)) {
+  if (w.wars.length < 2 && others.length >= 2 && roll(Math.max(3, 14 - ironPeace(c)))) {
     const a = pick(others), b = pick(others.filter((x) => x.id !== a.id));
     if (!a || !b) return;
     /* the great wars are declared by the calendar, not by a die roll — a border war
@@ -3875,6 +4222,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.13", n: "There Is A Door In The Land Of Iron", items: [
+    "It is not on any path and it is not on any menu. The Land of Iron has always been the one place all five great nations would agree to stand in, and somebody there has kept a sixth chair empty for a long time, facing the other five, for a judge who belongs to none of them",
+    "If you have sat on a bench of your own and sat on it well, somebody may leave you a small iron token with a word stamped on it. The word is the whole of the instructions",
+    "Fixed, while it was being built: the Hokage handover work from the last update now also covers a Kage killed at a summit, and the court's defiance clock gives you a full year to answer before the world decides you will not",
+  ] },
   { v: "10.12", n: "The Hat Came Off Before The Hearing", items: [
     "Fixed the Hokage line going wrong at the end of the Fourth War. Tsunade was seated and stepped down in the same year, Kakashi took the hat as the Fifth Hokage instead of the Sixth, and the Records went on listing Tsunade as the one in office. All three were one bug: the post-war handover wrote the new Kage straight into the seat without touching the line of succession, and the line rebuilds the seat from itself every year \u2014 so the handover was quietly undone twelve months later and the old Kage came back",
     "There is now one way for a seat to change hands outside its term, and it goes through the line: the outgoing Kage gets an end year in the Records, the incoming one gets the next number, and it stays that way. The court's own verdict against a Kage had the same fault and now uses it too, as does a Kage killed at a summit",
@@ -7452,6 +7804,9 @@ export default function ShinobiLife() {
   const [clanPower, setClanPower] = useState("read");
   const [benchCase, setBenchCase] = useState(null);
   const [benchRiders, setBenchRiders] = useState([]);
+  const [ironCase, setIronCase] = useState(null);
+  const ironKeys = useRef("");
+  const ironTaps = useRef({ n: 0, t: 0 });
   const [summitPick, setSummitPick] = useState([]);
   const [summitAgenda, setSummitAgenda] = useState("alliance");
   const [quest, setQuest] = useState(null);
@@ -9530,6 +9885,308 @@ export default function ShinobiLife() {
     });
     setModal(null);
   }
+  /* ---------- the hall under Tetsu ---------- */
+  function openIron() {
+    /* read the live character: the key listener that calls this was registered
+       on the title screen, where the render-time c is still null */
+    if (!cRef.current || bt) return;
+    commit((c2) => { if (!c2.iron) c2.iron = ironInit(c2); if (!c2.iron.found) c2.iron.found = c2.year; });
+    setIronCase(null);
+    setModal("iron");
+  }
+  function ironAct(kind, arg) {
+    if (kind === "case") { setIronCase(arg); return; }
+    if (kind === "back") { setIronCase(null); return; }
+    if (kind === "accept") {
+      commit((c, L) => {
+        const I = c.iron || (c.iron = ironInit(c));
+        if (!ironWorthy(c).ok || I.seated) return;
+        spend(c);
+        I.seated = true; I.since = c.year; I.favour = Math.max(I.favour || 0, 55); I.walked = [];
+        addTitle(c, "Arbiter of the Iron Scales");
+        P(L, "You took the iron token and put it on the table, and Mifune put his beside it. There was no ceremony. There is never any ceremony in the Land of Iron. You are the Arbiter of the Iron Scales, and the five nations will be told so in the morning.", "e");
+        newsItem(c, "The Land of Iron has named " + c.name + " Arbiter of the Iron Scales, the court in the hall under Tetsu that answers to none of the five nations. All five have been invited to bring their disputes. All five have said they will think about it.", "THE COURTS", true);
+        let n = 0; while ((I.docket || []).length < 2 && n++ < 6) { const cs = buildIronCase(c); if (cs) I.docket.push(cs); }
+      });
+      return;
+    }
+    if (kind === "decline") {
+      commit((c, L) => { if (c.iron) c.iron.declined = c.year; P(L, "You left the token on the step of the hall and walked back down the Iron road. Mifune did not come after you. He did not seem to expect to.", "n"); });
+      setModal(null); return;
+    }
+    if (kind === "hear") {
+      commit((c, L) => {
+        const I = c.iron; if (!I) return;
+        const cs = (I.docket || []).find((x) => x.no === ironCase);
+        if (!cs || cs.done || cs.heard.includes(arg)) return;
+        const K = IRON_CASES.find((k) => k.id === cs.kind);
+        const al = partyLabel(cs.a), bl = partyLabel(cs.b);
+        const target = cs.right === "a" ? -70 : cs.right === "b" ? 70 : 0;
+        cs.heard.push(arg);
+        const move = (d) => { cs.beam = Math.max(-100, Math.min(100, Math.round(cs.beam + d))); return d; };
+        if (arg === "a") {
+          const d = move(-(cs.right === "a" ? rr(12, 24) : rr(4, 11)));
+          cs.notes.push({ t: al.toUpperCase(), txt: pick(K.lines.a), d });
+        } else if (arg === "b") {
+          const d = move(cs.right === "b" ? rr(12, 24) : rr(4, 11));
+          cs.notes.push({ t: bl.toUpperCase(), txt: pick(K.lines.b), d });
+        } else if (arg === "samurai") {
+          I.favour = cl(I.favour - 3);
+          const d = move(Math.round((target - cs.beam) * 0.6));
+          cs.notes.push({ t: "THE SAMURAI WHO WENT TO LOOK", d, txt: cs.right === "a" ? pick(K.lines.a) + " They checked it twice."
+            : cs.right === "b" ? pick(K.lines.b) + " They checked it twice."
+            : cs.right === "both" ? "Both accounts are true and both are missing the half that makes the other side look better. The samurai says so, and says it is the most ordinary thing about the case."
+            : "Neither account survived a week of somebody actually looking. The samurai came back and said this court is being used, and did not say by whom." });
+        } else if (arg === "treaty") {
+          const d = move(target === 0 ? -Math.round(cs.beam * 0.4) : (target < 0 ? -rr(6, 14) : rr(6, 14)));
+          cs.notes.push({ t: "THE TREATIES", d, txt: pick([
+            "The clause they are both quoting was amended after the Second War. Only one of them is quoting the amendment.",
+            "The treaty says what the envoys say it says. It also says two other things, further down, that neither envoy mentioned.",
+            "The original copy in the Land of Iron's archive differs from both of the copies the envoys brought.",
+            "The treaty was never ratified by one of the councils. Everybody has behaved for thirty years as though it had been.",
+          ]) });
+        } else if (arg === "mifune") {
+          const d = move(target === 0 ? 0 : (target < 0 ? -rr(3, 8) : rr(3, 8)));
+          cs.notes.push({ t: "MIFUNE", d, txt: "“" + pick(MIFUNE) + "”" });
+        }
+      });
+      return;
+    }
+    if (kind === "envelope") {
+      commit((c, L) => {
+        const I = c.iron; if (!I) return;
+        const cs = (I.docket || []).find((x) => x.no === ironCase);
+        if (!cs || !cs.envelope || cs.envelope.done) return;
+        const e = cs.envelope; e.done = arg;
+        const sender = e.from === "a" ? cs.a : cs.b;
+        const sl = partyLabel(sender);
+        if (arg === "keep") {
+          c.ryo += e.amount; I.bribes = (I.bribes || 0) + 1; cs.bribedBy = e.from;
+          P(L, "You opened it. " + money(e.amount) + ", in the notes of three different countries so it could not be traced to one. It went into your coat and the hearing carried on.", "b");
+        } else if (arg === "return") {
+          if (sender.id) I.trust[sender.id] = cl(I.trust[sender.id] - 3);
+          I.favour = cl(I.favour + 2);
+          P(L, "You sent it back to " + sl + " unopened, with nothing written on it. They will know what that means.", "n");
+        } else {
+          ironNations(c).forEach((v) => { if (v !== sender.id) I.trust[v] = cl(I.trust[v] + 3); });
+          if (sender.id) I.trust[sender.id] = cl(I.trust[sender.id] - 8);
+          I.favour = cl(I.favour + 4);
+          P(L, "You held it up in front of both envoys, said who it was from, and put it in the brazier. " + sl + "'s envoy watched it burn and did not look at anybody.", "g");
+          newsItem(c, sl + " tried to pay the Iron Scales. The Arbiter burned the envelope in open session, in front of the other side.", "THE COURTS");
+        }
+      });
+      return;
+    }
+    if (kind === "rule") {
+      commit((c, L) => {
+        const I = c.iron; if (!I) return;
+        const cs = (I.docket || []).find((x) => x.no === ironCase);
+        if (!cs || cs.done) return;
+        const K = IRON_CASES.find((k) => k.id === cs.kind);
+        spend(c);
+        cs.done = true; cs.ruling = arg;
+        I.heard = (I.heard || 0) + 1;
+        const al = partyLabel(cs.a), bl = partyLabel(cs.b);
+        const ns = ironNations(c);
+        const correct = (arg === "fa" && cs.right === "a") || (arg === "fb" && cs.right === "b")
+          || (arg === K.special.id && cs.right === K.special.fits) || (arg === "dismiss" && cs.right === "neither");
+        if (correct) I.right = (I.right || 0) + 1;
+        /* who won, as far as the world is concerned */
+        let win = null, lose = null;
+        if (arg === "fa") { win = cs.a; lose = cs.b; }
+        else if (arg === "fb") { win = cs.b; lose = cs.a; }
+        else if (arg === K.special.id && ["cease", "outlaw"].includes(arg)) { win = cs.a; lose = cs.b; }
+        else if (arg === K.special.id && ["choose", "toll", "recuse"].includes(arg)) { win = cs.b; lose = cs.a; }
+        const wid = win && win.id, lid = lose && lose.id;
+        /* the pans */
+        if (lid) I.trust[lid] = cl(I.trust[lid] - rr(8, 14));
+        if (wid) I.trust[wid] = cl(I.trust[wid] + rr(3, 7));
+        ns.forEach((v) => { if (v !== wid && v !== lid) I.trust[v] = cl(I.trust[v] + (correct ? rr(2, 4) : -rr(1, 3))); });
+        /* the side that was right and lost does not forget */
+        const rightSide = cs.right === "a" ? cs.a : cs.right === "b" ? cs.b : null;
+        if (!correct && rightSide && rightSide.id && rightSide.id === lid) I.trust[lid] = cl(I.trust[lid] - rr(10, 18));
+        if (!correct && arg !== "dismiss" && (cs.right === "both" || cs.right === "neither")) ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 1)));
+        I.favour = cl(I.favour + (correct ? rr(2, 5) : -rr(3, 7)));
+        I.renown = (I.renown || 0) + (correct ? 2 : 1);
+        /* a ruling that went the way the money went */
+        if (cs.bribedBy && ((cs.bribedBy === "a" && arg === "fa") || (cs.bribedBy === "b" && arg === "fb"))) I.boughtRulings = (I.boughtRulings || 0) + 1;
+        /* your own village in the dock of the world */
+        if (cs.home) {
+          if (lid === c.village) { c.standing = cl(c.standing - rr(4, 9)); P(L, "You found against your own village in front of the world. Home will not thank you. The other four will not forget it either, which was the point.", "n"); ns.forEach((v) => { if (v !== c.village) I.trust[v] = cl(I.trust[v] + 3); }); }
+          else if (wid === c.village && !correct) { ns.forEach((v) => { if (v !== c.village) I.trust[v] = cl(I.trust[v] - 4); }); P(L, "You found for your own village and you were wrong to. Everybody in the hall saw exactly which way the Arbiter leaned.", "b"); }
+        }
+        if (c.world && c.world.stability) {
+          if (wid) c.world.stability[wid] = cl((c.world.stability[wid] || 50) + rr(2, 6));
+          if (lid) c.world.stability[lid] = cl((c.world.stability[lid] || 50) - rr(2, 6));
+        }
+        const rulingName = arg === "fa" ? "for " + al : arg === "fb" ? "for " + bl : arg === "dismiss" ? "dismissed" : K.special.n.toLowerCase();
+        P(L, "The Scales have ruled in " + cs.title.toLowerCase() + ": " + rulingName + "." + (correct ? "" : " Somewhere in the hall somebody knows you got it wrong."), correct ? "g" : "n");
+        /* ---- what it actually does to the world ---- */
+        const W = c.world || {};
+        if (cs.kind === "host" && cs.beast != null && W.hosts && W.hosts[cs.beast]) {
+          const bx = BEASTS.find((x) => x.id === cs.beast);
+          const to = arg === "fa" ? cs.a.id : arg === "fb" ? cs.b.id : arg === "choose" ? (cs.right === "a" ? cs.a.id : cs.b.id) : null;
+          if (to && W.hosts[cs.beast].village !== to) {
+            W.hosts[cs.beast].village = to;
+            newsItem(c, "By ruling of the Iron Scales, the host of " + beastLabel(c, bx) + " is to be returned to " + vName2(to) + ". " + (arg === "choose" ? "The host was asked, in open session, and answered." : "Nobody asked the host."), "THE BEASTS", true);
+          } else if (to) newsItem(c, "The Iron Scales have left " + beastLabel(c, bx) + " where it is, with " + vName2(to) + ". " + (arg === "choose" ? "The host chose to stay, out loud, in front of both envoys." : ""), "THE BEASTS");
+        }
+        if (cs.kind === "ceasefire" && (arg === "cease" || arg === "fa") && cs.war) {
+          const war = (W.wars || []).find((x) => x.years > 0 && ((x.a === cs.war.a && x.b === cs.war.b) || (x.a === cs.war.b && x.b === cs.war.a)));
+          const refuser = cs.b.id;
+          if (war && (I.trust[refuser] || 0) >= 40) {
+            war.years = 0; I.wars = (I.wars || 0) + 1;
+            addTitle(c, "Ended a war from Tetsu");
+            P(L, "It held. " + vName2(cs.war.a) + " and " + vName2(cs.war.b) + " stood down on the day the ruling was read, and the samurai walked the line between them.", "e");
+            newsItem(c, "THE IRON SCALES HAVE ENDED A WAR. " + vName2(cs.war.a) + " and " + vName2(cs.war.b) + " have stood down by order of the court at Tetsu, and samurai of the Land of Iron are walking the line between them.", "WAR", true);
+          } else if (war) {
+            I.defiance = { nation: refuser, year: c.year, what: "the ceasefire", no: cs.no };
+            P(L, vName2(refuser) + " heard the ruling and walked out of the hall before it was finished being read. The war goes on, and now it goes on in defiance of you.", "b");
+          }
+        }
+        if (cs.kind === "akatsuki" && (arg === "outlaw" || arg === "fa")) {
+          let n2 = 0;
+          AKATSUKI_RINGS.forEach((r) => { if (NAMED[r.who] && !isDead(c, r.who) && bookName(c, { name: NAMED[r.who].name, tier: "S", why: "outlawed by all five nations under the Iron Scales", by: "the Iron Scales" })) n2++; });
+          ns.forEach((v) => (I.trust[v] = cl(I.trust[v] + 3)));
+          P(L, "The Akatsuki are outlaws of all five nations. " + n2 + " name" + (n2 === 1 ? "" : "s") + " went into every Bingo Book on the continent with the Land of Iron's seal on the page.", "e");
+          newsItem(c, "THE AKATSUKI ARE OUTLAWED. By ruling of the Iron Scales, every member of the organisation is listed S-rank in all five nations at once.", "BINGO BOOK", true);
+        }
+        if (cs.kind === "daimyo" && arg === "fb" && c.daimyo && cs.b.id && c.daimyo[cs.b.id]) {
+          const old = c.daimyo[cs.b.id].name; const land = (VILLAGES.find((v) => v.id === cs.b.id) || {}).land || "the land";
+          c.daimyo[cs.b.id] = { name: randName(roll(50) ? "m" : "f"), since: c.year };
+          newsItem(c, "The Daimyo of " + land + " has been deposed by ruling of the Iron Scales. " + old + " leaves for the coast; " + c.daimyo[cs.b.id].name + " takes the seat and the empty treasury.", "THE COURTS", true);
+        }
+        if (cs.kind === "samurai") {
+          if (arg === "fa") { I.favour = cl(I.favour + 8); if (cs.b.id) I.trust[cs.b.id] = cl(I.trust[cs.b.id] - 6); }
+          else if (arg === "fb" || arg === "recuse") { I.favour = cl(I.favour - (arg === "recuse" ? 3 : 8)); ns.forEach((v) => (I.trust[v] = cl(I.trust[v] + (arg === "recuse" ? 4 : 2)))); P(L, arg === "recuse" ? "You would not judge your own house. Mifune said nothing at all for the rest of the day." : "You found against the Land of Iron, in the Land of Iron. Mifune bowed to you afterwards, which he has never done.", "e"); }
+        }
+        if (cs.kind === "beastright" && cs.beast != null && W.hosts && W.hosts[cs.beast]) {
+          const bx = BEASTS.find((x) => x.id === cs.beast);
+          if (arg === "fa") {
+            W.hosts[cs.beast].alive = false; W.hosts[cs.beast].released = true;
+            W.loose = (W.loose || []).concat([cs.beast]);
+            ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 10)));
+            addTitle(c, "Freed " + (bx ? bx.name : "a tailed beast"));
+            P(L, "You freed it. The seal came off in the hall itself, with the host holding your hand, and " + (bx ? bx.name : "it") + " walked out through a wall and went east, and did not hurt anybody on the way.", "e");
+            newsItem(c, "THE IRON SCALES HAVE RELEASED A TAILED BEAST. " + (bx ? bx.name : "A tailed beast") + " is free for the first time since the villages divided the nine. All five nations have lodged objections. It has not answered any of them.", "THE BEASTS", true);
+          } else if (arg === "recognise") {
+            revealBeast(c, cs.beast);
+            newsItem(c, "The Iron Scales have ruled that " + (bx ? bx.name : "a tailed beast") + " is a person, and must be spoken to as one. It stays sealed. Nobody in any village is sure what to do with the first half of that ruling.", "THE BEASTS", true);
+          }
+        }
+        if (cs.kind === "contract" && c.summon) {
+          const won = arg === "fa" ? "Toads of Mount Myoboku" : arg === "fb" ? "Snakes of Ryuchi Cave" : null;
+          if (won && c.summon === won) { c.stats.cha = cl(c.stats.cha + 4); P(L, "The next time you summoned, the " + won.split(" ")[1] + " came quicker than they have ever come. They remember who sat in that hall.", "g"); }
+          else if (won) P(L, "Your own summons were very quiet the next time you called. They know which way you ruled.", "n");
+        }
+        if (["warcrimes", "envoy", "border", "reparations", "extradition", "guild", "dead"].includes(cs.kind) && (correct || roll(50))) {
+          newsItem(c, "The Iron Scales have ruled in " + cs.title.toLowerCase() + ": " + rulingName + ".", "THE COURTS");
+        }
+        /* ---- will they obey ---- */
+        if (lid && !I.defiance && (I.trust[lid] || 0) < 40 && roll(55)) {
+          I.defiance = { nation: lid, year: c.year, what: "the ruling in " + cs.title.toLowerCase(), no: cs.no };
+          P(L, vName2(lid) + " has said, through its envoy, that it does not recognise the ruling. The Scales have no army. What you do next is the whole of the court's authority.", "b");
+        }
+        /* ---- and will they stay ---- */
+        ns.forEach((v) => {
+          if (!(I.walked || []).includes(v) && (I.trust[v] || 0) < 18) {
+            I.walked = (I.walked || []).concat([v]);
+            P(L, vName2(v) + "'s envoy stood up in the middle of the next hearing, bowed to nobody, and left. Their chair is empty.", "b");
+            newsItem(c, vName2(v) + " has withdrawn from the Iron Scales. Its envoy left the hall under Tetsu mid-session and has not returned.", "THE COURTS", true);
+          }
+        });
+        I.ledger = (I.ledger || []).concat([{ y: c.year, txt: cs.title + " — " + rulingName + "." }]).slice(-30);
+        if (I.heard === 10) addTitle(c, "Ten rulings at Tetsu");
+        if (I.heard >= 20 && (I.right || 0) / I.heard >= 0.7) addTitle(c, "The Iron Hand");
+      });
+      setIronCase(null);
+      return;
+    }
+    if (kind === "defy") {
+      const I0 = c.iron && c.iron.defiance;
+      if (!I0) return;
+      if (arg === "self") {
+        setModal(null);
+        setTimeout(() => startBattle("missing", { type: "iron", nation: I0.nation }, 0,
+          "You went to " + vName2(I0.nation) + " alone, with the ruling in your coat. They sent their best to meet you at the border, which is its own kind of answer.",
+          { name: freshName(c, null), title: vName2(I0.nation) + "'s answer to the Scales" }), 120);
+        return;
+      }
+      commit((c, L) => {
+        const I = c.iron; const D = I && I.defiance; if (!D) return;
+        spend(c);
+        const ns = ironNations(c);
+        if (arg === "samurai") {
+          I.favour = cl(I.favour - 8); I.trust[D.nation] = cl(I.trust[D.nation] - 8);
+          I.defiance = null;
+          P(L, "Mifune sent forty samurai to stand at " + vName2(D.nation) + "'s gate. Nobody drew. The ruling was complied with inside a week, and the Land of Iron has told you, formally, that it will not do that often.", "e");
+          newsItem(c, "Samurai of the Land of Iron have been seen at " + vName2(D.nation) + "'s gate. " + vName2(D.nation) + " has complied with the ruling of the Iron Scales.", "THE COURTS", true);
+        } else if (arg === "coalition") {
+          const allies = ns.filter((v) => v !== D.nation && !(I.walked || []).includes(v) && (I.trust[v] || 0) >= 55);
+          if (allies.length >= 2) {
+            I.trust[D.nation] = cl(I.trust[D.nation] - 14); I.defiance = null;
+            P(L, joinList(allies.map(vName2)) + " answered the Scales and put their names to the enforcement. " + vName2(D.nation) + " complied rather than face them together.", "e");
+            if (roll(30) && c.world) {
+              const e = pick(allies);
+              c.world.wars = (c.world.wars || []).concat([{ a: e, b: D.nation, years: rr(1, 3), great: false, no: 0 }]);
+              P(L, "It did not hold quietly. " + vName2(e) + " and " + vName2(D.nation) + " are fighting over the enforcement itself.", "b");
+              newsItem(c, vName2(e) + " and " + vName2(D.nation) + " are at war over the enforcement of a ruling from Tetsu.", "WAR", true);
+            }
+          } else {
+            ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 4))); I.favour = cl(I.favour - 4);
+            P(L, "You called on the other nations and not enough of them came. The whole continent watched the Scales ask for help and not get it.", "b");
+          }
+        } else if (arg === "yield") {
+          ns.forEach((v) => (I.trust[v] = cl(I.trust[v] - 3))); I.trust[D.nation] = cl(I.trust[D.nation] + 2); I.favour = cl(I.favour - 3);
+          I.defiance = null;
+          P(L, "You let it stand unenforced. " + vName2(D.nation) + " is grateful. Nobody else is.", "n");
+        }
+      });
+      return;
+    }
+    if (kind === "invite") {
+      commit((c, L) => {
+        const I = c.iron; if (!I || !(I.walked || []).includes(arg)) return;
+        spend(c);
+        I.trust[arg] = cl(I.trust[arg] + rr(14, 22));
+        ironNations(c).forEach((v) => { if (v !== arg) I.trust[v] = cl(I.trust[v] - rr(1, 3)); });
+        if (I.trust[arg] >= 30) {
+          I.walked = I.walked.filter((x) => x !== arg);
+          P(L, vName2(arg) + " came back, on the condition that its chair be moved a little closer to yours. You moved it. The other four watched you move it.", "g");
+        } else P(L, vName2(arg) + " received your envoy politely and sent them back with a letter that said nothing at all.", "n");
+      });
+      return;
+    }
+    if (kind === "propose") {
+      commit((c, L) => {
+        const I = c.iron; if (!I || !I.seated) return;
+        const A = IRON_ACCORDS.find((x) => x.id === arg); if (!A || accordOn(c, arg)) return;
+        spend(c);
+        const ns = ironNations(c);
+        const votes = ns.map((v) => {
+          const yes = !(I.walked || []).includes(v) && ((I.trust[v] || 0) + ((A.lean || {})[v] || 0) + rr(-8, 8)) >= 55;
+          return { v, yes, walked: (I.walked || []).includes(v) };
+        });
+        const ayes = votes.filter((x) => x.yes).length;
+        I.lastVote = { id: arg, year: c.year, votes };
+        P(L, "The vote on " + A.n + ": " + votes.map((x) => vName2(x.v) + " " + (x.walked ? "absent" : x.yes ? "aye" : "nay")).join(", ") + ".", "n");
+        if (ayes >= 3) {
+          I.accords = (I.accords || []).concat([arg]);
+          addTitle(c, "Author of " + A.n);
+          votes.forEach((x) => { if (!x.yes && !x.walked) I.trust[x.v] = cl(I.trust[x.v] - 2); });
+          I.favour = cl(I.favour + 6);
+          P(L, A.n + " is law in all five nations. " + A.d, "e");
+          newsItem(c, A.n.toUpperCase() + " IS RATIFIED. " + ayes + " of the five great nations have signed it at Tetsu, and it binds all of them. " + A.d, "THE COURTS", true);
+        } else {
+          I.failed = (I.failed || []).concat([{ id: arg, year: c.year }]);
+          I.favour = cl(I.favour - 3);
+          P(L, A.n + " failed, " + ayes + " to " + (ns.length - ayes) + ". It can be brought again, but not soon.", "b");
+        }
+      });
+      return;
+    }
+  }
+
   /* ---------- the bench ---------- */
   function benchAct(kind, arg) {
     if (kind === "open") { setModal("bench"); return; }
@@ -10859,6 +11516,20 @@ export default function ShinobiLife() {
       return { ...prev, hits, results, index: nextIndex };
     });
   }
+  /* ---- an old word for a hall nobody advertises ----
+     Type it anywhere outside a text box and the door is there. */
+  useEffect(() => {
+    const onKey = (ev) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      if (!ev.key || ev.key.length !== 1) return;
+      ironKeys.current = (ironKeys.current + ev.key.toLowerCase()).slice(-5);
+      if (ironKeys.current === "tetsu") { ironKeys.current = ""; if (cRef.current && !bt) openIron(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bt]);
   /* the beat timer and the keyboard input (1-4, matching the four seals on screen) */
   useEffect(() => {
     if (!sealQTE || sealQTE.done) return;
@@ -11360,6 +12031,25 @@ export default function ShinobiLife() {
               c.wonWarpath = true;
               newsItem(c, "THE FIVE GREAT NATIONS ARE GONE. There is no council left to convene, no Kage left to summon it, and no army left to send. History does not have a next chapter written for this.", "THE COURTS", true);
             }
+          }
+        }
+      }
+      if (ctx.type === "iron") {
+        spend(c);
+        const I = c.iron;
+        if (I && I.defiance && I.defiance.nation === ctx.nation) {
+          if (b.win) {
+            I.defiance = null; I.renown = (I.renown || 0) + 3;
+            I.trust[ctx.nation] = cl((I.trust[ctx.nation] || 0) + 3);
+            ironNations(c).forEach((v) => { if (v !== ctx.nation) I.trust[v] = cl((I.trust[v] || 0) + 2); });
+            addTitle(c, "Enforced the Scales by hand");
+            P(L, "You walked into " + vName2(ctx.nation) + " past the one they sent, and read the ruling aloud at their gate. They complied before you had finished reading it.", "e");
+            newsItem(c, "The Arbiter of the Iron Scales enforced a ruling against " + vName2(ctx.nation) + " in person, at its own gate. " + vName2(ctx.nation) + " has complied.", "THE COURTS", true);
+          } else {
+            const d = rr(20, 42); c.health = cl(c.health - d);
+            ironNations(c).forEach((v) => (I.trust[v] = cl((I.trust[v] || 0) - 5)));
+            P(L, "You lost at their border, and they let you walk home with the ruling still in your coat. \u2212" + d + " health.", "b");
+            if (c.health <= 0) die(c, L, "was killed enforcing a ruling of the Iron Scales");
           }
         }
       }
@@ -13487,8 +14177,17 @@ export default function ShinobiLife() {
               </div>
             </div>
             {/* the year, as the anchor of the whole screen */}
-            <div className="text-right shrink-0" style={{ lineHeight: 1 }}>
-              <div style={{ fontFamily: SERIF, fontSize: 27, letterSpacing: "-.02em", color: T.text, fontVariantNumeric: "tabular-nums" }} className="font-bold">{c.year}</div>
+            <div className="text-right shrink-0" style={{ lineHeight: 1, cursor: "default", userSelect: "none" }}
+              onClick={() => {
+                /* nothing here says it does anything */
+                const now = Date.now(), tp = ironTaps.current;
+                tp.n = now - tp.t < 700 ? tp.n + 1 : 1; tp.t = now;
+                if (tp.n >= 3) { tp.n = 0; openIron(); }
+              }}>
+              <div style={{ fontFamily: SERIF, fontSize: 27, letterSpacing: "-.02em", color: T.text, fontVariantNumeric: "tabular-nums" }} className="font-bold">
+                {c.iron && c.iron.seated ? <span title="Tetsu" onClick={(e) => { e.stopPropagation(); openIron(); }} style={{ color: IRON, fontSize: 15, marginRight: 8, cursor: "pointer", verticalAlign: "middle", opacity: .8 }}>{"\u2696"}</span> : null}
+                {c.year}
+              </div>
               <div style={{ color: accent, fontSize: 9, letterSpacing: ".26em", fontWeight: 800, marginTop: 2 }}>AH · AGE {c.age}</div>
             </div>
             {/* power ring */}
@@ -13947,8 +14646,12 @@ export default function ShinobiLife() {
                 </div>
               </div>
 
-              <div className="sc-year">
-                <div style={{ fontFamily: SERIF, fontSize: 26, lineHeight: 1, color: T.text }}>{c.year}</div>
+              <div className="sc-year" style={{ userSelect: "none" }}
+                onClick={() => { const now = Date.now(), tp = ironTaps.current; tp.n = now - tp.t < 700 ? tp.n + 1 : 1; tp.t = now; if (tp.n >= 3) { tp.n = 0; openIron(); } }}>
+                <div style={{ fontFamily: SERIF, fontSize: 26, lineHeight: 1, color: T.text }}>
+                  {c.iron && c.iron.seated ? <span title="Tetsu" onClick={(e) => { e.stopPropagation(); openIron(); }} style={{ color: IRON, fontSize: 14, marginRight: 6, cursor: "pointer", verticalAlign: "middle", opacity: .8 }}>{"\u2696"}</span> : null}
+                  {c.year}
+                </div>
                 <div style={{ color: T.dim, fontSize: 9, letterSpacing: ".2em" }}>AH</div>
                 <div style={{ color: T.gold, fontSize: 11, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{money(c.ryo)}</div>
               </div>
@@ -16542,6 +17245,223 @@ export default function ShinobiLife() {
             ))}
             <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">THE WAY OUT</div>
             <Row label="Take the ring off" sub="Nobody leaves and nobody says that out loud. Your partner is the one they will send." right="Power check" onClick={() => akatsukiAct("leave")} disabled={c.actions < 1} tone={T.blood} />
+          </Modal>
+        );
+      })()}
+
+      {modal === "iron" && (() => {
+        const I = c.iron || ironInit(c);
+        const worthy = ironWorthy(c);
+        const ns = ironNations(c);
+        const closed = !I.seated && I.ended && c.year - I.ended < 15;
+        const cs = I.seated && ironCase != null ? (I.docket || []).find((x) => x.no === ironCase && !x.done) : null;
+        const K = cs ? IRON_CASES.find((k) => k.id === cs.kind) : null;
+        const pct = I.heard ? Math.round(((I.right || 0) / I.heard) * 100) : null;
+        const Label = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">{children}</div>;
+        /* the beam: -100 is the left pan all the way down, +100 the right */
+        const Beam = ({ v, left, right }) => {
+          const ang = (v / 100) * 16;
+          const r = (ang * Math.PI) / 180;
+          const cx = 160, cy = 46, Lh = 118;
+          const lx = cx - Lh * Math.cos(r), ly = cy - Lh * Math.sin(r);
+          const rx = cx + Lh * Math.cos(r), ry = cy + Lh * Math.sin(r);
+          const pan = (x, y, lab, heavy) => (
+            <g>
+              <line x1={x} y1={y} x2={x - 22} y2={y + 40} stroke={IRON} strokeOpacity=".55" strokeWidth="1" />
+              <line x1={x} y1={y} x2={x + 22} y2={y + 40} stroke={IRON} strokeOpacity=".55" strokeWidth="1" />
+              <path d={"M " + (x - 30) + " " + (y + 40) + " Q " + x + " " + (y + 58) + " " + (x + 30) + " " + (y + 40) + " Z"} fill={heavy ? IRON : "rgba(159,180,199,.18)"} fillOpacity={heavy ? .55 : 1} stroke={IRON} strokeWidth="1.2" />
+              <text x={x} y={y + 74} textAnchor="middle" fill={heavy ? T.text : T.dim} fontSize="10.5" fontFamily="serif">{lab.length > 24 ? lab.slice(0, 23) + "\u2026" : lab}</text>
+            </g>
+          );
+          return (
+            <svg viewBox="0 0 320 172" style={{ width: "100%", maxWidth: 420, display: "block", margin: "0 auto" }} aria-label="The balance">
+              <path d={"M " + cx + " " + (cy + 4) + " L " + (cx - 16) + " 150 L " + (cx + 16) + " 150 Z"} fill="rgba(159,180,199,.14)" stroke={IRON} strokeOpacity=".5" />
+              <line x1={lx} y1={ly} x2={rx} y2={ry} stroke={IRON} strokeWidth="3" strokeLinecap="round" style={{ transition: "all .6s cubic-bezier(.2,.8,.2,1)" }} />
+              <circle cx={cx} cy={cy} r="5" fill={IRON} />
+              {pan(lx, ly, left, v < -8)}
+              {pan(rx, ry, right, v > 8)}
+            </svg>
+          );
+        };
+        return (
+          <Modal wide title={I.seated ? "THE IRON SCALES" : "THE HALL UNDER TETSU"} accent={IRON} onClose={() => { setIronCase(null); setModal(null); }}>
+            {/* ---------------- the door ---------------- */}
+            {!I.seated && (
+              <div style={{ ...glass(IRON) }} className="p-4 mb-2">
+                <div style={{ color: IRON, letterSpacing: ".3em", fontSize: 9.5 }} className="font-bold mb-2">THE LAND OF IRON</div>
+                <div style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1.25 }} className="font-bold mb-2">
+                  {closed ? "The doors are shut." : "You found the door."}
+                </div>
+                <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, lineHeight: 1.55 }}>
+                  {closed
+                    ? "The hall under Tetsu was closed in " + I.ended + ", and Mifune is not receiving anybody about it. Come back when the five have forgotten why it closed."
+                    : !worthy.ok
+                    ? worthy.why
+                    : "Snow on the steps, and a hall cut into the mountain with five empty chairs in a half circle and a sixth, facing them, that belongs to nobody. Mifune is sitting on the step with his sword across his knees. \u201cMost people who find this door are looking for something to steal,\u201d he says. \u201cThe five cannot agree on a single thing except that they would all stand in this room. They need somebody in that sixth chair who belongs to none of them. It pays badly and they will all hate you by turns.\u201d"}
+                </div>
+                {c.ironToken && !closed && worthy.ok && (
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 8, fontStyle: "italic" }}>The iron token you were given in {c.ironToken} is warm in your hand. It fits a slot in the arm of the sixth chair exactly.</div>
+                )}
+                {!closed && worthy.ok && (
+                  <div className="mt-3">
+                    <Row label="Take the sixth chair" sub="Become the Arbiter of the Iron Scales: the one court the five great nations will all stand in, and none of them own." right="Sit" onClick={() => ironAct("accept")} disabled={c.actions < 1} tone={IRON} />
+                    <Row label="Leave the token on the step" sub="Walk back down the Iron road. The door will still be there." right="Leave" onClick={() => ironAct("decline")} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ---------------- a dispute in session ---------------- */}
+            {cs && K && (
+              <>
+                <button onClick={() => ironAct("back")} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold mb-3">{"\u2190 the hall"}</button>
+                <div style={{ ...glass(IRON) }} className="p-3.5 mb-2">
+                  <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold">DISPUTE {cs.no} {"\u00b7"} {cs.year} AH{cs.home ? " \u00b7 YOUR OWN VILLAGE IS A PARTY" : ""}</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 19, lineHeight: 1.15 }} className="font-bold mt-1">{cs.title}</div>
+                  <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>{cs.sum}</div>
+                </div>
+                <div style={{ background: "rgba(0,0,0,.25)", border: "1px solid " + T.line, borderRadius: 12 }} className="p-2 mb-2">
+                  <Beam v={cs.beam} left={partyLabel(cs.a)} right={partyLabel(cs.b)} />
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5, textAlign: "center", marginTop: -2 }}>
+                    {Math.abs(cs.beam) < 10 ? "The beam is level. Nothing heard so far has weighed more than anything else." : "The beam leans toward " + (cs.beam < 0 ? partyLabel(cs.a) : partyLabel(cs.b)) + (Math.abs(cs.beam) > 55 ? ", heavily." : ".")}
+                  </div>
+                </div>
+
+                {cs.envelope && !cs.envelope.done && (
+                  <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.gold + "66", borderLeft: "3px solid " + T.gold, borderRadius: 10 }} className="p-3 mb-2">
+                    <div style={{ color: T.gold, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">A SEALED ENVELOPE</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>It was on your chair when you sat down, with {partyLabel(cs.envelope.from === "a" ? cs.a : cs.b)}'s seal on the flap. It is heavy in the way that paper money is heavy.</div>
+                    <Row label="Open it and keep it" sub={"Nobody saw. Probably. " + money(cs.envelope.amount) + "."} right="Keep" onClick={() => ironAct("envelope", "keep")} tone={T.blood} />
+                    <Row label="Send it back unopened" sub="No note. They will know what it means." right="Return" onClick={() => ironAct("envelope", "return")} />
+                    <Row label="Burn it in front of both envoys" sub="Say out loud who it is from, and let the whole hall watch it go." right="Burn" onClick={() => ironAct("envelope", "burn")} tone={IRON} />
+                  </div>
+                )}
+
+                <Label>THE HEARING</Label>
+                {[
+                  { id: "a", n: "Hear " + partyLabel(cs.a), d: "Their envoy, their account, and whatever they brought to prove it." },
+                  { id: "b", n: "Hear " + partyLabel(cs.b), d: "The other account. There is always one at Tetsu." },
+                  { id: "treaty", n: "Read the treaties", d: "The archive of the Land of Iron holds the original of everything the five have ever signed." },
+                  { id: "samurai", n: "Send a samurai to look", d: "Mifune lends you somebody for a week. It costs you some of the Land of Iron's patience." },
+                  { id: "mifune", n: "Ask Mifune", d: "He will not tell you what to do. He will say something, and it will turn out to have been advice." },
+                ].map((st) => (
+                  <Row key={st.id} label={st.n} sub={st.d} right={cs.heard.includes(st.id) ? "Heard" : "Hear"} onClick={() => ironAct("hear", st.id)} disabled={cs.heard.includes(st.id)} />
+                ))}
+                {cs.notes.length > 0 && (
+                  <>
+                    <Label>WHAT THE HALL HAS HEARD</Label>
+                    {cs.notes.map((nt, i) => (
+                      <div key={i} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-2.5 mb-2">
+                        <div className="flex justify-between items-baseline gap-2">
+                          <span style={{ color: nt.t === "MIFUNE" ? IRON : T.gold, letterSpacing: ".16em", fontSize: 9 }} className="font-bold">{nt.t}</span>
+                          {nt.d ? <span style={{ color: T.dim, fontSize: 10 }}>{nt.d < 0 ? "\u2190 " + Math.abs(nt.d) : nt.d + " \u2192"}</span> : null}
+                        </div>
+                        <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 3, fontStyle: nt.t === "MIFUNE" ? "italic" : "normal" }}>{nt.txt}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                <Label col={IRON}>THE RULING</Label>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Whichever way this goes, somebody's pan goes light. The Scales have no army; they have only whether the five keep coming back.</div>
+                <Row label={"Find for " + partyLabel(cs.a)} sub={cs.a.id ? vName2(cs.a.id) + "'s faith in you rises; the other side's falls." : "The ruling stands on its own."} right="Rule" onClick={() => ironAct("rule", "fa")} disabled={c.actions < 1} />
+                <Row label={"Find for " + partyLabel(cs.b)} sub={cs.b.id ? vName2(cs.b.id) + "'s faith in you rises; the other side's falls." : "The ruling stands on its own."} right="Rule" onClick={() => ironAct("rule", "fb")} disabled={c.actions < 1} />
+                <Row label={K.special.n} sub={K.special.d} right="Rule" onClick={() => ironAct("rule", K.special.id)} disabled={c.actions < 1} tone={IRON} />
+                <Row label="Dismiss it" sub="No case for the Scales. Both envoys go home with nothing, which is sometimes exactly right." right="Dismiss" onClick={() => ironAct("rule", "dismiss")} disabled={c.actions < 1} />
+              </>
+            )}
+
+            {/* ---------------- the hall ---------------- */}
+            {I.seated && !cs && (
+              <>
+                <div style={{ ...glass(IRON) }} className="p-3.5 mb-1">
+                  <div style={{ fontFamily: SERIF, fontSize: 19 }} className="font-bold">Arbiter of the Iron Scales</div>
+                  <div style={{ color: T.dim, fontSize: 11.5, marginTop: 2 }}>Seated {I.since} AH in the hall under Tetsu, by Mifune of the Land of Iron.</div>
+                  <div className="flex flex-wrap gap-3 mt-3" style={{ fontSize: 10, letterSpacing: ".14em", color: T.dim }}>
+                    <span>RULINGS <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{I.heard || 0}</b></span>
+                    <span>RIGHTLY <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{pct == null ? "\u2014" : pct + "%"}</b></span>
+                    <span>WARS ENDED <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{I.wars || 0}</b></span>
+                    <span>ACCORDS <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{(I.accords || []).length}</b></span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span style={{ color: T.dim, fontSize: 10, letterSpacing: ".14em" }}>THE LAND OF IRON</span>
+                    <span style={{ flex: 1, height: 4, background: "rgba(0,0,0,.5)", borderRadius: 99 }}>
+                      <span style={{ display: "block", width: cl(I.favour) + "%", height: "100%", background: I.favour >= 45 ? IRON : T.blood, borderRadius: 99 }} />
+                    </span>
+                    <span style={{ color: T.dim, fontSize: 10 }}>{cl(I.favour)}</span>
+                  </div>
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5, marginTop: 4 }}>
+                    {I.favour >= 70 ? "Mifune has started leaving the door open when you work late." : I.favour >= 45 ? "The Land of Iron is satisfied with its Arbiter, which is as warm as the Land of Iron gets." : "Mifune has asked twice this year how the work is going. He does not usually ask."}
+                  </div>
+                </div>
+
+                <Label>THE FIVE PANS</Label>
+                <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))" }}>
+                  {ns.map((v) => {
+                    const t = cl(I.trust[v] == null ? 50 : I.trust[v]);
+                    const out = (I.walked || []).includes(v);
+                    const col = out ? T.dim : t >= 62 ? T.good : t >= 38 ? IRON : T.blood;
+                    return (
+                      <div key={v} style={{ background: T.panel2, border: "1px solid " + (out ? T.blood + "55" : T.line), borderRadius: 10, opacity: out ? .7 : 1 }} className="p-2.5">
+                        <div style={{ fontFamily: SERIF, fontSize: 12.5 }} className="font-bold">{vName2(v).replace("gakure", "")}{v === c.village ? " \u00b7 home" : ""}</div>
+                        <div style={{ height: 3, background: "rgba(0,0,0,.5)", borderRadius: 99, marginTop: 6 }}>
+                          <div style={{ width: t + "%", height: "100%", background: col, borderRadius: 99, transition: "width .6s" }} />
+                        </div>
+                        <div style={{ color: col, fontSize: 10, marginTop: 4, letterSpacing: ".08em" }}>{out ? "WALKED OUT" : t >= 62 ? "trusts the Scales" : t >= 38 ? "watching" : "close to leaving"}</div>
+                        {out && <button onClick={() => ironAct("invite", v)} disabled={c.actions < 1} style={{ color: IRON, fontSize: 10.5, marginTop: 4 }}>send an envoy</button>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {I.defiance && (
+                  <div style={{ background: "rgba(0,0,0,.4)", border: "1px solid " + T.blood + "77", borderLeft: "3px solid " + T.blood, borderRadius: 12 }} className="p-3 mt-4">
+                    <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold mb-1">{vName2(I.defiance.nation).toUpperCase()} DOES NOT RECOGNISE THE RULING</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-2">They have refused {I.defiance.what}. The Scales have no army of their own. Whatever you do now is the whole of the court's authority, and if you do nothing for a year, every other nation will learn what that authority is worth.</div>
+                    <Row label="Send the samurai" sub="Mifune's men at their gate. It works. The Land of Iron will not lend them often." right="Samurai" onClick={() => ironAct("defy", "samurai")} disabled={c.actions < 1} tone={IRON} />
+                    <Row label="Call on the other four" sub="Ask the nations that trust you to enforce it with you. Needs two of them. It can start a war of its own." right="Coalition" onClick={() => ironAct("defy", "coalition")} disabled={c.actions < 1} />
+                    <Row label="Go and enforce it yourself" sub="Walk to their gate with the ruling in your coat. They will send somebody to meet you." right="Fight" onClick={() => ironAct("defy", "self")} disabled={c.actions < 1} tone={T.blood} />
+                    <Row label="Let it stand unenforced" sub="They will be grateful. Nobody else will." right="Yield" onClick={() => ironAct("defy", "yield")} disabled={c.actions < 1} />
+                  </div>
+                )}
+
+                <Label col={IRON}>BEFORE THE SCALES</Label>
+                {(I.docket || []).filter((x) => !x.done).length === 0 && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs">Nothing has come up the Iron road this year. It will.</div>}
+                {(I.docket || []).filter((x) => !x.done).map((x) => (
+                  <Row key={x.no} label={x.title}
+                    sub={partyLabel(x.a) + " v. " + partyLabel(x.b) + (x.home ? " \u00b7 your own village" : "") + (x.envelope && !x.envelope.done ? " \u00b7 something was left on your chair" : "") + (x.heard.length ? " \u00b7 part heard" : "")}
+                    right={"No. " + x.no} onClick={() => ironAct("case", x.no)} disabled={c.actions < 1} tone={x.kind === "ceasefire" || x.kind === "beastright" ? T.blood : null} />
+                ))}
+
+                <Label>THE ACCORDS</Label>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  {(I.heard || 0) < 5 ? "Law for all five is not written by somebody the five have only just met. Rule on five disputes first." : "Bring a law before the five. Each nation votes with its faith in you, bent by what it actually thinks of the idea. Three ayes binds all five."}
+                </div>
+                {(I.accords || []).map((id) => { const A = IRON_ACCORDS.find((x) => x.id === id); return A ? <Row key={id} label={A.n} sub={A.d} right="In force" disabled tone={T.good} /> : null; })}
+                {(I.heard || 0) >= 5 && IRON_ACCORDS.filter((A) => !accordOn(c, A.id)).map((A) => {
+                  const f = (I.failed || []).filter((x) => x.id === A.id).pop();
+                  const wait = f && c.year - f.year < 5;
+                  return <Row key={A.id} label={A.n} sub={A.d + (wait ? " \u00b7 failed in " + f.year + "; not again yet" : "")} right={wait ? "Wait" : "Propose"} onClick={() => ironAct("propose", A.id)} disabled={wait || c.actions < 1} />;
+                })}
+                {I.lastVote && (
+                  <div style={{ color: T.dim, fontSize: 11, marginTop: 6 }}>
+                    Last vote ({(IRON_ACCORDS.find((x) => x.id === I.lastVote.id) || {}).n}, {I.lastVote.year}): {I.lastVote.votes.map((x) => vName2(x.v).replace("gakure", "") + " " + (x.walked ? "absent" : x.yes ? "aye" : "nay")).join(" \u00b7 ")}
+                  </div>
+                )}
+
+                {(I.ledger || []).length > 0 && (
+                  <>
+                    <Label>THE IRON LEDGER</Label>
+                    <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3">
+                      {(I.ledger || []).slice(-12).reverse().map((l, i) => (
+                        <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginBottom: 5 }}>
+                          <span style={{ color: T.dim, fontSize: 10.5 }}>{l.y} AH{"\u00a0\u00a0"}</span>{l.txt}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </Modal>
         );
       })()}
