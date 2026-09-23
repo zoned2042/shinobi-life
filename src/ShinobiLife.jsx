@@ -1829,6 +1829,7 @@ const SENTENCES = [
   { id: "strip", n: "Strip them of rank", sev: 2, d: "Back down the roll, publicly, and everybody they trained under knows by evening." },
   { id: "labour1", n: "One year's hard labour", sev: 2, years: 1, d: "A short one. The quarries until next winter and then back to whatever is left of their life.", labour: true },
   { id: "labour", n: "Two years' hard labour", sev: 3, years: 2, d: "Not the cells. The quarries, the wall, the drainage under the village.", labour: true },
+  { id: "house", n: "House arrest", sev: 3, years: 5, d: "Five years inside their own walls with a guard on the gate. No cell, no quarry, no visitors the tower has not approved. What a village gives somebody it cannot quite bring itself to lock up.", house: true },
   { id: "labour5", n: "Five years' hard labour", sev: 4, years: 5, d: "Five years of the quarries. People come out of that unable to stand straight and unable to go back to the work they were trained for.", labour: true },
   { id: "labour10", n: "Ten years' hard labour", sev: 6, years: 10, d: "Ten years on the wall and under it. Most of a working life, spent, and the village gets the wall.", labour: true },
   { id: "penance", n: "The penal unit", sev: 4, years: 4, d: "Four years in the units that go first and are not replaced. Some of them come back and none of them come back the same.", penal: true },
@@ -1874,11 +1875,32 @@ const RIDERS = [
 ];
 const riderSev = (ids) => (ids || []).reduce((a, id) => a + ((RIDERS.find((r) => r.id === id) || {}).sev || 0), 0);
 
+/* ---- the other names on the page ----
+   A conspiracy against the seat is a document with signatures on it, and the
+   people on it did different things. The one who wrote it and the one who
+   carried the letters are not the same case and should not get the same
+   sentence, so each co-conspirator is tried on their own part. */
+const CONSPIRACY_ROLES = [
+  { id: "drafter", n: "drafted the document", sev: 9, odds: 88, ranks: ["Jonin", "Jonin Commander"],
+    line: "wrote the document the others signed, in their own hand, across several drafts that were found" },
+  { id: "squads", n: "moved the ANBU squads", sev: 8, odds: 84, ranks: ["ANBU", "Jonin Commander"],
+    line: "moved two ANBU squads on the night without any order from the tower" },
+  { id: "signer", n: "signed it", sev: 6, odds: 86, ranks: ["Jonin", "Special Jonin", "ANBU"],
+    line: "put their name to the document knowing what it was for" },
+  { id: "silent", n: "knew and said nothing", sev: 4, odds: 62, ranks: ["Jonin", "Special Jonin", "Chunin"],
+    line: "was told what was being planned and did not report it to anybody" },
+  { id: "courier", n: "carried the letters", sev: 3, odds: 70, ranks: ["Chunin", "Special Jonin"],
+    line: "carried the correspondence between the signatories and never opened any of it, or so they say" },
+];
+const roleOf = (cs) => (cs && cs.role ? CONSPIRACY_ROLES.find((r) => r.id === cs.role) : null);
+
 /* a charge reads differently depending on who is answering it */
 function chargeOf(cs) {
   const ch = ALL_CHARGES.find((x) => x.id === (cs || {}).charge);
   if (!ch) return null;
   if (cs && cs.escalated && ch.escalate) return { ...ch, ...ch.escalate };
+  const rl = roleOf(cs);
+  if (rl) return { ...ch, n: ch.n + " \u2014 " + rl.n, line: rl.line, sev: rl.sev };
   return ch;
 }
 /* what the case actually warranted, once you know the truth of it */
@@ -1887,7 +1909,8 @@ function deservedSev(cs) {
   const ch = chargeOf(cs);
   if (!ch) return 0;
   if (!cs.truth) return 0;
-  return cl(ch.sev + (cs.aggravated ? 1 : 0) - (cs.mitigated ? 2 : 0), 0, 9);
+  /* walking in and handing yourself over is worth something to a court */
+  return cl(ch.sev + (cs.aggravated ? 1 : 0) - (cs.mitigated ? 2 : 0) - (cs.surrendered ? 2 : 0), 0, 9);
 }
 const sentenceOf = (id) => SENTENCES.find((x) => x.id === id);
 
@@ -1939,7 +1962,7 @@ function buildCase(c, seat) {
   if (!who) who = { name: freshName(c, null), rank, age: rr(14, 44), pw: rr(24, 84) };
   const truth = roll(62);
   b.caseNo = (b.caseNo || 0) + 1;
-  return {
+  const out = {
     no: b.caseNo, year: c.year, name: who.name, rank: who.rank, age: who.age, pw: who.pw,
     rollId: who.rollId || null, kage: !!who.kage, anbu: !!who.anbu, named: who.named || null,
     charge: ch.id, truth, extreme: !!ch.rare,
@@ -1955,6 +1978,18 @@ function buildCase(c, seat) {
     pressure: buildPressure(c, ch, who),
     done: false,
   };
+  /* handing yourself in is not just a way of arriving. The person who walked
+     into the tower on their own is nearly always the person who did it, they
+     say so, and a court has always counted that in their favour. */
+  if (/turned themselves in/.test(out.how || "")) {
+    out.surrendered = true;
+    out.truth = roll(86);        /* and sometimes it is a false confession */
+    out.plea = "guilty";
+    out.fled = false;
+    out.mitigated = true;
+    out.aggravated = false;
+  }
+  return out;
 }
 const PRESSURE_SRC = [
   { who: "The tower", want: "free", txt: "The tower has let it be known that a conviction here would be inconvenient in a year it cannot afford inconvenience." },
@@ -2056,9 +2091,16 @@ function benchTick(c, L) {
   b.years = (b.years || 0) + 1;
   /* the docket */
   const want = cl(1 + Math.floor((b.years || 1) / 3) + (c.war ? 2 : 0), 1, 4);
-  b.docket = (b.docket || []).filter((x) => !x.done && c.year - x.year <= 2);
-  while (b.docket.length < want) {
+  /* ordinary cases lapse after two years unheard. A Kage, an extraordinary
+     charge and the names on a Kage's document do not simply fall off a list. */
+  b.docket = (b.docket || []).filter((x) => !x.done && (x.kage || x.extreme || x.coOf || c.year - x.year <= 2));
+  let tries2 = 0;
+  while (b.docket.length < want && tries2++ < 12) {
     const nc2 = buildCase(c, seat); if (!nc2) break;
+    /* two unrelated people on the same charge in the same year reads as a bug,
+       because it usually was one. A shared charge now only ever comes from a
+       delve or a document, and says so. */
+    if (b.docket.some((x) => !x.done && !x.fromNetwork && !x.coOf && x.charge === nc2.charge)) { b.caseNo -= 1; continue; }
     b.docket.push(nc2);
     if (nc2.extreme) {
       const ch3 = ALL_CHARGES.find((x) => x.id === nc2.charge);
@@ -2078,8 +2120,41 @@ function benchTick(c, L) {
        already listed against somebody the world has heard of. */
     if (k && k.name !== c.name && roll(4)) {
       const cs = buildCase(c, { ...seat, tries: ["Kage"] });
-      if (cs.rank === "Kage") {
-        b.docket.push(cs);
+      if (cs && cs.rank === "Kage") {
+        b.docket.unshift(cs);
+        /* sometimes the hat walks into the tower on its own */
+        if (cs.surrendered || roll(40)) {
+          const word = (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage;
+          cs.surrendered = true; cs.truth = true; cs.plea = "guilty"; cs.mitigated = true;
+          cs.how = "They turned themselves in. They walked into the tower alone before dawn and put the document on the clerk's desk themselves.";
+          /* continued service is untenable once the document exists, so the
+             resignation goes in the same morning and the Daimyo accepts it */
+          const nw = handOverSeat(c, c.village, { why: "resigned and surrendered to the high bench" });
+          cs.resigned = true;
+          P(L, cs.name + " surrendered to the high bench this morning and resigned the seat in the same hour. The Daimyo accepted the resignation before noon, formally, in a letter nobody expected to be so short.", "e");
+          if (nw) P(L, nw.name + " holds the seat now, as " + nw.title + ".", "n");
+          newsItem(c, "THE " + word.toUpperCase() + " HAS SURRENDERED. " + cs.name + " walked into the tower in " + homeName(c) + " and handed over a document naming themselves and others in a move against the seat. The resignation has been accepted by the Daimyo." + (nw ? " " + nw.name + " succeeds them." : ""), "THE COURTS", true);
+        }
+        /* and the others on the page */
+        const fit = CONSPIRACY_ROLES.slice();
+        const nCo = rr(2, 4);
+        for (let i = 0; i < nCo && fit.length; i++) {
+          const rl = fit.splice(Math.floor(Math.random() * fit.length), 1)[0];
+          const t2 = roll(rl.odds);
+          b.caseNo = (b.caseNo || 0) + 1;
+          const rk = pick(rl.ranks);
+          b.docket.splice(1 + i, 0, {
+            no: b.caseNo, year: c.year, name: freshName(c, null), rank: rk, age: rr(24, 56), pw: rr(55, 88),
+            rollId: null, kage: false, anbu: rk === "ANBU", named: null,
+            charge: "coup", role: rl.id, truth: t2, extreme: false, escalated: false, fled: false,
+            aggravated: t2 && roll(18), mitigated: roll(20),
+            evidence: rr(46, 74),
+            plea: t2 ? (roll(40) ? "guilty" : "not guilty") : "not guilty",
+            steps: [], facts: [], pressure: buildPressure(c, null, null), done: false,
+            coOf: cs.name, coOfSurrendered: !!cs.surrendered,
+            how: "Their name is on the document " + cs.name + (cs.surrendered ? " carried into the tower." : " was charged over."),
+          });
+        }
         P(L, "A file was put in front of you this morning with the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + "'s name on the front of it. The clerk did not stay in the room.", "e");
         newsItem(c, "The high bench in " + homeName(c) + " has accepted a charge against the sitting " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + ". No court in any village has done this before and nobody is certain it can be undone.", "THE COURTS", true);
       }
@@ -2390,6 +2465,89 @@ function namedTitle(c, id) {
   return n.title;
 }
 function kageWordFor(c, vid) { return c.founded && vid === c.village ? c.vil.kageWord : (VILLAGES.find((v) => v.id === vid) || {}).kage || "Kage"; }
+
+/* ---- a seat changing hands outside its normal term ----
+   Abdication after a war, a court, a resignation. Three places used to do this
+   by writing c.kages directly, and advanceLines rebuilds c.kages from the line
+   every single year — so the handover was undone twelve months later, the old
+   Kage came back into the hat, the Records still said "present", and whoever
+   had been put in the seat was wearing the previous holder's number. The line
+   is the record; this changes the line and derives the seat from it. */
+function nextFromQueue(c, ln, exclude) {
+  while (ln.queue && ln.queue.length) {
+    const h = ln.queue[0];
+    if (!h.id) { ln.queue.shift(); return null; }                                   /* an ordinary name's turn */
+    if (h.id === exclude || isDead(c, h.id) || !NAMED[h.id] || (!h.again && (ln.seated || []).includes(h.id))) { ln.queue.shift(); continue; }
+    if (NAMED_ERA[h.id] !== undefined && NAMED_ERA[h.id] > eraIndex(c)) return null;  /* not their age yet: somebody holds it until then */
+    return ln.queue.shift();
+  }
+  return null;
+}
+/* the seat changes after a won war, when the histories say it does */
+function postWarSeat(c, L, warName) {
+  const pk = (POSTWAR_KAGE[c.era] || {})[c.village];
+  const pln = c.line && c.line[c.village];
+  /* Every war in this era is called the Fourth Great Ninja War, so winning one
+     in 980 used to hand the hat to Kakashi as Fourth Hokage and delete Minato
+     and Tsunade from history. The post-war successor only takes the seat when
+     they are genuinely next: everybody ahead of them has served or died. */
+  if (pk && NAMED[pk] && !isDead(c, pk) && c.rank < 6 && pln && pln.current && !pln.current.player && pln.current.id !== pk
+      && peekNextSeat(c, pln, pln.current.id) === pk) {
+    const served = c.year - (pln.current.from || c.year);
+    if (served < 2) {
+      /* a Kage who took the hat this year does not hand it back this year. The
+         one the histories name next is put at the head of the line and the
+         current holder finishes a short term first. */
+      pln.queue = [{ id: pk }].concat((pln.queue || []).filter((q) => q.id !== pk));
+      pln.current.term = Math.min(pln.current.term || 99, served + rr(2, 4));
+      P(L, pln.current.name + " came into the seat in the last year of a war. They will see the village through the peace, and everybody already knows who comes after.", "n");
+    } else {
+      const oldName = pln.current.name, oldTitle = (c.kages[c.village] || {}).title || kageWordFor(c, c.village);
+      const nw = handOverSeat(c, c.village, { nextId: pk, why: "stood down after " + warName });
+      if (nw) {
+        P(L, oldName + " stepped down after the war. " + nw.name + " has taken the hat as " + nw.title + ".", "e");
+        newsItem(c, oldName + " has stepped down as " + oldTitle + " after " + warName + ". " + nw.name + " succeeds them as " + nw.title + ".", "THE VILLAGES", true);
+      }
+    }
+  }
+}
+
+/* who the line would seat next, without seating them */
+function peekNextSeat(c, ln, exclude) {
+  for (const h of (ln && ln.queue) || []) {
+    if (!h.id) return null;
+    if (h.id === exclude || isDead(c, h.id) || !NAMED[h.id] || (!h.again && ((ln.seated || []).includes(h.id)))) continue;
+    if (NAMED_ERA[h.id] !== undefined && NAMED_ERA[h.id] > eraIndex(c)) return null;
+    return h.id;
+  }
+  return null;
+}
+function handOverSeat(c, vid, opts) {
+  opts = opts || {};
+  const ln = c.line && c.line[vid];
+  if (!ln || !ln.current || ln.current.player) return null;
+  const cur = ln.current;
+  if (!ln.past) ln.past = [];
+  if (!ln.seated) ln.seated = [];
+  ln.past.push({ ...cur, to: c.year, left: opts.why || null });
+  if (cur.id && !ln.seated.includes(cur.id)) ln.seated.push(cur.id);
+  let nx = null;
+  if (opts.nextId && NAMED[opts.nextId] && !isDead(c, opts.nextId) && opts.nextId !== cur.id) {
+    ln.queue = (ln.queue || []).filter((q) => q.id !== opts.nextId);
+    nx = { id: opts.nextId };
+  } else {
+    nx = nextFromQueue(c, ln, cur.id);
+  }
+  const named = nx && nx.id && NAMED[nx.id] ? nx.id : null;
+  ln.current = {
+    id: named, name: named ? NAMED[named].name : freshName(c, null),
+    from: c.year, term: (nx && nx.term) || rr(12, 24), player: false,
+    caretaker: !named, diesInOffice: !!(nx && nx.dies),
+  };
+  if (named) ln.seated.push(named);
+  c.kages[vid] = { named, name: ln.current.name, title: kageOrdinal(ln) + " " + kageWordFor(c, vid) };
+  return c.kages[vid];
+}
 
 function advanceLines(c, L) {
   VILLAGES.forEach((v) => {
@@ -3717,6 +3875,17 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.12", n: "The Hat Came Off Before The Hearing", items: [
+    "Fixed the Hokage line going wrong at the end of the Fourth War. Tsunade was seated and stepped down in the same year, Kakashi took the hat as the Fifth Hokage instead of the Sixth, and the Records went on listing Tsunade as the one in office. All three were one bug: the post-war handover wrote the new Kage straight into the seat without touching the line of succession, and the line rebuilds the seat from itself every year \u2014 so the handover was quietly undone twelve months later and the old Kage came back",
+    "There is now one way for a seat to change hands outside its term, and it goes through the line: the outgoing Kage gets an end year in the Records, the incoming one gets the next number, and it stays that way. The court's own verdict against a Kage had the same fault and now uses it too, as does a Kage killed at a summit",
+    "A Kage who took the hat in the last year of a war no longer hands it straight back. They see the village through the peace for a short term and the successor the histories name comes after them, which in the run that prompted this gave Tsunade 996\u2013997, Kakashi as Sixth Hokage from 998, and Naruto as Seventh after him",
+    "Found underneath it: every war in the Interwar is called the Fourth Great Ninja War, so winning one in 980 handed the hat to Kakashi as Fourth Hokage and deleted Minato and Tsunade from history. The post-war successor now only takes the seat when they are genuinely next in line, with everybody ahead of them already served or dead",
+    "Turning yourself in means something now. It used to be one of twenty-four ways a case reached court and changed nothing. Anybody who walks in on their own now pleads guilty, is nearly always the person who did it, and has it counted in their favour when you sentence them",
+    "And a Kage who does it resigns. The document makes staying in the seat impossible, so the resignation goes in that same morning, the Daimyo accepts it before noon, the successor takes the seat, and the one in your dock is the former Kage. The fair sentence is a reduced one \u2014 five to ten years, or the new house arrest \u2014 and passing it no longer reads as though you had just imprisoned a sitting Kage",
+    "A conspiracy against the seat now has everybody else on the document on your docket too, each tried for their own part in it rather than for the whole thing: whoever drafted it, whoever moved the ANBU squads, whoever signed it, whoever knew and said nothing, and whoever carried the letters. The drafter and the courier do not deserve the same sentence and the court now knows that",
+    "The docket says where a shared charge comes from \u2014 \u201con Kakashi Hatake's document\u201d, \u201cnamed under the delve by\u201d \u2014 so two people on the same charge no longer look like a duplicate, and two unrelated people can no longer be listed on the same charge in the same year. A Kage's case and the names on its document go to the top of the docket and no longer lapse after two years unheard",
+    "New sentence: house arrest. Five years inside their own walls with a guard on the gate, which is what a village gives somebody it cannot quite bring itself to lock up",
+  ] },
   { v: "10.11", n: "Not The Same Five Cases In Rotation", items: [
     "Twenty more ordinary charges, forty-four in all before the extraordinary ones. Cheating the Chunin Exams, selling the Academy graduation paper, drunk on watch the night something came over the wall, an unsanctioned duel where the other one did not get up, teaching a clan's three-hundred-year-old technique to an outsider, abducting a clan heir, forging the Kage's seal, stealing a dead sensei's summoning contract, setting fire to the lower village, killing a prisoner before they could testify, running genin fight nights in a basement, throwing an escort for money, hoarding grain in the hungry winter, hiding a missing-nin brother in the cellar, an assassination nobody at the tower signed, genjutsu on civilians who then signed away their land, buying a council vote, robbing a clan crypt for its eyes, blackmailing an elder, and sending a squad over a crossing that washed out two springs ago",
     "Every case now arrives by a particular road, shown in the hall under the charge: a squadmate who filed it and asked for a transfer the same afternoon, an anonymous letter under the clerk's door, a dying jonin naming them in front of two medics and a chaplain, their own sensei asking to sit at the back while it is heard, their spouse, an Academy student who told an instructor, a prisoner's memory in the Yamanaka wing, a drawer nobody opened for four years. Twenty-four of them, and the same one does not come round twice in quick succession",
@@ -8303,13 +8472,7 @@ export default function ShinobiLife() {
       P(L, "The terms were written by " + worst.name + ". You are paying " + money(bill) + " now and a share of the mission take every year until " + AH(c.reparations.until) + ".", "b");
       newsItem(c, cap(w.side) + " has signed terms with " + worst.name + " — reparations, a demilitarised border, and their inspectors inside your gates.", "THE COURTS", true);
     }
-    const pk = (POSTWAR_KAGE[c.era] || {})[c.village];
-    if (won && pk && NAMED[pk] && !isDead(c, pk) && c.rank < 6) {
-      const old = c.kages[c.village];
-      c.kages[c.village] = { named: pk, name: NAMED[pk].name, title: old.title };
-      P(L, old.name + " stepped down after the war. " + NAMED[pk].name + " has taken the hat.", "e");
-      newsItem(c, old.name + " has stepped down as " + old.title + " after " + w.name + ". " + NAMED[pk].name + " succeeds them.", "OBITUARIES", true);
-    }
+    if (won) postWarSeat(c, L, w.name);
     if (won) {
       c.standing = cl(c.standing + 25); c.ryo += 80000 + w.contribution * 25000;
       P(L, w.name + " is over. Your side held. The villages count their dead and call it a victory.", "g");
@@ -9536,7 +9699,9 @@ export default function ShinobiLife() {
         cs.riders = rid.slice();
         const took = cl(sen.sev + riderSev(rid), 0, 12);
         const deserved = deservedSev(cs);
-        const err = Math.abs(took - deserved);
+        /* house arrest is the sentence built for somebody who handed themselves in */
+        const houseFit = sen.house && cs.surrendered ? 1 : 0;
+        const err = Math.max(0, Math.abs(took - deserved) - houseFit);
         const unjust = took > deserved ? Math.ceil((took - deserved) / 3) : 0;
         /* the record */
         if (sen.free) b.acquitted = (b.acquitted || 0) + 1; else b.convicted = (b.convicted || 0) + 1;
@@ -9761,13 +9926,22 @@ export default function ShinobiLife() {
   }
   /* sentencing the person in the hat is not a normal day at work */
   function kageCrisis(c, L, cs, what) {
+    /* somebody who resigned and walked in is a former Kage. The village had
+       its crisis the morning they surrendered; this is just the sentence. */
+    if (cs.resigned) {
+      const word = (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage;
+      P(L, "The former " + word + " heard it standing, and thanked the bench, which nobody in the hall knew what to do with either.", "n");
+      newsItem(c, cs.name + ", former " + word + " of " + homeName(c) + ", has been " + what + " by the high bench after surrendering. The court counted the surrender; the others on the document are being tried for their own parts.", "THE COURTS", true);
+      return;
+    }
     c.standing = cl(c.standing - rr(6, 16));
     c.bench.crisis = (c.bench.crisis || 0) + 1;
     P(L, "You have just " + what + " the " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage + ". There is no procedure for the next part and everybody in the hall knows it.", "e");
     newsItem(c, "A SITTING KAGE HAS BEEN " + what.toUpperCase() + " BY THEIR OWN VILLAGE'S COURT. " + homeName(c) + " has no head and four other villages have asked, separately, what exactly happened in that hall.", "THE COURTS", true);
-    if (c.kages && c.kages[c.village] && c.kages[c.village].name === cs.name) {
-      const nx = c.line && c.line.length ? c.line.shift() : null;
-      c.kages[c.village] = nx || { name: freshName(c, null), title: "Acting " + (VILLAGES.find((v) => v.id === c.village) || { kage: "Kage" }).kage };
+    /* a Kage who surrendered has already resigned, so the seat has already moved */
+    if (!cs.resigned && c.kages && c.kages[c.village] && c.kages[c.village].name === cs.name) {
+      const nw = handOverSeat(c, c.village, { why: what + " by the high bench" });
+      if (nw) P(L, nw.name + " holds the seat now, as " + nw.title + ". Nobody asked them whether they wanted it this way.", "n");
     }
   }
 
@@ -11435,10 +11609,7 @@ export default function ShinobiLife() {
               /* an unnamed seat still dies, and the village still has to fill it */
               const ln = c.line && c.line[t.vid];
               if (ln && ln.current) {
-                ln.past.push({ ...ln.current, to: c.year });
-                const nx = (ln.queue || []).shift() || { id: null, term: rr(12, 24) };
-                ln.current = { id: nx.id || null, name: nx.id && NAMED[nx.id] ? NAMED[nx.id].name : freshName(c, null), from: c.year, term: nx.term || rr(12, 24), player: false };
-                c.kages[t.vid] = { named: ln.current.id, name: ln.current.name, title: kageOrdinal(ln) + " " + kageWordFor(c, t.vid) };
+                handOverSeat(c, t.vid, { why: "killed at the summit" });
               }
             }
             if (t.kind === "kage") addTitle(c, "Killed a Kage at the summit");
@@ -16430,11 +16601,29 @@ export default function ShinobiLife() {
                     <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{ch.note}</div>
                   </div>
                 )}
+                {cs.surrendered && (
+                  <div style={{ background: "rgba(0,0,0,.3)", border: "1px solid " + T.gold + "66", borderLeft: "3px solid " + T.gold, borderRadius: 10 }} className="p-3 mb-3">
+                    <div style={{ color: T.gold, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">{cs.resigned ? "THE HAT CAME OFF BEFORE THE HEARING" : "THEY CAME IN ON THEIR OWN"}</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>
+                      {cs.resigned
+                        ? "They walked into the tower alone and handed over the document themselves. Continued service was untenable the moment it existed, so the resignation went in that same morning and the Daimyo accepted it. The seat has already moved. What is left for this hall is the sentence, and a court has always counted a surrender: the fair outcome here is a reduced one \u2014 five to ten years, or house arrest \u2014 while the others on that page answer for their own parts in it."
+                        : "Nobody brought them. They walked in and said it themselves, which a court has always counted in their favour. People who hand themselves in are nearly always the people who did it \u2014 nearly."}
+                    </div>
+                  </div>
+                )}
+                {cs.coOf && roleOf(cs) && (
+                  <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3 mb-3">
+                    <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9 }} className="font-bold mb-1">THEIR PART IN IT</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>
+                      Named on the document {cs.coOf} {cs.coOfSurrendered ? "carried in" : "was charged over"}. The charge against them is that they {roleOf(cs).n}, and they are tried on that, not on the whole of it.
+                    </div>
+                  </div>
+                )}
                 <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">{cs.fled ? "THE DOCK IS EMPTY" : "THE DOCK"}</div>
                 <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 12 }} className="p-3 mb-3">
                   <div className="flex items-baseline justify-between gap-2">
                     <span style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{cs.name}</span>
-                    <span style={{ color: cs.rank === "Kage" ? T.blood : T.gold, fontSize: 10, letterSpacing: ".14em", fontWeight: 800 }}>{cs.rank.toUpperCase()}</span>
+                    <span style={{ color: cs.rank === "Kage" ? T.blood : T.gold, fontSize: 10, letterSpacing: ".14em", fontWeight: 800 }}>{(cs.resigned ? "Former " + ((VILLAGES.find((v) => v.id === c.village) || {}).kage || "Kage") : cs.rank).toUpperCase()}</span>
                   </div>
                   <div style={{ color: T.dim, fontSize: 11 }} className="mt-1">
                     Age {cs.age} {"·"} power {cs.pw} {"·"} {cs.fled ? "over the border before anybody reached the gate" : "pleads " + (cs.plea === "guilty" ? "guilty" : cs.plea === "silent" ? "nothing at all" : "not guilty")}
@@ -16624,8 +16813,8 @@ export default function ShinobiLife() {
                     )}
                     {(b.docket || []).filter((x) => !x.done).map((x) => {
                       const ch2 = chargeOf(x);
-                      return <Row key={x.no} label={x.name + " · " + x.rank}
-                        sub={ch2.n + (x.fled ? " · already over the border" : "") + (x.extreme ? " · the hall will be closed" : "") + (x.steps.length ? " · part heard" : "") + (x.pressure && x.pressure.want ? " · somebody is watching this one" : "")}
+                      return <Row key={x.no} label={x.name + " · " + (x.resigned ? "Former " + ((VILLAGES.find((v) => v.id === c.village) || {}).kage || "Kage") : x.rank)}
+                        sub={ch2.n + (x.coOf ? " · on " + x.coOf + "'s document" : "") + (x.fromNetwork ? " · named under the delve by " + x.fromNetwork : "") + (x.surrendered ? " · handed themselves in" : "") + (x.fled ? " · already over the border" : "") + (x.extreme ? " · the hall will be closed" : "") + (x.steps.length ? " · part heard" : "") + (x.pressure && x.pressure.want ? " · somebody is watching this one" : "")}
                         right={"Case " + x.no} onClick={() => benchAct("case", x.no)} disabled={c.actions < 1} tone={x.rank === "Kage" ? T.blood : null} />;
                     })}
                   </>
