@@ -593,6 +593,8 @@ const ENEMIES = {
   kage: EN("Rival Kage", "The hat", 94, 52, "Lightning", [["Kirin", 1.35, "nin"], ["Lightning Armour", 0, "buff"], ["Guillotine Drop", 1.2, "tai"]], "A whole village decided this person was the strongest alive."),
   /* named, because enemyFighter hands anything unnamed a randName() — which meant
      you tracked down the Nine-Tails and fought a jinchuriki called Kenji Mori. */
+  /* the Warden of the Iron Vault. Kage-level, and has never lost a prisoner */
+  warden: { ...EN("Kurogane J\u016bz\u014d", "Warden of the Iron Vault", 95, 50, "Earth", [["Nine-Ring Iron Seal", 1.4, "nin"], ["Chakra Severance", 1.25, "tai"], ["The Deep Closes", 0, "guard"]], "Thirty years in the Deep and not one of them has ever got past him."), named: true },
   beastRaw: { ...EN("Rampaging Beast", "Tailed beast", 90, 30, "Chakra", [["Tailed Beast Bomb", 1.35, "nin"], ["Tail Sweep", 1.15, "tai"], ["Chakra Roar", 1.0, "nin"]], "No seal, no host, no reason, no mercy."), named: true },
 };
 
@@ -625,7 +627,7 @@ const ERAS = [
   { id: "naruto", n: "The Interwar Period", yr: "974\u20131000 AH", war: "The Fourth Great Ninja War",
     d: "Minato holds the hat, the Nine-Tails comes over the wall in 983, and the Akatsuki start collecting beasts. It ends in the Fourth Great Ninja War.",
     warChance: 16, warLen: [2, 3], allied: true,
-    roster: ["kakashi", "guy", "naruto", "sasuke", "sakura", "hinata", "ino", "tenten", "temari", "shizune", "kurenai", "anko", "itachi", "pain", "konan", "karin", "tayuya", "guren", "fu", "samui", "karui", "deidara", "sasori", "hidan", "kakuzu", "gaara", "neji", "lee", "shikamaru", "kabuto", "obito", "madaraRe"],
+    roster: ["kakashi", "guy", "naruto", "sasuke", "sakura", "hinata", "ino", "tenten", "temari", "shizune", "kurenai", "anko", "itachi", "pain", "zetsu", "konan", "karin", "tayuya", "guren", "fu", "samui", "karui", "deidara", "sasori", "hidan", "kakuzu", "gaara", "neji", "lee", "shikamaru", "kabuto", "obito", "madaraRe"],
     pool: ["missing", "akatsuki", "jin"], bosses: ["kabuto", "obito", "madaraRe", "kaguya"] },
   { id: "boruto", n: "The New Era", yr: "1001 AH onward", war: "The Otsutsuki Incursion",
     d: "Trains, screens, and a peace nobody under twenty has ever seen broken. Something is coming from outside the world anyway.",
@@ -699,6 +701,8 @@ const NAMED = {
   sasori: N("Sasori of the Red Sand", "Puppet master", 86, 42, null, "Turned himself into a puppet so he would never have to age.", [["Red Secret Technique", 1.35, "tai"], ["Poison Senbon Rain", 1.2, "nin"], ["Iron Sand Shield", 0, "guard"]], "Red Secret Technique"),
   hidan: N("Hidan", "Immortal zealot", 76, 40, null, "Cannot be killed and will explain his religion while you try.", [["Curse Ritual Scythe", 1.3, "tai"], ["Blood Circle", 0, "buff"], ["Triple Scythe Sweep", 1.15, "tai"]], "Curse Ritual Scythe"),
   kakuzu: N("Kakuzu", "The bounty collector", 86, 42, "Earth", "Five hearts, five natures, and a grudge older than your village.", [["Earth Grudge Fear", 1.3, "nin"], ["Fire Style: Searing Migraine", 1.25, "nin"], ["Iron Skin", 0, "guard"]], "Earth Grudge Fear"),
+  /* the one member the game never had: half a spy, half something older than the villages */
+  zetsu: N("Zetsu", "The one who watches from the ground", 74, 50, "Wood Release", "Comes up out of the floor, remembers everything, and was never entirely one thing.", [["Spore Technique", 1.1, "nin"], ["Mayfly", 0, "guard"], ["Wood Release: Binding", 1.25, "nin"]], "Mayfly"),
   gaara: N("Gaara", "Fifth Kazekage", 88, 40, "Magnet Release", "The sand moves before he decides to move it.", [["Magnet Style: Sand Burial", 1.35, "nin"], ["Sand Shield", 0, "guard"], ["Sand Tsunami", 1.2, "nin"]], "Magnet Style: Sand Burial"),
   neji: N("Neji Hyuga", "Hyuga prodigy", 72, 46, null, "Sees all 361 points and intends to close 64 of them.", [["Eight Trigrams Sixty-Four Palms", 1.35, "tai"], ["Eight Trigrams Palm Rotation", 0, "guard"], ["Gentle Fist", 1.15, "tai"]], "Eight Trigrams Sixty-Four Palms"),
   lee: N("Rock Lee", "The hard worker", 70, 50, null, "No ninjutsu at all. Still might be faster than you.", [["Front Lotus", 1.35, "tai"], ["Gate of Life", 0, "buff"], ["Leaf Whirlwind", 1.15, "tai"]], "Front Lotus"),
@@ -861,17 +865,11 @@ function killNamed(c, id, L, how, claimVid) {
     if (ln && ln.current && ln.current.id === id) {
       /* if you are taking this seat yourself, the village does not get to name anyone else */
       if (claimVid === v.id) return;
-      ln.past.push({ ...ln.current, to: c.year });
-      const nx = ln.queue.shift() || { id: null, term: rr(14, 26) };
-      const gone = nx.id && c.dead.includes(nx.id);
-      ln.current = {
-        id: gone ? null : nx.id,
-        name: !gone && nx.id && NAMED[nx.id] ? NAMED[nx.id].name : randName(Math.random() < 0.5 ? "m" : "f"),
-        from: c.year, term: nx.term || rr(14, 26), player: false,
-      };
-      const t2 = kageOrdinal(ln) + " " + kageWordFor(c, v.id);
-      c.kages[v.id] = { named: ln.current.id, name: ln.current.name, title: t2 };
-      newsItem(c, ln.current.name + " has taken the hat as " + t2 + " of " + v.name + ".", "THE VILLAGES", true);
+      /* the one way a seat changes hands: through the line, with the next holder
+         checked for being alive, of their era and old enough. this used to take
+         the next name off the queue blind, which is how Gaara became Kazekage at 7. */
+      const nw = handOverSeat(c, v.id, { why: "died in office" });
+      if (nw) newsItem(c, nw.name + " has taken the hat as " + nw.title + " of " + v.name + ".", "THE VILLAGES", true);
     } else if (c.kages[v.id] && c.kages[v.id].named === id) {
       c.kages[v.id] = { named: null, name: randName(Math.random() < 0.5 ? "m" : "f"), title: c.kages[v.id].title };
     }
@@ -955,7 +953,7 @@ const ORGS = {
   founding: { n: "The exiles", ids: ["madara", "mu"] },
   sannin: { n: "The shadow of the Sannin", ids: ["orochimaru", "danzo", "hanzo"] },
   third: { n: "The Mist defectors", ids: ["zabuza", "kisame", "obitoYoung"] },
-  naruto: { n: "Akatsuki", ids: ["itachi", "kisame", "deidara", "sasori", "hidan", "kakuzu", "konan", "pain", "obito"] },
+  naruto: { n: "Akatsuki", ids: ["itachi", "kisame", "deidara", "sasori", "hidan", "kakuzu", "konan", "pain", "obito", "zetsu"] },
   boruto: { n: "Kara", ids: ["delta", "koji", "jigen", "momoshiki"] },
 };
 const BOUNTY_TIERS = [
@@ -1023,6 +1021,11 @@ const NAMED_CLAN = {
 };
 const namedClan = (id) => (NAMED_CLAN[id] !== undefined ? NAMED_CLAN[id] : null);
 
+/* the year each of the missing-nin actually left their village, on this calendar.
+   Without it the rolls kept listing Sasori as a Suna jonin and Itachi as a
+   Konoha one long after both were in the Akatsuki. */
+const DEFECTED = { sasori: 960, kakuzu: 950, obito: 971, kisame: 978, orochimaru: 985, itachi: 991, deidara: 991, hidan: 993 };
+const hasDefected = (c, id) => DEFECTED[id] != null && c && c.year >= DEFECTED[id];
 const namedVillage = (id) => (NAMED_VILLAGE[id] !== undefined ? NAMED_VILLAGE[id] : null);
 /* somebody who could plausibly be fighting against you.
    a named shinobi only ever fights for their own clan, or for their own village once it exists. */
@@ -1131,7 +1134,7 @@ const BORN_YEAR = {
   kisame: 953, killerb: 953, ay: 955, zabuza: 955,
   kakashiYoung: 958, obitoYoung: 958, guyYoung: 958, kakashi: 958, guy: 958, obito: 958,
   mei: 960, koji: 960, yagura: 962, darui: 962, kabuto: 962, kimimaro: 978,
-  itachi: 968, chojuro: 968, kurotsuchi: 968, haku: 972, deidara: 976, hidan: 978,
+  zetsu: 930, itachi: 968, chojuro: 968, kurotsuchi: 968, haku: 972, deidara: 976, hidan: 978,
   naruto: 983, sasuke: 983, sakura: 983, gaara: 983, lee: 983, shikamaru: 983, neji: 982,
   narutoAdult: 983, sasukeAdult: 983,
   kawaki: 1004, boruto: 1005, sarada: 1005, mitsuki: 1005, shikadai: 1005,
@@ -1155,7 +1158,7 @@ const DEATH_YEAR = {
   reto: 916, shamon: 944, thirdKazekage: 968, firstRaikage: 926, ishikawa: 926, thirdMizukage: 974,
   hanzo: 995, sasori: 1000, deidara: 1000, kakuzu: 1000, hidan: 1000,
   itachi: 1000, jiraiya: 1000, chiyo: 1000, danzo: 1000, pain: 1000,
-  konan: 1001, neji: 1001, obito: 1001, madaraRe: 1001, kaguya: 1001,
+  zetsu: 1001, konan: 1001, neji: 1001, obito: 1001, madaraRe: 1001, kaguya: 1001,
   koji: 1006, delta: 1006, isshiki: 1005,
 };
 const DEATH_HOW = {
@@ -1183,6 +1186,7 @@ const DEATH_HOW = {
   deidara: "took himself and half a valley apart, on his own terms, calling it art",
   kakuzu: "died with the last of five hearts stopped, still arguing about the bounty",
   hidan: "was cut apart and buried in the Nara forest, alive, which is the point",
+  zetsu: "was sealed away inside the one it had served since before there were villages to serve",
   chiyo: "gave her life to bring back a boy from Sunagakure, and did not make a speech about it",
   danzo: "died by his own hand rather than be taken, still certain he had been right",
   konan: "died defending the country she had spent her life holding together with paper",
@@ -1842,6 +1846,7 @@ const SENTENCES = [
   { id: "memory", n: "Their memory of it sealed", sev: 6, d: "They keep their rank, their life and their name, and lose the part of themselves that did it. Nobody agrees whether this is mercy.", wipe: true },
   { id: "combat", n: "Trial by combat", sev: 5, d: "The old way. They fight, and if they are still standing the charge is answered. You are the one standing across from them.", combat: true },
   { id: "exile", n: "Exile — struck from the roll", sev: 6, d: "Out of the gate with nothing. They are a missing-nin by nightfall, and they will remember who said it.", exile: true },
+  { id: "vault", n: "The Iron Vault", sev: 8, d: "Under Tetsu, three rings deep, with a Kage-level warden who has not lost a prisoner in thirty years. Where the five send the people none of them can hold.", vault: true },
   { id: "blood", n: "The Blood Prison", sev: 8, years: 99, d: "Hozuki Castle. The sentence has no number on it and nobody has ever been released from it by a court.", hard: true },
   { id: "life", n: "Life, no appeal", sev: 8, years: 99, d: "The cells under the tower until they stop. No appeal means no appeal." },
   { id: "anbuhand", n: "Hand them to ANBU", sev: 8, d: "Out of your hall and into a department that does not file. There is no register entry for this and there never will be.", vanish: true },
@@ -2166,6 +2171,237 @@ function benchTick(c, L) {
     if (b.fair >= 74) newsItem(c, "The bench in " + homeName(c) + " has acquired a reputation nobody expected it to: people are asking to be tried there. " + c.name + " has heard " + b.heard + " cases.", "THE COURTS");
     else if (b.fair <= 26) newsItem(c, "Defence advocates in " + homeName(c) + " have begun asking for cases to be moved away from " + c.name + "'s court. The tower has not answered them.", "THE COURTS");
   }
+}
+
+/* ============================ THE IRON VAULT ============================
+   Hozuki Castle is a foreign prison run by the Hidden Grass, and the court
+   has already learned what that costs. The Iron Vault is the other thing:
+   cut into the mountain under Tetsu, three rings deep, run for thirty years
+   by a Kage-level warden who has never lost a prisoner. It holds the people
+   nobody else can hold. Every Akatsuki member it takes gets a protocol written
+   for exactly what they are, because a cell that holds Kisame does not hold
+   Obito, and a guard who is safe with Deidara is dead with Itachi. */
+
+const VAULT_WARDEN = { name: "Kurogane Jūzō", title: "Warden of the Iron Vault", lvl: 95,
+  about: "Neither samurai nor shinobi and trained as both. Took the Vault thirty years ago, when it held eleven people and lost two a year. It has not lost one since." };
+
+const VAULT_RINGS = [
+  { n: "The Outer Ring", d: "Dangerous, but ordinary. Stone cells, chakra suppression at the door, guards in pairs." },
+  { n: "The Middle Ring", d: "Jonin-level and above. Suppression seals in the walls themselves, meals through a hatch, no two inmates within sight of each other." },
+  { n: "The Deep", d: "S-rank, the Akatsuki and anybody who has worn a hat. Every cell has its own written protocol, and the Warden walks it himself." },
+];
+
+/* the five it already held before you ever came up the Iron road: the worst
+   each of the great villages ever produced and could not keep */
+const VAULT_SEED = [
+  { name: "Rokurō Asagiri", from: "kiri", rank: "Former Jonin", pw: 88, age: 51, yrs: 12, crime: "killed his whole graduating class, all nineteen of them, to find out whether he could" },
+  { name: "Tenma Hōkō", from: "iwa", rank: "Former Jonin Commander", pw: 90, age: 58, yrs: 20, crime: "buried a Kumogakure border town in its own hillside on the second day of a truce" },
+  { name: "Kasane the Hollow", from: "konoha", rank: "Former Special Jonin", pw: 86, age: 44, yrs: 7, crime: "walked into forty minds on interrogation duty and did not always come back out alone" },
+  { name: "Sōen of the Nine Wells", from: "suna", rank: "Former Jonin", pw: 84, age: 66, yrs: 25, crime: "poisoned nine wells across three countries in one dry season" },
+  { name: "Raijin Kaminari", from: "kumo", rank: "Former ANBU Captain", pw: 89, age: 39, yrs: 5, crime: "assassinated two daimyo on commission and a third for nothing" },
+];
+
+/* ---- what it takes to hold each of them ----
+   code: the emergency most likely to be called on them. never: the single
+   rule that, broken, is the whole failure. exec: whether and how the Vault
+   can end them if it has to. */
+const AKATSUKI_PROTOCOLS = {
+  pain: { n: "Pain / Nagato", code: "BLACK RODS",
+    threat: "Six bodies moved by one will through black chakra receivers, and the Rinnegan behind all of them.",
+    measures: ["Every chakra receiver extracted from all six bodies on admission, counted twice, and destroyed in front of the Warden.", "The six bodies held in six separate cells in six separate corridors, with no line of sight between any two.", "Nagato's own body kept in the Deep on the Vault's medical support, eyes bound under a triple seal.", "No metal rod, pin or spike of any colour permitted below the outer ring."],
+    never: "Not one black rod, not one pin, ever brought within the outer ring.",
+    exec: "Only with the Rinnegan removed first and sealed separately, and all six bodies destroyed within the same hour." },
+  konan: { n: "Konan", code: "WET PAGE",
+    threat: "She is paper. Six hundred billion explosive tags have been folded out of less.",
+    measures: ["No paper anywhere in the Vault. Records below the outer ring are kept on slate.", "Her cell held at saturation humidity, day and night, so nothing in it will hold a fold.", "Fire-suppression seals in the walls, the floor and the ceiling of her corridor.", "Every guard searched for paper at the top of the stair, including receipts, including letters from home."],
+    never: "Not one sheet of paper below the outer ring. Not a note. Not a label.",
+    exec: "Possible, by water, and done quickly. She will not resist it; the protocol is written so that she cannot." },
+  itachi: { n: "Itachi Uchiha", code: "SILENT EYES",
+    threat: "Every fight with him is a genjutsu you lost before it started. So is every conversation.",
+    measures: ["His eyes sealed under cloth and a suppression seal, checked every shift.", "All communication in writing, through a slot, with the guard's face turned away.", "Guards rotated every two hours; every guard coming off shift is checked by a Yamanaka before leaving the Deep.", "No mirror, no polished metal and no still water anywhere on his corridor. Crows shot on sight on the mountain."],
+    never: "No guard ever meets his eyes. A guard who does is relieved and examined, whatever he says afterwards.",
+    exec: "Possible. Blindfolded, in silence, by a guard who has never been assigned to his corridor." },
+  kisame: { n: "Kisame Hoshigaki", code: "DRY WELL",
+    threat: "Chakra enough for three jonin, a sword that eats more of it, and anywhere with water is his.",
+    measures: ["Samehada sealed in a separate vault at the far end of the Iron road. It is never in the same building as him.", "His cell kept bone dry; humidity checked every hour; meals without soup.", "Reversed chakra-drain seals on his cell, feeding what he has back into the walls.", "No drain, no pipe and no standing water within a hundred yards."],
+    never: "No standing water within a hundred yards of his cell, for any reason, including a fire.",
+    exec: "Possible, with Samehada destroyed first. The sword is the part that remembers him." },
+  deidara: { n: "Deidara", code: "ASH",
+    threat: "Mouths in both hands and one in his chest, and anything he can knead becomes a bomb.",
+    measures: ["The mouths in both palms sealed shut with suppression stitching, resealed at every dawn.", "The mouth in his chest sealed under a separate plate that only the Warden can open.", "No clay, soil, ceramic or bread dough in his cell or his meals. He is fed through a hatch.", "His cell shielded against blast on all six sides, with the corridor clear of other inmates."],
+    never: "Nothing that could be kneaded ever reaches his hands.",
+    exec: "Possible, with the chest seal checked by the Warden immediately beforehand. He has said he would like to go out as art. He will not." },
+  sasori: { n: "Sasori of the Red Sand", code: "CUT STRINGS",
+    threat: "His body is a puppet. The only living part of him is a single cylinder in his chest.",
+    measures: ["The body dismantled on admission and its parts held in separate vaults in separate rings.", "The core cylinder kept alone in a sealed case in the Deep.", "Antidotes to every poison he is known to have used stocked at every guard post.", "Chakra-thread detection seals on every corridor he could reach."],
+    never: "The core and the body are never in the same ring.",
+    exec: "Possible. One blade, through the core. It is the only part that matters, and it has always known that." },
+  hidan: { n: "Hidan", code: "BLOOD RING",
+    threat: "He cannot be killed. With a drop of your blood and a circle to stand in, he can kill you by hurting himself.",
+    measures: ["Held in separated, sealed containers, in the Deep, in the dark.", "No blade carried by any guard in his ring. Not a knife, not a razor.", "Nobody's blood is ever drawn in his ring: medical work is done two rings up.", "The floor of his ring is uneven stone, so no circle can be drawn on it."],
+    never: "Not one drop of anybody's blood ever spilled within his ring.",
+    exec: "Impossible. Hidan cannot be executed. His protocol is permanent separation, and it is not a sentence. It is maintenance." },
+  kakuzu: { n: "Kakuzu", code: "FIVE HEARTS",
+    threat: "Five hearts, five natures, and he takes more from anybody he can reach.",
+    measures: ["His four spare hearts removed with their masks and sealed in four separate vaults.", "Earth Grudge threads suppressed by binding seals at every joint.", "Nobody living ever within his reach, including the Warden, including for meals.", "A heart count every shift. The count is always one."],
+    never: "Never let him touch a living person. He does not want to hurt you. He wants your heart.",
+    exec: "Possible, only with all five hearts destroyed within the same minute, in five different rooms, on one signal." },
+  obito: { n: "Obito Uchiha", code: "BLACK WATER",
+    threat: "Kamui. He can step out of any room into a dimension of his own and back into any other.",
+    measures: ["His cell sits inside a space-time anchoring barrier that fixes space itself; Kamui cannot open inside it.", "The barrier is held by four sealers in rotation, never fewer than four, never all from one village.", "His Sharingan sealed and, if he carries a Rinnegan, the Rinnegan removed and held elsewhere.", "The Warden checks the barrier personally at every change of the watch."],
+    never: "The barrier around his cell is never down. Not for one breath. Not for any reason.",
+    exec: "Possible, inside the barrier, with the Warden present and the four sealers holding. It must be done in the space it is contained in." },
+  zetsu: { n: "Zetsu", code: "SPORE",
+    threat: "It comes up out of floors, merges with anything that grew, and splits into copies of itself.",
+    measures: ["A cell of iron and glass only, suspended off the floor on chains.", "No wood, no cloth made from plants, no living thing anywhere in the Deep.", "A spore check of every guard and every inmate every day; anything that has split is burned.", "It is fed through a hatch, and the hatch is iron."],
+    never: "Nothing that ever grew is allowed in the Deep.",
+    exec: "Uncertain. The Vault can destroy what is in the cell. Nobody has ever been sure that is all of it." },
+  orochimaru: { n: "Orochimaru", code: "WHITE SNAKE",
+    threat: "Formerly of the organisation. Takes bodies. Sheds his own when it is inconvenient.",
+    measures: ["Nobody is ever alone with him. Not the guards, not the Warden, not the Arbiter.", "No snake on the mountain survives the day it is seen. The Vault keeps cats.", "Any shinobi carrying a cursed seal is barred from the Vault, permanently.", "Anything he sheds — skin, hair, blood — is burned the same hour it is found."],
+    never: "Nobody is ever alone with him.",
+    exec: "Possible, and it must be checked. He has died several times before and considered each one an appointment." },
+};
+const isAkatsukiId = (id) => !!AKATSUKI_PROTOCOLS[id];
+
+/* ---- the emergencies the Vault has a word for ---- */
+const VAULT_CODES = [
+  { code: "RED LANTERN", n: "An escape attempt in progress",
+    trigger: "Any inmate outside their cell, or any cell door open without the Warden's order.",
+    acts: ["Every gate between the rings drops at once and does not rise until the Warden says so.", "Suppression in the Deep raised to full; every inmate below the outer ring is effectively without chakra.", "Guards withdraw to the ring above. Nobody engages.", "The Warden goes down alone."],
+    done: "The attempt ends in the ring it started in. The inmate is returned to a new cell, and the old one is examined for how." },
+  { code: "SILENT EYES", n: "Genjutsu on the staff",
+    trigger: "A guard acting on an order nobody gave, or unable to account for a stretch of their shift.",
+    acts: ["Every guard on that shift relieved at once, including anybody who says they are fine.", "A Yamanaka examines each of them before they leave the Deep.", "The inmate's hatch sealed for three days.", "The guard's rotation is changed so they never serve that corridor again."],
+    done: "The guard is treated, not punished. The inmate loses a privilege they were never told they had." },
+  { code: "ASH", n: "An explosion inside a cell",
+    trigger: "Heat, light or sound from a cell that nothing inside it should be able to make.",
+    acts: ["Blast doors drop on both ends of the corridor.", "Fire seals triggered from outside.", "Medics wait at the stair for the Warden's all-clear."],
+    done: "The cell is rebuilt, the seals on the inmate re-cut, and whatever they made it from is found and traced." },
+  { code: "BLACK WATER", n: "A space-time disturbance",
+    trigger: "The anchoring barrier fluctuating, or anything appearing or vanishing inside the Deep.",
+    acts: ["The four barrier sealers are joined by four more from the reserve.", "Everybody else leaves the Deep.", "The Warden takes the barrier's anchor himself until it is steady."],
+    done: "The barrier holds. It has always held. The reserve sealers stay for a week." },
+  { code: "DRY WELL", n: "Water where there must be none",
+    trigger: "Humidity rising in a dry cell, or water found within the forbidden distance.",
+    acts: ["The source traced and sealed.", "The cell dried with heat seals, and the inmate moved while it is."],
+    done: "Whoever let the water in is found. It has so far always been an accident." },
+  { code: "CUT STRINGS", n: "Chakra threads detected",
+    trigger: "Thread-detection seals triggered on any corridor.",
+    acts: ["Every dismantled part of the inmate checked against the inventory.", "Suppression raised in the rings holding the parts."],
+    done: "The part that moved is moved again, to somewhere further." },
+  { code: "BLOOD RING", n: "Blood in a ring where there must be none",
+    trigger: "A wound, a nosebleed, a cut hand, anything, in Hidan's ring.",
+    acts: ["The bleeding person is carried up two rings before anything else happens.", "The blood is burned, and the stone it touched is cut out."],
+    done: "The ring is scrubbed and the guard is given a week somewhere warm." },
+  { code: "FIVE HEARTS", n: "A heart count that is not one",
+    trigger: "Any count of Kakuzu's hearts other than the one he is allowed.",
+    acts: ["Every living person on his corridor counted and checked, immediately.", "The four heart vaults opened and counted by the Warden."],
+    done: "The count has always, eventually, come back to one." },
+  { code: "SPORE", n: "A copy found",
+    trigger: "A spore check that finds anything that has split.",
+    acts: ["Whatever split is burned where it is found.", "The whole Deep checked again, twice."],
+    done: "The Vault does not know if it got all of it. It acts as though it did not." },
+  { code: "WHITE SNAKE", n: "An attempt to take a body",
+    trigger: "Anybody found alone with Orochimaru, or a snake anywhere on the mountain.",
+    acts: ["The person is removed and examined by a Yamanaka for somebody else inside them.", "The mountain is searched."],
+    done: "It has never worked here. The protocol is written as though it will one day." },
+  { code: "BLACK RODS", n: "A chakra receiver inside the Vault",
+    trigger: "Any black metal found below the outer ring.",
+    acts: ["It is destroyed where it is found, by the Warden.", "All six of Pain's cells are checked, and the six bodies counted."],
+    done: "Nobody has ever found out how the last one got in." },
+  { code: "IRON SILENCE", n: "A riot across a ring",
+    trigger: "Three or more inmates acting together.",
+    acts: ["Every cell in the ring locked, and every hatch.", "Food withheld for a day.", "The Warden walks the ring, alone, slowly, and speaks to each of them."],
+    done: "It ends when the Warden has finished walking. It has never needed a second walk." },
+  { code: "DAWN", n: "An attack on the Vault from outside",
+    trigger: "Anybody armed on the Iron road who should not be.",
+    acts: ["The Land of Iron's samurai to the gate.", "Every inmate in the Deep sedated.", "The Arbiter informed within the hour."],
+    done: "Nobody has come for anybody in the Vault in thirty years. The Vault behaves as if somebody is always on the road." },
+  { code: "FINAL SEAL", n: "Containment cannot be guaranteed",
+    trigger: "Only when the Warden judges that an inmate will get out, and that nothing in the protocol can stop it.",
+    acts: ["The Warden may end the inmate without a hearing.", "It is reported to the Arbiter of the Iron Scales within the hour, in writing, in full."],
+    done: "It has been invoked twice in thirty years. The Warden will not say on whom." },
+];
+const vaultCode = (id) => VAULT_CODES.find((x) => x.code === id);
+
+function vaultInit(c) {
+  return {
+    since: c.year, warden: { ...VAULT_WARDEN, alive: true, sparred: 0 },
+    inmates: VAULT_SEED.map((x) => ({ name: x.name, named: null, from: x.from, rank: x.rank, pw: x.pw, age: x.age,
+      crime: x.crime, since: c.year - x.yrs, ring: x.pw >= 85 ? 2 : 1, protocol: null, status: "held" })),
+    log: [], incidents: 0, attempts: 0, escapes: 0,
+  };
+}
+const vaultKnown = (c) => !!(c && c.vault && (c.vault.known || (c.iron && c.iron.seated) || (c.bench && c.bench.seat)));
+
+/* ---- somebody taken alive, going down the stair ---- */
+function vaultAdmit(c, L, p) {
+  if (!c.vault) c.vault = vaultInit(c);
+  const V = c.vault; V.known = true;
+  if (V.inmates.some((x) => x.status === "held" && x.name === p.name)) return null;
+  const prot = p.named && AKATSUKI_PROTOCOLS[p.named] ? p.named : null;
+  const ring = prot || p.kage || (p.pw || 0) >= 85 ? 2 : (p.pw || 0) >= 68 ? 1 : 0;
+  const inm = { name: p.name, named: p.named || null, from: p.from || null, rank: p.rank || "unranked", pw: p.pw || 60,
+    age: p.age || null, crime: p.crime || "listed in the Bingo Book", since: c.year, ring, protocol: prot, status: "held", kage: !!p.kage };
+  V.inmates.push(inm);
+  if (p.named) c.held = (c.held || []).filter((x) => x !== p.named).concat([p.named]);
+  V.log.push({ y: c.year, code: "ADMISSION", txt: p.name + " taken down the stair to " + VAULT_RINGS[ring].n.toLowerCase() + ". Stripped, searched twice, sealed at the gate and examined by a Yamanaka for anybody else inside them." + (prot ? " Protocol " + AKATSUKI_PROTOCOLS[prot].n + " in force from the first minute." : "") });
+  P(L, p.name + " went down the stair into the Iron Vault. " + (prot ? "Their protocol was in force before they reached the bottom: " + AKATSUKI_PROTOCOLS[prot].never : "The Warden met them at the gate himself.") , "e");
+  newsItem(c, p.name + (p.rank ? ", " + p.rank + (p.from ? " of " + vName2(p.from) : "") + "," : "") + " has been taken alive and sent to the Iron Vault under Tetsu." + (prot ? " The Vault has written a protocol for them. It has never yet had to use the last page of one." : ""), "BINGO BOOK", true);
+  return inm;
+}
+
+/* ---- a year in the Vault ----
+   Attempts happen. Escapes do not. Every attempt is met by the procedure that
+   was written for it, and the Vault's record is the whole point of it. */
+function vaultTick(c, L) {
+  const V = c.vault; if (!V) return;
+  V.inmates.forEach((x) => { if (x.status === "held" && x.age) x.age += 1; });
+  const held = V.inmates.filter((x) => x.status === "held");
+  held.forEach((x) => {
+    const risk = x.protocol ? 14 : x.ring === 2 ? 7 : 3;
+    if (!roll(risk)) return;
+    V.attempts += 1; V.incidents += 1;
+    const codeId = x.protocol ? (roll(70) ? AKATSUKI_PROTOCOLS[x.protocol].code : "RED LANTERN") : (roll(20) && held.length >= 3 ? "IRON SILENCE" : "RED LANTERN");
+    const code = vaultCode(codeId) || vaultCode("RED LANTERN");
+    V.log.push({ y: c.year, code: code.code, txt: x.name + ": " + code.n.toLowerCase() + ". " + code.acts[0] + " " + code.done });
+    if (V.log.length > 60) V.log.shift();
+    if ((V.known || vaultKnown(c)) && roll(45)) P(L, "CODE " + code.code + " in the Iron Vault. " + x.name + " tried, and the procedure was already running before they had finished trying. Nobody got out. Nobody ever has.", "n");
+  });
+  /* thirty years, now thirty-one */
+  V.years = (V.years || 0) + 1;
+}
+
+/* ---- who can be indicted: every name on the five rolls ---- */
+function indictRoster(c, vid) {
+  const r = villageRoll(c, vid);
+  if (!r) return [];
+  const out = [];
+  const k = c.kages && c.kages[vid];
+  r.rows.forEach((row) => {
+    if (row.rank === "Academy Student") return;
+    row.people.forEach((pp) => {
+      if (pp.you) return;
+      const isKage = row.rank === "Kage";
+      out.push({ name: pp.name, rank: isKage && k ? k.title : row.rank, pw: pp.pw || 50, age: pp.age || null, from: vid,
+        named: pp.named || (isKage && k ? k.named : null) || null, kage: isKage });
+    });
+  });
+  return out;
+}
+const bookTemplate = (pw) => (pw >= 90 ? "kage" : pw >= 80 ? "missing" : pw >= 70 ? "swordsman" : pw >= 58 ? "hunter" : pw >= 45 ? "chunin" : "genin");
+/* what rank a named person holds, for the book */
+function namedRank(c, id) {
+  if (!NAMED[id]) return "";
+  const vid = namedVillage(id);
+  if (vid && c.kages && c.kages[vid] && c.kages[vid].named === id) return c.kages[vid].title;
+  const l = NAMED[id].lvl || 0;
+  if (AGELESS.includes(id) || l >= 100) return "Beyond any rank";
+  if (hasDefected(c, id)) return "S-rank missing-nin" + (isAkatsukiId(id) && id !== "orochimaru" ? ", Akatsuki" : "");
+  if (isAkatsukiId(id) && id !== "orochimaru") return "S-rank, Akatsuki";
+  if (!vid) return l >= 85 ? "S-rank, no village" : "Unaffiliated";
+  return l >= 74 ? "Jonin" : l >= 60 ? "Special Jonin" : "Chunin";
 }
 
 /* ============================ THE IRON SCALES ============================
@@ -2524,7 +2760,7 @@ function ironEnd(c, L, why) {
    The span is derived from the id rather than rolled, so it does not change
    when a save is reloaded and the same person does not die twice in two
    playthroughs at two different ages. */
-const AGELESS = ["kaguya", "isshiki", "momoshiki", "urashiki", "code", "eida", "delta", "jigen"];
+const AGELESS = ["kaguya", "isshiki", "momoshiki", "urashiki", "code", "eida", "delta", "jigen", "zetsu"];
 /* the ones the histories specifically record as outliving everybody */
 const LONG_LIVED = { onoki: 40, chiyo: 34, kakuzu: 30, hiruzen: 18, danzo: 16, tsunade: 26, orochimaru: 30 };
 function lifespanOf(id) {
@@ -2722,9 +2958,11 @@ function buildLine(c, vid) {
       const goneBefore = (diedAt !== undefined && diedAt <= year) || (!NAMED[head.id]);
       if (goneBefore) { ln.queue.shift(); caretaker = true; break; }
       if (!head.again && ln.seated.includes(head.id)) { ln.queue.shift(); continue; }
+      /* judged at the year the walk has reached: nobody holds a hat before fifteen */
+      if (BORN_YEAR[head.id] != null && year - BORN_YEAR[head.id] < 15) { caretaker = true; break; }
       nx = ln.queue.shift(); break;
     }
-    if (!nx) nx = G(caretaker ? rr(6, 14) : rr(14, 26));
+    if (!nx) nx = G(caretaker ? (heirWait(ln, year) || rr(6, 14)) : rr(14, 26));
     const useName = nx.id && NAMED[nx.id];
     let term = nx.term || rr(14, 26);
     if (useName && DEATH_YEAR[nx.id] !== undefined && !nx.again) {
@@ -2747,17 +2985,28 @@ function buildLine(c, vid) {
   return ln;
 }
 /* a returning Kage keeps the number they already had — Hiruzen is the Third twice over */
+/* somebody holding a seat until its heir is of age, or its era arrives, is
+   acting, not numbered — so a stand-in never pushes Gaara to "Sixth". */
 const kageOrdinal = (line, who) => {
   const seat = who || (line && line.current);
+  if (seat && seat.caretaker) return "Acting";
+  const numbered = ((line && line.past) || []).filter((p2) => !p2.caretaker);
   if (seat && seat.id && line && line.past) {
-    const first = line.past.findIndex((p2) => p2.id === seat.id);
+    const first = numbered.findIndex((p2) => p2.id === seat.id);
     if (first >= 0) return ORDINALS[first] || "Latest";
   }
   /* count distinct holders, so a returning Kage does not push everyone after them up a number */
   const seen = [];
-  (line.past || []).forEach((p2) => { const key = p2.id || p2.name; if (key && !seen.includes(key)) seen.push(key); });
+  numbered.forEach((p2) => { const key = p2.id || p2.name; if (key && !seen.includes(key)) seen.push(key); });
   return ORDINALS[seen.length] || "Latest";
 };
+/* years until the heir at the head of the line is old enough to take the seat */
+function heirWait(ln, year) {
+  const h = ((ln && ln.queue) || [])[0];
+  if (!h || !h.id || BORN_YEAR[h.id] == null) return null;
+  const age = year - BORN_YEAR[h.id];
+  return age < 15 ? Math.max(1, 15 - age) : null;
+}
 
 /* who is canonically slated for which seat, so nobody wears a hat they have not been given */
 const KAGE_OFFICE = {};
@@ -2821,9 +3070,10 @@ function kageWordFor(c, vid) { return c.founded && vid === c.village ? c.vil.kag
 function nextFromQueue(c, ln, exclude) {
   while (ln.queue && ln.queue.length) {
     const h = ln.queue[0];
-    if (!h.id) { ln.queue.shift(); return null; }                                   /* an ordinary name's turn */
+    if (!h.id) return ln.queue.shift();                                             /* an ordinary name's turn: a real Kage, just not a famous one */
     if (h.id === exclude || isDead(c, h.id) || !NAMED[h.id] || (!h.again && (ln.seated || []).includes(h.id))) { ln.queue.shift(); continue; }
     if (NAMED_ERA[h.id] !== undefined && NAMED_ERA[h.id] > eraIndex(c)) return null;  /* not their age yet: somebody holds it until then */
+    { const ha = namedAge(c, h.id); if (ha != null && ha < 15) return null; }
     return ln.queue.shift();
   }
   return null;
@@ -2863,6 +3113,7 @@ function peekNextSeat(c, ln, exclude) {
     if (!h.id) return null;
     if (h.id === exclude || isDead(c, h.id) || !NAMED[h.id] || (!h.again && ((ln.seated || []).includes(h.id)))) continue;
     if (NAMED_ERA[h.id] !== undefined && NAMED_ERA[h.id] > eraIndex(c)) return null;
+    { const ha = namedAge(c, h.id); if (ha != null && ha < 15) return null; }
     return h.id;
   }
   return null;
@@ -2884,10 +3135,11 @@ function handOverSeat(c, vid, opts) {
     nx = nextFromQueue(c, ln, cur.id);
   }
   const named = nx && nx.id && NAMED[nx.id] ? nx.id : null;
+  const acting = !nx;   /* nobody eligible yet: somebody holds it until the heir can */
   ln.current = {
     id: named, name: named ? NAMED[named].name : freshName(c, null),
-    from: c.year, term: (nx && nx.term) || rr(12, 24), player: false,
-    caretaker: !named, diesInOffice: !!(nx && nx.dies),
+    from: c.year, term: acting ? (heirWait(ln, c.year) || rr(6, 14)) : (nx.term || rr(12, 24)), player: false,
+    caretaker: acting, diesInOffice: !!(nx && nx.dies),
   };
   if (named) ln.seated.push(named);
   c.kages[vid] = { named, name: ln.current.name, title: kageOrdinal(ln) + " " + kageWordFor(c, vid) };
@@ -2927,9 +3179,10 @@ function advanceLines(c, L) {
         }
         if (!head.again && ln.seated.includes(head.id)) { ln.queue.shift(); continue; } /* nobody holds it twice unless the histories say so */
         if (NAMED_ERA[head.id] !== undefined && NAMED_ERA[head.id] > eraIndex(c)) { caretaker = true; break; } /* not their age yet */
+        { const ha = namedAge(c, head.id); if (ha != null && ha < 15) { caretaker = true; break; } } /* Gaara was Kazekage at fifteen, not at seven */
         nx = ln.queue.shift(); break;
       }
-      if (!nx) nx = G(caretaker ? rr(6, 14) : rr(14, 26));
+      if (!nx) nx = G(caretaker ? (heirWait(ln, c.year) || rr(6, 14)) : rr(14, 26));
 
       const useName = nx.id && NAMED[nx.id] && !isDead(c, nx.id);
       ln.current = {
@@ -3860,6 +4113,24 @@ function worldTick(c, L) {
   benchTick(c, L);
   if (!c.iron) c.iron = ironInit(c);
   ironTick(c, L);
+  vaultTick(c, L);
+  /* hunter-nin sent after names in the book */
+  (c.bookHunts || []).forEach((h) => {
+    if (h.done) return;
+    h.years += 1;
+    const e = (c.booked || []).find((x) => x.name === h.name);
+    if (!e || e.dead || e.captured) { h.done = true; return; }
+    if (roll(cl(30 + h.years * 10 - (e.pw || 60) / 4, 5, 80))) {
+      h.done = true; e.dead = true;
+      if (e.named && NAMED[e.named] && !isDead(c, e.named)) killNamed(c, e.named, L, "was hunted down by hunter-nin on an order from the Bingo Book");
+      else if (e.kage && e.from) handOverSeat(c, e.from, { why: "killed by hunter-nin" });
+      P(L, "The hunter-nin found " + e.name + ". What came back was a confirmation and a sealed jar, not a body.", "g");
+      newsItem(c, e.name + (e.from ? " of " + vName2(e.from) : "") + ", listed " + e.tier + "-rank in the Bingo Book, has been killed by hunter-nin.", "OBITUARIES", true);
+    } else if (roll(6)) {
+      h.done = true;
+      P(L, "The squad that went after " + e.name + " has not reported in a year. The department has stopped calling them overdue.", "b");
+    }
+  });
   feudTick(c, L);
   incidentTick(c, L);
   timesTick(c);
@@ -4222,6 +4493,15 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.14", n: "The Iron Vault", items: [
+    "A maximum-security prison under Tetsu, three rings deep, run for thirty years by Kurogane J\u016bz\u014d, Warden of the Iron Vault \u2014 Kage-level, power 95, and he has never lost a prisoner. It already holds the worst each of the five great villages ever produced and could not keep: a Mist swordsman who killed his whole graduating class, an Iwa commander who buried a town on the second day of a truce, a Konoha interrogator who walked into forty minds and did not always come back out alone, a poisoner of nine wells, and a Kumo ANBU captain who killed three daimyo. You can spar with the Warden. He stops a hand's width short, every time, until you beat him",
+    "Every member of the Akatsuki can now be taken alive, and every one of them has a containment protocol written for exactly what they are: Pain's receivers counted and destroyed and his six bodies never within sight of each other; no paper below the outer ring for Konan; nobody ever meets Itachi's eyes, and every guard leaving his corridor is checked by a Yamanaka; Samehada kept in another building from Kisame and no standing water within a hundred yards; Deidara's mouths sealed and resealed at dawn with nothing kneadable in reach; Sasori's core and body never in the same ring; not one drop of blood in Hidan's ring, and Hidan cannot be executed at all; Kakuzu's four spare hearts in four vaults and a heart count every shift; a space-time barrier around Obito that is never down for one breath; nothing that ever grew allowed near Zetsu; and nobody, ever, alone with Orochimaru",
+    "Zetsu is in the game. He was the one member of the organisation that never existed here",
+    "The Standing Orders of the Iron Vault, readable in full: what the Vault is, the three rings, admission, every Akatsuki protocol with its one rule and whether it can end in an execution, fourteen emergency codes \u2014 RED LANTERN, SILENT EYES, ASH, BLACK WATER, FIVE HEARTS, WHITE SNAKE, FINAL SEAL and the rest \u2014 each with when it is called, what is done in order, and what will be done after, then the Warden's authority, execution, and interrogation. Attempts happen every year and the log shows the code that answered each one. Nobody has ever got out",
+    "The Indictment Roll. As Arbiter of the Iron Scales you can put any shinobi of the five great nations in the Bingo Book \u2014 the five Kage included \u2014 and as a judge of the tribunal or the high bench, anybody on your own village's roll. Every one of them is listed by name, village, rank, age and power. Indicting a sitting Kage is a declaration and their nation takes it as one",
+    "Everybody in the Bingo Book can now be dealt with, not just read about: hunt them down yourself, take them alive for the Iron Vault (the bounty pays double for alive), or sign an order and send the hunter-nin, who report back years later or do not report back at all. Every name in the book shows where they are from, their rank, their age and their power. A high bench can also sentence somebody straight to the Vault",
+    "Showing everybody's age exposed some history that had gone wrong, now fixed. Gaara was the Kazekage at seven: a Kage who died in office was replaced by whoever was next in line without checking they were alive, of their era or old enough. Nobody takes a hat before fifteen now, which puts Gaara in it at fifteen, as the histories say. The people who hold a seat until the heir is of age are Acting Kage, and are not numbered, so they no longer push Yagura, Mei or Gaara down an ordinal. Sasori, Itachi, Kisame, Deidara, Hidan, Kakuzu, Obito and Orochimaru leave their villages' rolls in the year they actually left, and Kaguya is no longer listed as a Jonin",
+  ] },
   { v: "10.13", n: "There Is A Door In The Land Of Iron", items: [
     "It is not on any path and it is not on any menu. The Land of Iron has always been the one place all five great nations would agree to stand in, and somebody there has kept a sixth chair empty for a long time, facing the other five, for a judge who belongs to none of them",
     "If you have sat on a bench of your own and sat on it well, somebody may leave you a small iron token with a word stamped on it. The word is the whole of the instructions",
@@ -5942,6 +6222,7 @@ function bookName(c, e) {
     by: e.by || (c.name || "the bench"), vid: c.village,
     bounty: e.bounty != null ? e.bounty : ({ S: 1200000, A: 480000, B: 160000, C: 45000 }[e.tier || "C"] || 45000),
     pw: e.pw || null, dead: false,
+    from: e.from || null, age: e.age || null, named: e.named || null, kage: !!e.kage,
   });
   return true;
 }
@@ -6834,7 +7115,7 @@ function villageRoll(c, vid) {
   const me = playerNamedId(c);
   /* you appear once, at the rank you actually hold — not twice, and not as an NPC of yourself */
   const seated = c.kages && c.kages[vid] ? c.kages[vid].named : null;
-  const named = livingRoster(c).filter((id) => namedVillage(id) === vid && id !== me && id !== seated);
+  const named = livingRoster(c).filter((id) => namedVillage(id) === vid && id !== me && id !== seated && !hasDefected(c, id));
   const kage = c.kages && c.kages[vid] ? c.kages[vid] : null;
   const mine = c.village === vid;
   const foreignRoster = (!mine && villageExists(c, vid) && !eraOf(c).hideVillages) ? lightRosterFor(vid, c.year) : null;
@@ -7805,6 +8086,8 @@ export default function ShinobiLife() {
   const [benchCase, setBenchCase] = useState(null);
   const [benchRiders, setBenchRiders] = useState([]);
   const [ironCase, setIronCase] = useState(null);
+  const [indict, setIndict] = useState({ scope: null, vid: null, sel: null, tier: "A", charge: 0 });
+  const [ruleSec, setRuleSec] = useState(null);
   const ironKeys = useRef("");
   const ironTaps = useRef({ n: 0, t: 0 });
   const [summitPick, setSummitPick] = useState([]);
@@ -9094,7 +9377,8 @@ export default function ShinobiLife() {
     setModal(null);
   }
   function huntNamed(id, spare) {
-    commit((c2) => { c2.spareThem = !!spare; });
+    /* spare === "capture": take them alive, for the Iron Vault */
+    commit((c2) => { c2.spareThem = spare === true; c2.captureThem = spare === "capture"; });
     startBattle(id, { type: "named", id }, 0, NAMED[id].name + " \u2014 " + NAMED[id].title + ". " + NAMED[id].desc + (spare ? " You have already decided you are not going to finish this one." : ""));
     setModal(null);
   }
@@ -9885,6 +10169,114 @@ export default function ShinobiLife() {
     });
     setModal(null);
   }
+  /* ---------- the Iron Vault, the book, and the indictments ---------- */
+  const INDICT_CHARGES = ["crimes against the five nations", "treason against their own village", "war crimes", "the murder of civilians",
+    "desertion with village secrets", "collaboration with the Akatsuki", "abuse of a Kage's office"];
+  /* who may put a name in the book: the Arbiter for all five, a judge for their own village */
+  const indictScopeOf = (cc) => (cc.iron && cc.iron.seated ? "world" : cc.bench && (cc.bench.seat === "tribunal" || cc.bench.seat === "high") ? "home" : null);
+  function openVault() {
+    commit((c2) => { if (!c2.vault) c2.vault = vaultInit(c2); c2.vault.known = true; });
+    setModal("vault");
+  }
+  function openIndict() {
+    const sc = indictScopeOf(c); if (!sc) return;
+    setIndict({ scope: sc, vid: sc === "world" ? (ironNations(c)[0] || c.village) : c.village, sel: null, tier: "A", charge: 0 });
+    setModal("indict");
+  }
+  function vaultAct(kind, arg) {
+    if (kind === "spar") {
+      setModal(null);
+      setTimeout(() => startBattle("warden", { type: "warden" }, 0,
+        "The Warden put his sword on the rack, took his gloves off, and walked into the practice ring under the mountain. “Thirty years,” he said. “Somebody should find out.”"), 120);
+      return;
+    }
+    commit((c, L) => {
+      const V = c.vault; if (!V) return;
+      const x = V.inmates[arg]; if (!x || x.status !== "held") return;
+      if (kind === "interrogate") {
+        if (x.asked === c.year) { P(L, "You have already been down to " + x.name + " this year. The protocol does not allow a second visit.", "n"); return; }
+        spend(c); x.asked = c.year;
+        const P2 = x.protocol ? AKATSUKI_PROTOCOLS[x.protocol] : null;
+        const said = x.protocol === "itachi" ? "The answers came back through the slot in a neat hand, and every one of them was true, and none of them was what you asked."
+          : x.protocol === "hidan" ? "He talked for an hour about his god, from inside three separate boxes. The guards have learned to hum."
+          : x.protocol === "deidara" ? "He could not speak through the seal on his chest, so he wrote on the slate with his elbow: ART IS AN EXPLOSION. Then: LET ME SHOW YOU."
+          : x.protocol === "kakuzu" ? "He asked what his bounty stood at now, and seemed genuinely hurt when you told him."
+          : x.protocol === "obito" ? "He did not say anything at all for the first hour. Then he asked whether the barrier ever flickered. Just once. Just for a breath."
+          : x.protocol === "zetsu" ? "Two voices answered from the same chained cell, and they did not agree about what had happened."
+          : x.protocol === "konan" ? "She answered everything politely, and asked only whether it ever rained in the Land of Iron."
+          : x.protocol === "orochimaru" ? "He asked about your health. Twice. The two guards in the room with you did not let you answer."
+          : x.protocol === "kisame" ? "He laughed at the dryness, and then he asked for water, and then he stopped laughing."
+          : x.protocol === "sasori" ? "The core in its case said nothing. The inventory of his parts was read aloud to it and something in the case seemed to listen."
+          : x.protocol === "pain" ? "Nagato spoke, frail and clear, about a rain country and a boy who wanted peace. The six bodies in their six corridors did not move."
+          : "They talked, through the hatch, about the thing they did. It was the same account as the file, and a little worse.";
+        P(L, "Interrogation, " + x.name + ", " + (P2 ? "under protocol, in writing, with the Warden present. " : "through the hatch, with two guards. ") + said, "n");
+        c.stats.int = cl(c.stats.int + 2);
+        if (x.named && NAMED[x.named] && NAMED[x.named].sig && roll(25)) learn(c, L, NAMED[x.named].sig, "You understood how " + NAMED[x.named].sig + " actually works from the way they described it. You wish you had not.");
+        V.log.push({ y: c.year, code: "INTERROGATION", txt: x.name + " questioned" + (P2 ? " under protocol " + P2.n : "") + ". Nothing irregular." });
+      } else if (kind === "execute") {
+        const auth = (c.iron && c.iron.seated) || (c.bench && c.bench.seat === "high");
+        if (!auth) { P(L, "Only the Arbiter of the Iron Scales or the high bench can sign that order. The Warden would not take it from anybody else.", "b"); return; }
+        if (x.protocol === "hidan") { P(L, AKATSUKI_PROTOCOLS.hidan.exec, "b"); return; }
+        spend(c);
+        x.status = "executed"; x.out = c.year;
+        const how = x.protocol ? AKATSUKI_PROTOCOLS[x.protocol].exec : "Under Section VII: in the Deep, before the Warden and two witnesses, and the body burned by hunter-nin within the hour.";
+        if (x.named && NAMED[x.named] && !isDead(c, x.named)) { c.held = (c.held || []).filter((y) => y !== x.named); killNamed(c, x.named, L, "was executed in the Iron Vault under Tetsu"); }
+        V.log.push({ y: c.year, code: "SECTION VII", txt: x.name + " executed on the order of " + c.name + ". " + how });
+        P(L, "You signed it and went down to watch it done, because the orders say whoever signs it watches. " + how, "b");
+        newsItem(c, x.name + " has been executed in the Iron Vault under Tetsu on an order signed by " + c.name + ".", "OBITUARIES", true);
+      }
+    });
+  }
+  function indictAct() {
+    const sel = indict.sel; if (!sel) return;
+    const charge = INDICT_CHARGES[indict.charge] || INDICT_CHARGES[0];
+    const tier = indict.tier;
+    commit((c, L) => {
+      const ok = bookName(c, { name: sel.name, rank: sel.rank, tier, pw: sel.pw, age: sel.age, from: sel.from, named: sel.named, kage: sel.kage,
+        why: charge, by: indict.scope === "world" ? "the Iron Scales" : c.name });
+      if (!ok) { P(L, sel.name + " is already in the book.", "n"); return; }
+      spend(c);
+      const vn = vName2(sel.from);
+      if (sel.kage) {
+        if (indict.scope === "world" && c.iron) {
+          c.iron.trust[sel.from] = cl((c.iron.trust[sel.from] || 50) - 25);
+          P(L, "You indicted the " + sel.rank + " of " + vn + " in the name of all five nations. " + vn + "'s envoy did not wait for the ruling to be finished before leaving the hall.", "e");
+          newsItem(c, "THE IRON SCALES HAVE INDICTED A SITTING KAGE. " + sel.name + ", " + sel.rank + " of " + vn + ", is entered in the Bingo Book at " + tier + "-rank for " + charge + ".", "BINGO BOOK", true);
+          if (c.iron.trust[sel.from] < 18 && !(c.iron.walked || []).includes(sel.from)) c.iron.walked = (c.iron.walked || []).concat([sel.from]);
+        } else {
+          c.standing = cl(c.standing - 12);
+          P(L, "You put your own Kage in the Bingo Book. The clerk's hand shook writing it, and so, afterwards, did yours.", "e");
+          newsItem(c, sel.name + ", " + sel.rank + " of " + vn + ", has been entered in the Bingo Book by their own village's court.", "BINGO BOOK", true);
+        }
+      } else {
+        if (indict.scope === "world" && c.iron && c.iron.trust[sel.from] != null) c.iron.trust[sel.from] = cl(c.iron.trust[sel.from] - 4);
+        P(L, sel.name + ", " + sel.rank + " of " + vn + ", is in the Bingo Book at " + tier + "-rank for " + charge + ". Every village on the continent will have the page by the end of the month.", "n");
+        newsItem(c, sel.name + " of " + vn + " has been entered in the Bingo Book at " + tier + "-rank by " + (indict.scope === "world" ? "the Iron Scales" : "their village's court") + ".", "BINGO BOOK");
+      }
+    });
+    setIndict((d) => ({ ...d, sel: null }));
+  }
+  /* a name in the book: go after them, take them alive, or send somebody */
+  function bookAct(kind, name) {
+    const e = (c.booked || []).find((x) => x.name === name && !x.dead && !x.captured);
+    if (!e) return;
+    if (kind === "order") {
+      commit((c2, L) => {
+        if ((c2.bookHunts || []).some((h) => h.name === name && !h.done)) { P(L, "A squad is already out after " + name + ".", "n"); return; }
+        spend(c2);
+        c2.bookHunts = (c2.bookHunts || []).concat([{ name, years: 0 }]);
+        P(L, "You signed the order. A hunter-nin squad left before dawn with " + name + "'s page and nothing else.", "e");
+      });
+      return;
+    }
+    const nm = e.named && NAMED[e.named] && !isDead(c, e.named) ? e.named : null;
+    setModal(null);
+    setTimeout(() => startBattle(nm || bookTemplate(e.pw || 60), { type: "bookhunt", name, mode: kind }, 0,
+      (kind === "capture" ? "You went after " + name + " with sealing tags and a plan that required them to be alive at the end of it. " : "You went after " + name + " with their page in your coat. ")
+      + (e.from ? "They were last seen well outside " + vName2(e.from) + "." : ""),
+      nm ? undefined : { name, title: (e.rank || "Listed") + (e.from ? " of " + vName2(e.from) : "") }), 120);
+  }
+
   /* ---------- the hall under Tetsu ---------- */
   function openIron() {
     /* read the live character: the key listener that calls this was registered
@@ -10440,6 +10832,11 @@ export default function ShinobiLife() {
           if (sen.hard || sen.years >= 25 || cs.rank === "Kage" || cs.rank === "Jonin Commander") {
             newsItem(c, who + " has been sentenced to " + sen.n.toLowerCase() + " in " + homeName(c) + " for " + ch.n.toLowerCase() + ". " + c.name + " presided.", "THE COURTS", true);
           }
+          if (cs.kage) kageCrisis(c, L, cs, "imprisoned");
+        } else if (sen.vault) {
+          removeFromRoll(c, cs, L, "prison");
+          b.toVault = (b.toVault || 0) + 1;
+          vaultAdmit(c, L, { name: cs.name, named: cs.named, from: c.village, rank: cs.rank, pw: cs.pw, age: cs.age, crime: ch.n.toLowerCase(), kage: cs.kage });
           if (cs.kage) kageCrisis(c, L, cs, "imprisoned");
         } else if (sen.vanish) {
           /* ANBU does not file, so there is no register entry and no way back */
@@ -12034,6 +12431,48 @@ export default function ShinobiLife() {
           }
         }
       }
+      if (ctx.type === "bookhunt") {
+        spend(c);
+        const e = (c.booked || []).find((x) => x.name === ctx.name);
+        if (e) {
+          if (b.win) {
+            c.wins += 1; c.ryo += e.bounty || 0;
+            if (ctx.mode === "capture") {
+              e.captured = true;
+              vaultAdmit(c, L, { name: e.name, named: e.named, from: e.from, rank: e.rank, pw: e.pw, age: e.age, crime: e.why, kage: e.kage });
+              if (e.kage && e.from) handOverSeat(c, e.from, { why: "taken alive on a Bingo Book listing" });
+              addTitle(c, "Took " + e.name + " alive");
+              P(L, "You brought " + e.name + " in alive, bound and sealed, and handed them to the Warden at the top of the stair. The bounty pays double for alive. +" + money((e.bounty || 0) * 2), "e");
+              c.ryo += e.bounty || 0;
+            } else {
+              e.dead = true; c.kills += 1;
+              if (e.named && NAMED[e.named] && !isDead(c, e.named)) { killNamed(c, e.named, L, "was hunted down on a Bingo Book listing by " + c.name); killFeat(c, L, e.named); }
+              else if (e.kage && e.from) handOverSeat(c, e.from, { why: "killed on a Bingo Book listing" });
+              P(L, e.name + " is dead, and their page is closed. +" + money(e.bounty || 0), "e");
+              newsItem(c, e.name + (e.from ? " of " + vName2(e.from) : "") + ", listed " + e.tier + "-rank in the Bingo Book, has been killed by " + c.name + ".", "OBITUARIES", true);
+            }
+            c.standing = cl(c.standing + (e.kage ? 20 : 6));
+          } else {
+            const d = rr(20, 44); c.health = cl(c.health - d);
+            e.bounty = Math.round((e.bounty || 0) * 1.2);
+            P(L, e.name + " got away from you, and the bounty on them went up for it. \u2212" + d + " health.", "b");
+            if (c.health <= 0) die(c, L, "was killed by " + e.name + ", whose page they were carrying");
+          }
+        }
+      }
+      if (ctx.type === "warden") {
+        spend(c);
+        const V = c.vault;
+        if (b.win) {
+          addTitle(c, "Beat the Warden of the Iron Vault");
+          STAT_KEYS.forEach(([k]) => (c.stats[k] = cl(c.stats[k] + 2)));
+          if (V) V.warden.sparred = (V.warden.sparred || 0) + 1;
+          P(L, "You put the Warden down on the stone of the practice ring. He got up, put his gloves back on, and said it had been a long time since anybody had done that. Then he went back down to the Deep.", "e");
+        } else {
+          c.health = cl(c.health - rr(12, 30));
+          P(L, "The Warden stopped a hand's width short of finishing it, every time, for as long as you kept getting up. It was a lesson, and he did not pretend otherwise.", "b");
+        }
+      }
       if (ctx.type === "iron") {
         spend(c);
         const I = c.iron;
@@ -12362,6 +12801,21 @@ export default function ShinobiLife() {
         spend(c);
         const nm = NAMED[ctx.id];
         if (b.win) {
+          if (c.captureThem) {
+            c.captureThem = false; c.wins += 1;
+            c.defeated.push(nm.name);
+            const vid = namedVillage(ctx.id);
+            const seat = vid && c.kages && c.kages[vid] && c.kages[vid].named === ctx.id;
+            vaultAdmit(c, L, { name: nm.name, named: ctx.id, from: vid, rank: namedRank(c, ctx.id), pw: nm.lvl, age: namedAge(c, ctx.id), crime: isAkatsukiId(ctx.id) ? "membership of the Akatsuki" : "listed in the Bingo Book", kage: !!seat });
+            if (seat) handOverSeat(c, vid, { why: "taken alive and sent to the Iron Vault" });
+            (c.booked || []).forEach((x) => { if (x.name === nm.name) x.captured = true; });
+            const pay = rr(300000, 1100000); c.ryo += pay;
+            if (c.rogue) c.infamy = cl(c.infamy + 14); else c.standing = cl(c.standing + 18);
+            addTitle(c, "Took " + nm.name + " alive");
+            c.health = cl(c.health - rr(6, 20));
+            P(L, "You did not kill " + nm.name + ". That was much harder. They were sealed where they fell and carried to the Iron road. +" + money(pay), "e");
+            return;
+          }
           if (c.spareThem) {
             c.spareThem = false; c.wins += 1;
             c.defeated.push(nm.name);
@@ -15791,23 +16245,40 @@ export default function ShinobiLife() {
                 </div>
               </div>
             )}
-            {/* names this village's own court put in the book */}
-            {bookedOf(c).length > 0 && (
+            {/* the doors out of the book: who can put a name in, and where the living ones go */}
+            {(indictScopeOf(c) || (c.vault && c.vault.known) || vaultKnown(c)) && (
+              <div className="flex gap-2 flex-wrap mb-3">
+                {indictScopeOf(c) && <button onClick={() => openIndict()} style={{ background: T.blood, color: "#fff", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">{indictScopeOf(c) === "world" ? "Indict a shinobi of the five nations" : "Indict a shinobi of " + homeName(c)}</button>}
+                {((c.vault && c.vault.known) || vaultKnown(c)) && <button onClick={() => openVault()} style={{ background: T.panel2, border: "1px solid " + IRON + "66", color: IRON, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">The Iron Vault</button>}
+              </div>
+            )}
+            {/* names somebody's court put in the book */}
+            {bookedOf(c).filter((e) => !e.captured).length > 0 && (
               <>
-                <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">LISTED OUT OF {homeName(c).toUpperCase()}</div>
-                {bookedOf(c).slice().reverse().map((e, i) => (
-                  <div key={"bk" + i} style={{ background: T.panel2, border: "1px solid " + T.line, borderLeft: "3px solid " + T.blood, borderRadius: 10 }} className="p-3 mb-2">
-                    <div className="flex justify-between items-baseline gap-3">
-                      <div>
-                        <div className="text-sm font-bold">{e.name}{e.rank ? " \u00b7 " + e.rank : ""}</div>
-                        <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-0.5">
-                          {cap(e.why)}. Listed {e.year} AH by {e.by}. Bounty {money(e.bounty)}.
-                        </div>
+                <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">INDICTED</div>
+                {bookedOf(c).filter((e) => !e.captured).slice().reverse().map((e, i) => {
+                  const squad = (c.bookHunts || []).find((h) => h.name === e.name && !h.done);
+                  const odds = cl(50 + (pw - (e.pw || 60)) * 2.2, 3, 97);
+                  return (
+                    <div key={"bk" + i} style={{ background: T.panel2, border: "1px solid " + T.line, borderLeft: "3px solid " + T.blood, borderRadius: 10 }} className="p-3 mb-2">
+                      <div className="flex justify-between items-baseline gap-3">
+                        <div className="text-sm font-bold">{e.name}{e.kage ? " · " + e.rank : ""}</div>
+                        <div style={{ color: T.blood, fontSize: 11, whiteSpace: "nowrap" }} className="font-bold">{e.tier}-rank</div>
                       </div>
-                      <div style={{ color: T.blood, fontSize: 11, whiteSpace: "nowrap" }} className="font-bold">{e.tier}-rank</div>
+                      <div style={{ color: T.dim, fontSize: 11.5, marginTop: 2 }}>
+                        {e.rank || "Unranked"} {"·"} {e.from ? vName2(e.from) : "no village"}{e.age ? " · age " + e.age : ""}{e.pw ? " · power " + e.pw : ""}
+                      </div>
+                      <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs mt-1">
+                        {cap(e.why)}. Listed {e.year} AH by {e.by}. Bounty {money(e.bounty)}.
+                      </div>
+                      <div className="flex gap-3 mt-2 flex-wrap" style={{ fontSize: 11.5 }}>
+                        <button onClick={() => bookAct("hunt", e.name)} disabled={c.actions < 1} style={{ color: T.blood }}>hunt them down {"·"} ~{Math.round(odds)}%</button>
+                        <button onClick={() => bookAct("capture", e.name)} disabled={c.actions < 1} style={{ color: IRON }}>take them alive {"→"} the Iron Vault</button>
+                        <button onClick={() => bookAct("order", e.name)} disabled={c.actions < 1 || !!squad} style={{ color: squad ? T.dim : T.soft }}>{squad ? "hunter-nin out, " + squad.years + "y" : "send the hunter-nin"}</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">THE NAMES OF THE AGE</div>
               </>
             )}
@@ -15819,7 +16290,8 @@ export default function ShinobiLife() {
               const mine = c.akatsuki && AKATSUKI_RINGS.some((r) => r.who === id && !isDead(c, id));
               return (
                 <div key={id} className="mb-2">
-                  <Row label={namedName(c, id) + " · " + namedTitle(c, id) + (mine ? " · your organisation" : "")} sub={nm.desc}
+                  <Row label={namedName(c, id) + " · " + namedTitle(c, id) + (mine ? " · your organisation" : "")}
+                    sub={(namedVillage(id) ? vName2(namedVillage(id)) : isAkatsukiId(id) ? "the Akatsuki" : "no village") + " · " + namedRank(c, id) + (namedAge(c, id) ? " · age " + namedAge(c, id) : "") + " · power " + nm.lvl + " — " + nm.desc}
                     right={mine ? "One of yours" : "Lvl " + nm.lvl + " · ~" + Math.round(odds) + "%"}
                     onClick={() => huntNamed(id)} disabled={mine || c.actions < 1}
                     tone={mine ? null : odds < 25 ? T.blood + "55" : null} />
@@ -15828,6 +16300,12 @@ export default function ShinobiLife() {
                       <button onClick={() => huntNamed(id, true)} disabled={c.actions < 1}
                         style={{ color: T.dim, fontSize: 11 }} className="mb-1">
                         …fight them, but let them live
+                      </button>
+                    )}
+                    {!mine && (
+                      <button onClick={() => huntNamed(id, "capture")} disabled={c.actions < 1}
+                        style={{ color: IRON, fontSize: 11 }} className="mb-1">
+                        …take them alive {"\u2192"} the Iron Vault
                       </button>
                     )}
                     <button onClick={() => setOpenFile(openFile === id ? null : id)}
@@ -15955,11 +16433,11 @@ export default function ShinobiLife() {
                     );
                   }
                   const key = k.id || k.name;
-                  let ord = seenIds.indexOf(key);
-                  if (ord < 0) { seenIds.push(key); ord = seenIds.length - 1; }
+                  let ord = k.caretaker ? -1 : seenIds.indexOf(key);
+                  if (!k.caretaker && ord < 0) { seenIds.push(key); ord = seenIds.length - 1; }
                   return (
-                    <div key={i} className="flex justify-between gap-2" style={{ color: k.player ? T.gold : T.soft, fontFamily: SERIF, fontSize: 12 }}>
-                      <span>{ORDINALS[ord] || "Latest"} {kageWordFor(c, v.id)} — {k.name}{k.player ? " (you)" : ""}</span>
+                    <div key={i} className="flex justify-between gap-2" style={{ color: k.player ? T.gold : T.soft, fontFamily: SERIF, fontSize: 12, fontStyle: k.caretaker ? "italic" : "normal" }}>
+                      <span>{k.caretaker ? "Acting" : ORDINALS[ord] || "Latest"} {kageWordFor(c, v.id)} — {k.name}{k.player ? " (you)" : ""}</span>
                       <span style={{ color: T.dim }}>{k.from}–{k.to != null ? k.to : annexed ? AH(annexed).replace(" AH", "") : "present"}{k.annexed ? " (annexed)" : ""}</span>
                     </div>
                   );
@@ -17249,6 +17727,223 @@ export default function ShinobiLife() {
         );
       })()}
 
+      {modal === "vault" && (() => {
+        const V = c.vault || vaultInit(c);
+        const held = V.inmates.map((x, i) => ({ ...x, i })).filter((x) => x.status === "held");
+        const auth = (c.iron && c.iron.seated) || (c.bench && c.bench.seat === "high");
+        const Label = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-4">{children}</div>;
+        return (
+          <Modal wide title="THE IRON VAULT" accent={IRON} onClose={() => setModal(null)}>
+            <div style={{ ...glass(IRON) }} className="p-3.5 mb-1">
+              <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold">UNDER TETSU {"·"} THREE RINGS DEEP</div>
+              <div style={{ fontFamily: SERIF, fontSize: 19 }} className="font-bold mt-1">{V.warden.name}</div>
+              <div style={{ color: IRON, fontSize: 11, letterSpacing: ".1em" }}>{V.warden.title.toUpperCase()} {"·"} KAGE-LEVEL {"·"} POWER {V.warden.lvl}</div>
+              <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 6 }}>{V.warden.about}</div>
+              <div className="flex flex-wrap gap-3 mt-3" style={{ fontSize: 10, letterSpacing: ".14em", color: T.dim }}>
+                <span>HELD <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{held.length}</b></span>
+                <span>ATTEMPTS <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{V.attempts || 0}</b></span>
+                <span>ESCAPES <b style={{ color: T.good, letterSpacing: 0, fontSize: 12 }}>0</b></span>
+                <span>EMERGENCIES CALLED <b style={{ color: T.text, letterSpacing: 0, fontSize: 12 }}>{V.incidents || 0}</b></span>
+              </div>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <button onClick={() => { setRuleSec(null); setModal("rulebook"); }} style={{ background: T.panel2, border: "1px solid " + IRON + "66", color: IRON, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">Read the Standing Orders</button>
+                <button onClick={() => vaultAct("spar")} disabled={c.actions < 1} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">Spar with the Warden</button>
+              </div>
+            </div>
+            {[2, 1, 0].map((ri) => {
+              const here = held.filter((x) => x.ring === ri);
+              return (
+                <div key={ri}>
+                  <Label col={ri === 2 ? T.blood : IRON}>{VAULT_RINGS[ri].n.toUpperCase()} {"·"} {here.length}</Label>
+                  <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">{VAULT_RINGS[ri].d}</div>
+                  {here.length === 0 && <div style={{ color: T.dim, fontSize: 11.5 }} className="mb-2">Empty.</div>}
+                  {here.map((x) => {
+                    const PR = x.protocol ? AKATSUKI_PROTOCOLS[x.protocol] : null;
+                    return (
+                      <div key={x.i} style={{ background: T.panel2, border: "1px solid " + (PR ? T.blood + "55" : T.line), borderRadius: 10 }} className="p-3 mb-2">
+                        <div className="flex justify-between items-baseline gap-2">
+                          <span style={{ fontFamily: SERIF, fontSize: 14.5 }} className="font-bold">{x.name}</span>
+                          <span style={{ color: IRON, fontSize: 10.5, whiteSpace: "nowrap" }}>POWER {x.pw}</span>
+                        </div>
+                        <div style={{ color: T.dim, fontSize: 11, marginTop: 2 }}>
+                          {x.rank}{x.from ? " · " + vName2(x.from) : " · no village"}{x.age ? " · age " + x.age : ""} {"·"} held since {x.since}
+                        </div>
+                        <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>For {x.crime}.</div>
+                        {PR && (
+                          <div style={{ color: T.blood, fontSize: 11, marginTop: 5 }}>
+                            Protocol {PR.n} {"·"} code {PR.code} {"·"} <span style={{ color: T.soft }}>{PR.never}</span>
+                          </div>
+                        )}
+                        <div className="flex gap-3 mt-2 flex-wrap" style={{ fontSize: 11 }}>
+                          <button onClick={() => vaultAct("interrogate", x.i)} disabled={c.actions < 1 || x.asked === c.year} style={{ color: x.asked === c.year ? T.dim : IRON }}>{x.asked === c.year ? "questioned this year" : "interrogate"}</button>
+                          {PR && <button onClick={() => { setRuleSec(x.protocol); setModal("rulebook"); }} style={{ color: T.dim }}>read the protocol</button>}
+                          {auth && <button onClick={() => vaultAct("execute", x.i)} disabled={c.actions < 1} style={{ color: x.protocol === "hidan" ? T.dim : T.blood }}>{x.protocol === "hidan" ? "cannot be executed" : "sign the order (Section VII)"}</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {(V.log || []).length > 0 && (
+              <>
+                <Label>THE DUTY LOG</Label>
+                <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3">
+                  {(V.log || []).slice(-14).reverse().map((l, i) => (
+                    <div key={i} style={{ fontSize: 12, marginBottom: 6 }}>
+                      <span style={{ color: l.code === "ADMISSION" || l.code === "INTERROGATION" ? IRON : T.blood, fontSize: 9.5, letterSpacing: ".14em", fontWeight: 800 }}>{l.y} {"·"} {l.code}</span>
+                      <div style={{ color: T.soft, fontFamily: SERIF }}>{l.txt}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {modal === "rulebook" && (() => {
+        const H = ({ children }) => <div style={{ color: IRON, letterSpacing: ".2em", fontSize: 10.5 }} className="font-bold mt-5 mb-2">{children}</div>;
+        const Pp = ({ children }) => <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, lineHeight: 1.55 }} className="mb-2">{children}</div>;
+        const ids = Object.keys(AKATSUKI_PROTOCOLS);
+        const shown = ruleSec ? ids.filter((k) => k === ruleSec) : ids;
+        return (
+          <Modal wide title="STANDING ORDERS OF THE IRON VAULT" accent={IRON} onClose={() => setModal("vault")}>
+            <div style={{ fontFamily: SERIF, fontSize: 18 }} className="font-bold">The Standing Orders of the Iron Vault</div>
+            <div style={{ color: T.dim, fontSize: 11.5 }} className="mb-2">Issued under the seal of the Land of Iron. Read aloud to every guard on their first day and every year after. Kept on slate, because some inmates are paper.</div>
+            {ruleSec && <button onClick={() => setRuleSec(null)} style={{ color: IRON, fontSize: 11.5 }} className="mb-2">{"←"} the whole book</button>}
+            {!ruleSec && (
+              <>
+                <H>I. WHAT THE VAULT IS</H>
+                <Pp>The one prison the five great nations agree to send their worst to, because none of them runs it. It answers to the Land of Iron and to the Arbiter of the Iron Scales, and to nobody else. It has not lost a prisoner in thirty years, and these orders are the reason.</Pp>
+                <H>II. THE THREE RINGS</H>
+                {VAULT_RINGS.map((r, i) => <Pp key={i}><b>{r.n}.</b> {r.d}</Pp>)}
+                <H>III. ADMISSION</H>
+                <Pp>1. Every inmate is stripped, searched twice by two different guards, and searched a third time by the Warden if they are going to the Deep.</Pp>
+                <Pp>2. Chakra suppression seals are cut at the gate, before the inmate has taken a step inside.</Pp>
+                <Pp>3. A Yamanaka examines every inmate for anybody else inside them. Nobody enters the Vault carrying a passenger.</Pp>
+                <Pp>4. Anybody going to the Deep has a protocol written for exactly what they are, and it is in force from the first minute, not the first night.</Pp>
+              </>
+            )}
+            <H>{ruleSec ? "CONTAINMENT PROTOCOL" : "IV. THE AKATSUKI, BY NAME"}</H>
+            {!ruleSec && <Pp>A cell that holds Kisame does not hold Obito, and a guard who is safe with Deidara is dead with Itachi. Every member of the organisation has their own protocol, and every protocol has one rule that, if it is broken, is the whole of the failure.</Pp>}
+            {shown.map((k) => {
+              const PR = AKATSUKI_PROTOCOLS[k];
+              return (
+                <div key={k} style={{ background: T.panel2, border: "1px solid " + T.line, borderLeft: "3px solid " + T.blood, borderRadius: 10 }} className="p-3 mb-3">
+                  <div className="flex justify-between items-baseline gap-2">
+                    <span style={{ fontFamily: SERIF, fontSize: 15 }} className="font-bold">{PR.n}</span>
+                    <span style={{ color: T.blood, fontSize: 10, letterSpacing: ".14em", fontWeight: 800 }}>CODE {PR.code}</span>
+                  </div>
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 3, fontStyle: "italic" }}>{PR.threat}</div>
+                  <ol style={{ margin: "8px 0 6px 18px", listStyle: "decimal" }}>
+                    {PR.measures.map((m, i) => <li key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginBottom: 3 }}>{m}</li>)}
+                  </ol>
+                  <div style={{ color: T.blood, fontSize: 12, marginTop: 4 }}><b>The one rule:</b> <span style={{ color: T.text }}>{PR.never}</span></div>
+                  <div style={{ color: T.dim, fontSize: 12, marginTop: 4 }}><b>If it comes to Section VII:</b> {PR.exec}</div>
+                </div>
+              );
+            })}
+            {!ruleSec && (
+              <>
+                <H>V. EMERGENCY PROCEDURES</H>
+                <Pp>Every emergency in the Vault has a word. The word is shouted once, and after that nobody improvises: they do what is written under it, in order, and they do not stop to ask why.</Pp>
+                {VAULT_CODES.map((cd) => (
+                  <div key={cd.code} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10 }} className="p-3 mb-2">
+                    <div className="flex justify-between items-baseline gap-2">
+                      <span style={{ color: cd.code === "FINAL SEAL" ? T.blood : IRON, fontSize: 11, letterSpacing: ".16em", fontWeight: 800 }}>CODE {cd.code}</span>
+                      <span style={{ color: T.dim, fontSize: 11 }}>{cd.n}</span>
+                    </div>
+                    <div style={{ color: T.dim, fontSize: 11.5, marginTop: 4 }}><b>Called when:</b> {cd.trigger}</div>
+                    <ol style={{ margin: "6px 0 4px 18px", listStyle: "decimal" }}>
+                      {cd.acts.map((a, i) => <li key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginBottom: 2 }}>{a}</li>)}
+                    </ol>
+                    <div style={{ color: T.soft, fontSize: 12 }}><b style={{ color: T.dim }}>What will be done:</b> {cd.done}</div>
+                  </div>
+                ))}
+                <H>VI. THE WARDEN'S AUTHORITY</H>
+                <Pp>The Warden commands every guard, sealer and samurai inside the Vault, answers to the Arbiter of the Iron Scales, and holds the one power nobody else in the building has: under Code FINAL SEAL, and only there, he may end an inmate without a hearing when nothing written can hold them. He must report it in writing within the hour. He has done it twice in thirty years.</Pp>
+                <H>VII. EXECUTION</H>
+                <Pp>An execution in the Vault is ordered only by the Arbiter of the Iron Scales or a village's high bench, in writing. It is carried out in the Deep, before the Warden and two witnesses, and whoever signed the order is required to watch it done. The body is burned by hunter-nin within the hour so that nothing of it can be read, bought or reanimated. Where an inmate's protocol says how it must be done, it is done that way and no other. Where it says it cannot be done, it is not.</Pp>
+                <H>VIII. VISITS AND INTERROGATION</H>
+                <Pp>Nobody visits the Deep alone. Interrogation below the middle ring is in writing, through a slot, with the Warden or his second present, once a year per inmate and no more. Anybody leaving the Deep after an interrogation is examined by a Yamanaka before they are allowed to go back up the stair.</Pp>
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {modal === "indict" && (() => {
+        const sc = indict.scope;
+        const vids = sc === "world" ? ironNations(c) : [c.village];
+        const roster = indictRoster(c, indict.vid);
+        const booked = (c.booked || []).map((x) => x.name);
+        const rankOrder = ["Kage", "Jonin Commander", "Jonin", "Special Jonin", "Chunin", "Genin"];
+        const groups = {};
+        roster.forEach((pp) => { const g = pp.kage ? "Kage" : pp.rank; (groups[g] = groups[g] || []).push(pp); });
+        const sel = indict.sel;
+        return (
+          <Modal wide title="THE INDICTMENT ROLL" accent={T.blood} onClose={() => setModal(null)}>
+            <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">
+              {sc === "world"
+                ? "Every shinobi of the five great nations, by village, rank, age and power — the five Kage included. What you enter here goes into every Bingo Book on the continent with the Iron Scales' seal on the page."
+                : "Every shinobi on your own village's roll, by rank, age and power. What you enter here goes into the Bingo Book under your court's name."}
+            </div>
+            {vids.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {vids.map((v) => (
+                  <button key={v} onClick={() => setIndict((d) => ({ ...d, vid: v, sel: null }))}
+                    style={{ background: indict.vid === v ? T.blood : T.panel2, color: indict.vid === v ? "#fff" : T.soft, border: "1px solid " + (indict.vid === v ? T.blood : T.line), borderRadius: 99 }}
+                    className="px-3 py-1.5 text-xs font-semibold">{vName2(v)}</button>
+                ))}
+              </div>
+            )}
+            {sel && (
+              <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.blood + "77", borderLeft: "3px solid " + T.blood, borderRadius: 12 }} className="p-3 mb-3">
+                <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold mb-1">THE INDICTMENT</div>
+                <div style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{sel.name}</div>
+                <div style={{ color: T.dim, fontSize: 11.5 }}>{sel.rank} {"·"} {vName2(sel.from)}{sel.age ? " · age " + sel.age : ""} {"·"} power {sel.pw}</div>
+                <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".16em" }} className="font-bold mt-3 mb-1">THE CHARGE</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {INDICT_CHARGES.map((ch, i) => (i === 6 && !sel.kage) ? null : (
+                    <button key={i} onClick={() => setIndict((d) => ({ ...d, charge: i }))}
+                      style={{ background: indict.charge === i ? T.gold : T.panel2, color: indict.charge === i ? "#0b0d11" : T.soft, border: "1px solid " + T.line, borderRadius: 99 }}
+                      className="px-2.5 py-1 text-xs font-semibold">{ch}</button>
+                  ))}
+                </div>
+                <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".16em" }} className="font-bold mt-3 mb-1">THE PAGE</div>
+                <div className="flex gap-1.5">
+                  {["S", "A", "B", "C"].map((t) => (
+                    <button key={t} onClick={() => setIndict((d) => ({ ...d, tier: t }))}
+                      style={{ background: indict.tier === t ? T.blood : T.panel2, color: indict.tier === t ? "#fff" : T.soft, border: "1px solid " + T.line, borderRadius: 8, minWidth: 44 }}
+                      className="px-3 py-1.5 text-xs font-bold">{t}-rank</button>
+                  ))}
+                </div>
+                {sel.kage && <div style={{ color: T.blood, fontFamily: SERIF, fontSize: 12, marginTop: 8 }}>This is a sitting Kage. {sc === "world" ? "Their nation will take it as the Scales taking a side, and may leave the hall over it." : "Your own village will take it as exactly what it is."}</div>}
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => indictAct()} disabled={c.actions < 1} style={{ background: T.blood, color: "#fff", borderRadius: 8 }} className="px-4 py-2 text-xs font-bold">Enter them in the Bingo Book</button>
+                  <button onClick={() => setIndict((d) => ({ ...d, sel: null }))} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-2 text-xs">Not this one</button>
+                </div>
+              </div>
+            )}
+            {rankOrder.filter((r) => groups[r] && groups[r].length).map((r) => (
+              <div key={r}>
+                <div style={{ color: r === "Kage" ? T.blood : T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2 mt-3">{r.toUpperCase()} {"·"} {vName2(indict.vid).toUpperCase()}</div>
+                {groups[r].map((pp, i) => {
+                  const inBook = booked.includes(pp.name);
+                  return (
+                    <Row key={r + i} label={pp.name + (pp.kage ? " · " + pp.rank : "")}
+                      sub={vName2(pp.from) + " · " + (pp.kage ? pp.rank : pp.rank) + (pp.age ? " · age " + pp.age : "") + " · power " + pp.pw}
+                      right={inBook ? "In the book" : "Indict"} onClick={() => setIndict((d) => ({ ...d, sel: pp, charge: pp.kage ? 6 : 0, tier: pp.pw >= 88 ? "S" : pp.pw >= 74 ? "A" : pp.pw >= 55 ? "B" : "C" }))}
+                      disabled={inBook} tone={pp.kage ? T.blood : null} />
+                  );
+                })}
+              </div>
+            ))}
+          </Modal>
+        );
+      })()}
+
       {modal === "iron" && (() => {
         const I = c.iron || ironInit(c);
         const worthy = ironWorthy(c);
@@ -17424,6 +18119,10 @@ export default function ShinobiLife() {
                   </div>
                 )}
 
+                <div className="flex gap-2 flex-wrap mt-4">
+                  <button onClick={() => openIndict()} style={{ background: T.blood, color: "#fff", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">The Indictment Roll</button>
+                  <button onClick={() => openVault()} style={{ background: T.panel2, border: "1px solid " + IRON + "66", color: IRON, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">The Iron Vault</button>
+                </div>
                 <Label col={IRON}>BEFORE THE SCALES</Label>
                 {(I.docket || []).filter((x) => !x.done).length === 0 && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs">Nothing has come up the Iron road this year. It will.</div>}
                 {(I.docket || []).filter((x) => !x.done).map((x) => (
@@ -17724,6 +18423,12 @@ export default function ShinobiLife() {
                   </div>
                 )}
 
+                {seat && (seat.id === "tribunal" || seat.id === "high") && (
+                  <div className="flex gap-2 flex-wrap mt-3">
+                    <button onClick={() => openIndict()} style={{ background: T.blood, color: "#fff", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">Indict a shinobi of {homeName(c)}</button>
+                    <button onClick={() => openVault()} style={{ background: T.panel2, border: "1px solid " + IRON + "66", color: IRON, borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">The Iron Vault</button>
+                  </div>
+                )}
                 {/* the docket */}
                 {seat && (
                   <>
