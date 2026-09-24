@@ -58,5 +58,4 @@ Battles are menu-driven and tactical, not real-time twitch combat:
 All names/characters are drawn from the Naruto universe as a fan-made,
 non-commercial tribute — this project is not affiliated with or endorsed by
 the rights holders.
-  side note the added songs are the og naruto theme song and blue bird, just had to rename the files so Claude could add them.
 
