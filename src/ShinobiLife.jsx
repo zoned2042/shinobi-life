@@ -5104,6 +5104,248 @@ function world2Tick(c, L) {
   [landsTick, orgTick, akaTick, fugitiveTick, wrongfulTick, wrongfulHunt].forEach((fn) => safeTick(fn, c, L));
 }
 
+
+/* what could be learned from here, for code that lives outside the component */
+function studyableJutsu(c) {
+  const tierMax = c.rank >= 4 ? 4 : c.rank >= 3 ? 3 : c.rank >= 2 ? 2 : 1;
+  const pools = ["general"].concat(c.natures || []);
+  if (c.rogue || c.akatsuki) pools.push("rogue");
+  const sp = c.specialty && SPECIALTIES.find((x) => x.id === c.specialty); if (sp) pools.push(sp.pool);
+  if (c.eye) pools.push(c.eye.t);
+  if (c.kg && JUTSU[c.kg]) pools.push(c.kg);
+  const out = [];
+  pools.forEach((p) => (JUTSU[p] || []).forEach(([nm, t]) => { const mv = MOVES[nm]; if (t <= tierMax && (!mv || mv.tier < 6) && !c.jutsu.includes(nm)) out.push(nm); }));
+  return out;
+}
+/* ============================ A WHOLE LIFE ============================
+   Wounds that stay, a body that ages, a life after the headband, work that
+   is not fighting, mysteries that are not handed to you solved, and the
+   named people of the world living lives of their own whether or not you
+   are there to see them. */
+
+/* ---- wounds that stay ---- */
+const INJURIES = [
+  { id: "eye", n: "Lost the left eye", fx: { gen: -6, spd: -2 }, heal: "prosthetic", seen: "People recognise you by the eye before they recognise your face.", line: "Your left eye was destroyed. The medics saved the socket and nothing else." },
+  { id: "arm", n: "Damaged sword arm", fx: { tai: -8, str: -6 }, heal: "prosthetic", seen: "You shake hands with your left now. People have stopped noticing, mostly.", line: "Your right arm will not close into a fist the way it used to. The medics say it never will." },
+  { id: "chakra", n: "Chronic chakra damage", fx: { cha: -10, nin: -4 }, heal: "medic", seen: "Your chakra runs thin by the evening now. You plan around it.", line: "Something in your chakra network tore and did not grow back. There is less of you to draw on." },
+  { id: "scar", n: "A scar across the face", fx: { cha: 4 }, heal: null, seen: "Children stare at the scar. Old soldiers nod at it.", line: "The blade went across your face. You kept the eye. You will keep the scar too." },
+  { id: "hearing", n: "Hearing loss", fx: { int: -3, spd: -2 }, heal: "medic", seen: "You watch people's mouths when they talk now. It has made you a better judge of liars.", line: "The explosion took most of the hearing in one ear. The ringing has not stopped." },
+  { id: "leg", n: "A bad leg", fx: { spd: -8 }, heal: "prosthetic", seen: "You favour the leg on stairs. Nobody who has seen you fight mentions it.", line: "The leg healed crooked. You can walk on it. Running is a negotiation." },
+  { id: "lungs", n: "Scarred lungs", fx: { con: -6 }, heal: "medic", seen: "The cold mornings are harder than they were. You breathe through it.", line: "Whatever you breathed in that day scarred your lungs. You are short of breath on the hills now." },
+];
+function injure(c, L, why) {
+  if (!c.injuries) c.injuries = [];
+  const have = c.injuries.map((x) => x.id);
+  const I = pick(INJURIES.filter((x) => !have.includes(x.id)));
+  if (!I) return;
+  Object.entries(I.fx).forEach(([k, v]) => { if (c.stats[k] != null) c.stats[k] = cl(c.stats[k] + v); });
+  c.injuries.push({ id: I.id, y: c.year, treated: null });
+  if (L) P(L, I.line + (why ? " " + why : ""), "b");
+  chron(c, { cat: "villages", line: c.name, txt: c.name + ": " + I.n.toLowerCase() + ", " + c.year + "." });
+}
+function treatInjury(c, L, id, how) {
+  const x = (c.injuries || []).find((y) => y.id === id && !y.treated); const I = INJURIES.find((y) => y.id === id);
+  if (!x || !I) return;
+  const cost = how === "prosthetic" ? 280000 : 180000;
+  const discount = c.career && c.career.id === "medic" ? 0.5 : 1;
+  const price = Math.round(cost * discount);
+  if (c.ryo < price) { P(L, "The medic-nin quoted you " + money(price) + ". You do not have it.", "n"); return; }
+  c.ryo -= price;
+  const ok = roll(how === "prosthetic" ? 85 : 60);
+  if (!ok) { P(L, "The treatment took " + money(price) + " and three months and did not take. The medic-nin apologised, which does not happen often.", "b"); return; }
+  x.treated = c.year;
+  Object.entries(I.fx).forEach(([k, v]) => { if (v < 0 && c.stats[k] != null) c.stats[k] = cl(c.stats[k] - Math.round(v * 0.7)); });
+  P(L, how === "prosthetic" ? "The prosthetic is good work. It is not the same, and after a year you mostly forget that it is not." : "The medic-nin worked on it for a season. Most of what was lost came back.", "g");
+}
+
+/* ---- the years themselves ---- */
+function ageStage(c) { return c.age >= 65 ? "elder" : c.age >= 50 ? "veteran" : c.age >= 35 ? "seasoned" : c.age >= 18 ? "prime" : "young"; }
+const AGE_STAGES = {
+  young: "Growing into it. Everything is still getting better.",
+  prime: "At your physical peak. It will not last, and you are not thinking about that yet.",
+  seasoned: "Still fast, and now also careful. The best years for most shinobi who live through the prime ones.",
+  veteran: "Slower in the body, quicker in the head. People listen when you speak, and younger jonin correct you and are wrong half the time.",
+  elder: "Your body has stopped keeping up with what you know. What you know has never been worth more.",
+};
+function agingTick(c, L) {
+  if (c.age >= 45) {
+    const d = c.age >= 60 ? 2 : 1;
+    ["tai", "spd", "str"].forEach((k) => { if (c.stats[k] != null && roll(c.age >= 55 ? 90 : 60)) c.stats[k] = cl(c.stats[k] - d); });
+  }
+  if (c.age >= 40 && c.age % 2 === 0 && c.stats.int != null) c.stats.int = cl(c.stats.int + 1);
+  if (c.age >= 50 && !c.rogue) c.standing = cl(c.standing + 1);
+  if (L && [35, 50, 65].includes(c.age)) P(L, AGE_STAGES[ageStage(c)], "n");
+  /* people remember the scars */
+  const vis = (c.injuries || []).filter((x) => ["eye", "scar", "arm", "leg"].includes(x.id));
+  if (L && vis.length && roll(6)) { const I = INJURIES.find((y) => y.id === pick(vis).id); if (I) P(L, I.seen, "n"); }
+  /* the wounds of a hard year do not all heal */
+  if (c.health <= 35 && c.age >= 14 && roll(Math.round((40 - c.health) / 2) + 6)) injure(c, L, "It happened this year, and the year did not give it back.");
+}
+
+/* ---- the life after ---- */
+const RETIREMENTS = [
+  { id: "teacher", n: "Teach at the Academy", d: "Children who do not know who you were. The best of them find out.", income: 40000 },
+  { id: "shop", n: "Open a shop", d: "Tea, or blades, or both. Customers come for the stories.", income: 70000 },
+  { id: "elder", n: "Sit as a clan elder", d: "A cushion near the top of the table and a vote that people court.", income: 30000, need: (c) => c.clan !== "Civilian-born" },
+  { id: "advisor", n: "Advise the tower", d: "The Kage asks for you by name when it is going badly.", income: 60000, need: (c) => c.standing >= 55 && !c.rogue },
+  { id: "farm", n: "Farm", d: "A field, a roof, and nobody knocking at night. Mostly.", income: 20000 },
+  { id: "research", n: "Research", d: "Everything you learned in the field, written down properly at last.", income: 30000 },
+];
+function retireLife(c, L, id) {
+  const R = RETIREMENTS.find((x) => x.id === id); if (!R || c.retiredLife || c.age < 35 || c.rogue) return;
+  if (R.need && !R.need(c)) return;
+  c.retiredLife = { id, since: c.year, rank: c.rankName };
+  chron(c, { cat: "villages", line: c.name, txt: c.name + " retires from active duty to " + R.n.toLowerCase().replace(/^./, (x) => x) + "." });
+  P(L, "You handed your headband in at the tower. They let you keep it. " + R.d, "e");
+}
+function retiredTick(c, L) {
+  const r = c.retiredLife; if (!r) return;
+  const R = RETIREMENTS.find((x) => x.id === r.id) || RETIREMENTS[0];
+  c.ryo += R.income;
+  if (!L) return;
+  const studs = (c.formerStudents || []).filter((s) => !s.dead && !s.rogue);
+  if (studs.length && roll(14)) { const st = pick(studs); P(L, st.name + " came to see you this year, and stayed for dinner, and did not ask for anything. That was the whole visit.", "g"); if (st.rel != null) st.rel = cl(st.rel + 5); }
+  if (roll(10) && !c.rogue) { c.standing = cl(c.standing + 2); P(L, "The village asked your advice on " + pick(["a border dispute", "a promotion", "the exam proctors", "a clan quarrel", "a missing-nin they are not sure about"]) + ". You gave it. They took half of it, which is about right.", "n"); }
+  if (r.id === "research" && roll(20)) { const o = studyableJutsu(c); if (o && o.length) learn(c, L, pick(o), "Writing it all down properly, you finally understood a technique you had only ever watched."); }
+  if (r.id === "teacher" && roll(10)) P(L, "A student in your Academy class did something you have only seen once before, and you were thirty years younger when you saw it.", "g");
+  /* one last crisis */
+  if (c.age >= 60 && !c.lastCall && !c.dilemma && roll(9)) { c.lastCall = c.year; c.dilemma = "lastcall"; }
+}
+
+/* ---- work that is not fighting ---- */
+const CAREERS = [
+  { id: "teacher", n: "Academy teacher", d: "Twenty children a year, and one of them will matter.", need: (c) => c.rank >= 3 && !c.rogue, needTxt: "Chunin, with a village" },
+  { id: "medic", n: "Medic-nin", d: "Hospital shifts between missions. Treatment costs you half.", need: (c) => (c.jutsu || []).some((j) => MOVES[j] && MOVES[j].kind === "heal") || c.stats.con >= 55, needTxt: "A healing technique, or control 55" },
+  { id: "smith", n: "Weaponsmith", d: "Steel that holds, sold to people who will need it to.", need: (c) => c.stats.str >= 45, needTxt: "Strength 45" },
+  { id: "research", n: "Researcher", d: "Techniques, taken apart and written up.", need: (c) => c.stats.int >= 55, needTxt: "Intellect 55" },
+  { id: "interrogator", n: "Interrogator", d: "Torture and Interrogation. The ones who break, and the ones who make them.", need: (c) => c.stats.int >= 50 && !c.rogue && c.rank >= 3, needTxt: "Intellect 50, chunin, with a village" },
+  { id: "intel", n: "Intelligence officer", d: "What other villages do not want known, and what your own village does not want said.", need: (c) => c.stats.int >= 50 && c.rank >= 4 && !c.rogue, needTxt: "Intellect 50, jonin" },
+  { id: "diplomat", n: "Diplomat", d: "The talks that happen so the fighting does not.", need: (c) => c.stats.cha >= 50 && !c.rogue, needTxt: "Presence 50, with a village" },
+  { id: "archivist", n: "Archivist", d: "The records nobody reads until everybody needs them.", need: (c) => c.stats.int >= 45 && !c.rogue, needTxt: "Intellect 45" },
+  { id: "admin", n: "Mission administrator", d: "The desk that decides who goes where. Everybody is nice to you.", need: (c) => c.rank >= 3 && !c.rogue, needTxt: "Chunin, with a village" },
+  { id: "journalist", n: "Journalist for the Shinobi Times", d: "What happened, printed, whether anybody likes it or not.", need: (c) => c.stats.int >= 40, needTxt: "Intellect 40" },
+];
+const CAREER_LEVELS = ["Apprentice", "Journeyman", "Master"];
+function careerLevel(k) { return (k.xp || 0) >= 10 ? 2 : (k.xp || 0) >= 4 ? 1 : 0; }
+function careerWork(c, L) {
+  const k = c.career; if (!k) return;
+  const Cd = CAREERS.find((x) => x.id === k.id); if (!Cd) return;
+  const lv0 = careerLevel(k);
+  k.xp = (k.xp || 0) + 1;
+  const lv = careerLevel(k);
+  const pay = Math.round((25000 + lv * 25000) * landPayMult(c));
+  c.ryo += pay;
+  const W = c.world || {};
+  const out = {
+    teacher: () => { c.standing = cl(c.standing + 2); c.stats.cha = cl(c.stats.cha + 1); return "A year of twenty children who all want to be Kage. You told them the truth about it, gently."; },
+    medic: () => { c.stats.con = cl(c.stats.con + 2); c.health = cl(c.health + 10); if (W.lands && W.lands[c.village] && atWarWith(c, c.village).length) W.lands[c.village].pop += 1; return "Hospital shifts. " + rr(40, 180) + " people walked out who would have been carried."; },
+    smith: () => { c.stats.str = cl(c.stats.str + 2); c.ryo += 40000; return "You made blades all year. A jonin came back to tell you one of them had held when it mattered."; },
+    research: () => { c.stats.int = cl(c.stats.int + 2); if (roll(25)) { const o = studyableJutsu(c); if (o && o.length) learn(c, L, pick(o), "You took a technique apart on paper and put it back together in your hands."); } return "A year of research. Three papers, one of which somebody has actually read."; },
+    interrogator: () => { c.stats.int = cl(c.stats.int + 2); c.darkDeeds = (c.darkDeeds || 0) + (roll(25) ? 1 : 0); if (c.bench) c.bench.fair = cl((c.bench.fair || 50) + 1); return "A year in the rooms under the tower. You learned what people will say, and when."; },
+    intel: () => { c.stats.int = cl(c.stats.int + 2); const hid = (c.chron || []).filter((x) => x.truth && !x.revealed && x.line !== c.name); if (hid.length && roll(35)) { const x = pick(hid); return "You found something in a dead drop: " + x.truth + ". The world was told " + (x.reported || "otherwise") + ". You have not decided who to tell."; } return "A year of other people's letters. Nothing you can talk about. That is the job."; },
+    diplomat: () => { c.stats.cha = cl(c.stats.cha + 2); const to = pick(((typeof ironNations === "function" ? ironNations(c) : []) || []).filter((v) => v !== c.village)); if (to && villageExists(c, c.village)) { W.calm = W.calm || {}; W.calm[pairKey(c.village, to)] = c.year + 5; return "A year of talks with " + vName2(to) + ". Nothing was signed. Nobody fought, either, which was the point."; } return "A year of talks. Nothing was signed."; },
+    archivist: () => { c.stats.int = cl(c.stats.int + 1); const lg = (c.chron || []).filter((x) => x.legend && !x.corrected); if (lg.length && roll(40)) { const x = pick(lg); x.corrected = c.year; return "You found the original record behind a legend: " + x.record + " The story still says otherwise, and always will."; } return "A year among the records. You found a treaty everybody had forgotten, and filed it where they will find it."; },
+    admin: () => { c.standing = cl(c.standing + 2); c.ryo += 20000; return "A year at the mission desk. Everybody was very nice to you, and you know exactly why."; },
+    journalist: () => { c.stats.int = cl(c.stats.int + 1); const hid = (c.chron || []).filter((x) => x.truth && !x.revealed && x.line !== c.name); if (hid.length && roll(25)) { const x = pick(hid); x.revealed = c.year; newsItem(c, "THE SHINOBI TIMES CAN REVEAL: " + cap(x.truth) + ". The account accepted at the time was false. (Reported by " + c.name + ".)", "THE COURTS", true); return "You printed it: " + x.truth + ". It is the biggest story you will ever write, and several people would like a word with you."; } newsItem(c, pick(["A long piece on the " + landOf(c.village) + "'s refugee camps, by " + c.name + ", has been read aloud in three council meetings.", c.name + " writes for the Times this month on the price of rice, and why it will not come down.", "An interview with a retired jonin, by " + c.name + ", has upset exactly the people it was meant to upset."]), "THE VILLAGES"); return "A year of deadlines. Your name was in the paper twelve times, and none of them for fighting."; },
+  }[k.id] || (() => "A year of work.");
+  P(L, Cd.n + ": " + out() + " +" + money(pay) + ".", "n");
+  if (lv > lv0) { P(L, "You are a " + CAREER_LEVELS[lv] + " " + Cd.n.toLowerCase() + " now.", "e"); if (lv === 2) addTitle(c, "Master " + Cd.n); }
+}
+
+/* ---- mysteries nobody has solved for you ---- */
+const MYSTERIES = [
+  { id: "vanish", t: "Three shinobi disappeared from the same village", truths: ["missing-nin", "kidnapping", "secret experiment", "Akatsuki recruitment", "rogue clan", "government cover-up"] },
+  { id: "well", t: "A well in a border town was poisoned", truths: ["enemy saboteurs", "a clan settling a feud", "a merchant ruining a rival", "an accident being covered up"] },
+  { id: "scroll", t: "A scroll vanished from the archive", truths: ["a missing-nin", "a council member", "the Akatsuki", "the archivist themselves"] },
+  { id: "double", t: "A Kage was seen in two places on the same night", truths: ["a transformation technique", "a twin nobody knew about", "a shadow clone and a lie", "a genjutsu on the witnesses"] },
+  { id: "patrol", t: "A patrol came back with one more person than it left with", truths: ["a spy", "a reanimated body", "a Zetsu clone", "a runaway child who followed them home"] },
+  { id: "fire", t: "The records office burned", truths: ["an accident", "someone erasing a debt", "someone erasing a crime", "a council member erasing a vote"] },
+];
+const CLUE_LINES = ["A witness who saw more than they said the first time.", "A ledger with a page cut out, and the page underneath still pressed with the writing.", "A footprint that belongs to nobody on the roster.", "A seal residue a sensor ninja can read.", "A receipt from somewhere nobody involved should have been.", "A lie that the second witness told the same way as the first, word for word."];
+function mysteryTick(c, L) {
+  if (!c.cases) c.cases = [];
+  const open = c.cases.filter((x) => !x.done);
+  const inclined = c.career && ["interrogator", "intel", "journalist"].includes(c.career.id);
+  if (open.length >= 2 || c.age < 16 || !roll(inclined ? 14 : c.anbu ? 9 : 5)) return;
+  const M = pick(MYSTERIES.filter((m) => !open.some((x) => x.kind === m.id)));
+  if (!M) return;
+  const where = pick(VILLAGES.filter((v) => villageExists(c, v.id))) || VILLAGES[0];
+  const truth = pick(M.truths);
+  const cs = { id: (c.caseNo = (c.caseNo || 0) + 1), kind: M.id, t: M.t, where: where.id, truth, options: M.truths.slice(), ruled: [], clues: [], year: c.year, done: null };
+  c.cases.push(cs);
+  if (L) P(L, "A case has landed on you: " + M.t.toLowerCase() + ", in " + where.name + ". Nobody else seems to want it.", "n");
+}
+function investigate(c, L, id) {
+  const cs = (c.cases || []).find((x) => x.id === id && !x.done); if (!cs) return;
+  const ok = roll(cl(35 + c.stats.int * 0.5 + (c.career && ["interrogator", "intel"].includes(c.career.id) ? 15 : 0), 20, 92));
+  if (!ok) { P(L, "A season on it and nothing new. Somebody is being careful.", "n"); return; }
+  const wrong = cs.options.filter((o) => o !== cs.truth && !cs.ruled.includes(o));
+  cs.clues.push(pick(CLUE_LINES));
+  if (wrong.length) { const w = pick(wrong); cs.ruled.push(w); P(L, "A clue: " + cs.clues[cs.clues.length - 1] + " It rules out " + w + ".", "g"); }
+  else P(L, "A clue: " + cs.clues[cs.clues.length - 1] + " There is only one explanation left standing.", "g");
+}
+function closeCase(c, L, id, how, guess) {
+  const cs = (c.cases || []).find((x) => x.id === id && !x.done); if (!cs) return;
+  cs.done = c.year; cs.how = how; cs.guess = guess;
+  const right = guess === cs.truth;
+  const where = vName2(cs.where);
+  if (how === "expose") {
+    if (right) {
+      c.standing = cl(c.standing + (cs.truth === "government cover-up" || /council/.test(cs.truth) ? -6 : 8));
+      chron(c, { cat: "courts", line: c.name, big: true, txt: c.name + " exposes the truth of " + cs.t.toLowerCase() + " in " + where + ": " + cs.truth + "." });
+      newsItem(c, cs.t + " in " + where + ": " + c.name + " has made public that it was " + cs.truth + ".", "THE COURTS", true);
+      if (/missing-nin|kidnapping|rogue/.test(cs.truth)) bookName(c, { name: freshName(c, null), rank: "Missing-nin", tier: "B", why: cs.t.toLowerCase(), by: c.name, pw: rr(50, 72) });
+      if (/experiment/.test(cs.truth) && c.iron && c.iron.seated && typeof buildIronCase === "function") { const k = buildIronCase(c, { kind: "lab" }); if (k) c.iron.docket.push(k); }
+      P(L, "You made it public: " + cs.truth + ". " + (/cover-up|council/.test(cs.truth) ? "The tower has not thanked you, and will not." : "People believed you, because you were right."), "e");
+    } else {
+      c.standing = cl(c.standing - 10);
+      chron(c, { cat: "courts", line: c.name, txt: c.name + " publicly blames " + guess + " for " + cs.t.toLowerCase() + " in " + where + ". It was " + cs.truth + "." , truth: "it was " + cs.truth, reported: "it was " + guess, revealed: false });
+      P(L, "You named " + guess + " in public. You were wrong. It will come out eventually, and so will your name with it.", "b");
+    }
+  } else if (how === "report") {
+    c.standing = cl(c.standing + (right ? 4 : -2));
+    P(L, right ? "You took it to ANBU quietly. They thanked you and told you it never happened." : "You took it to ANBU quietly. They looked into it and came back unconvinced.", right ? "g" : "n");
+  } else {
+    c.ryo += 90000; c.darkDeeds = (c.darkDeeds || 0) + 1;
+    chron(c, { cat: "courts", line: c.name, txt: cs.t + " in " + where + " is never solved.", truth: "it was " + cs.truth + ", and " + c.name + " buried it for money", reported: "an unsolved case", revealed: false });
+    P(L, "You buried it. Somebody paid you well to, and you will think about who, and why, for longer than the money lasts.", "b");
+  }
+}
+
+/* ---- the named people of the world, living ---- */
+const CANON_SPOUSES = { naruto: "Hinata Hyuga", hinata: "Naruto Uzumaki", sasuke: "Sakura Haruno", sakura: "Sasuke Uchiha", shikamaru: "Temari", temari: "Shikamaru Nara", minato: "Kushina Uzumaki", hashirama: "Mito Uzumaki", mito: "Hashirama Senju", ino: "Sai", choji: "Karui" };
+const LIFE_EVENTS = [
+  (n) => "took a squad of genin, and lost none of them",
+  (n) => "was wounded on the border and walked home on it",
+  (n) => "argued in council against " + pick(["a border war", "a new tax on missions", "the Root budget", "sending children to the front"]) + ", and lost the vote",
+  (n) => "trained alone in the mountains for most of a year",
+  (n) => "turned down a promotion",
+  (n) => "fell out with an old teammate over something neither will talk about",
+  (n) => "saved a village nobody had heard of and never mentioned it",
+  (n) => "was offered a place in " + pick(["the Red Rope Company", "the Paper Lantern Network", "the Fire Temple", "the Bounty Stations"]) + " and said no",
+  (n) => "wrote a technique down properly for the first time",
+  (n) => "spent a season in hospital and came out quieter",
+  (n) => "took in a war orphan",
+  (n) => "said something at a funeral that people still repeat",
+];
+function namedLivesTick(c) {
+  if (!c.lives) c.lives = {};
+  const pool = (c.roster || []).filter((id) => NAMED[id] && !isDead(c, id) && !isPlayerNamed(c, id) && !AGELESS.includes(id));
+  pool.forEach((id) => {
+    const age = livingAge(c, id);
+    /* nobody has a life story before they are old enough to be in one */
+    if (age != null && age < 13) return;
+    const L2 = c.lives[id] || (c.lives[id] = []);
+    if (L2.length >= 14) L2.shift();
+    if (age != null && CANON_SPOUSES[id] && age >= 24 && !L2.some((x) => x.k === "wed") && roll(8)) { L2.push({ y: c.year, k: "wed", t: "married " + CANON_SPOUSES[id] }); return; }
+    if (!roll(6)) return;
+    L2.push({ y: c.year, t: pick(LIFE_EVENTS)(NAMED[id].name) });
+  });
+}
+function wholeLifeTick(c, L) {
+  [agingTick, retiredTick, mysteryTick, namedLivesTick].forEach((fn) => safeTick(fn, c, L));
+}
+
 /* ---------------- NOBODY LIVES FOREVER ----------------
    Only the people with a date in DEATH_YEAR were ever mortal. Thirty-seven of
    the eighty named — Naruto, Sasuke, Kakashi, Gaara, Tsunade, Boruto, Sarada
@@ -6473,6 +6715,7 @@ function worldTick(c, L) {
   vaultTick(c, L);
   legacyTick(c, L);
   world2Tick(c, L);
+  wholeLifeTick(c, L);
   /* hunter-nin sent after names in the book */
   (c.bookHunts || []).forEach((h) => {
     if (h.done) return;
@@ -6877,6 +7120,16 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.18", n: "A Whole Life", items: [
+    "YOUR LIFE, a new screen with four parts: your body and your years, your work, what comes after the headband, and the cases nobody has solved for you",
+    "Wounds that stay. A bad enough year or a bad enough fight can leave something permanent: a lost eye, a damaged sword arm, chronic chakra damage, a scar across the face, hearing loss, a bad leg, scarred lungs. Each takes something away, and people start recognising you by it. A prosthetic or a season of medic-nin treatment can win most of it back, and some things are not treated, only carried",
+    "The years change you. Past forty-five your speed, strength and taijutsu slip a little every year; past forty your judgment keeps getting better; past fifty your name carries more weight. Young, prime, seasoned, veteran, elder, and the game tells you when you cross into each",
+    "Work that is not fighting: Academy teacher, medic-nin, weaponsmith, researcher, interrogator, intelligence officer, diplomat, archivist, mission administrator, and journalist for the Shinobi Times. It runs alongside everything else, from Apprentice to Journeyman to Master, and it talks to the rest of the world: a diplomat keeps two nations talking, an intelligence officer finds out what the world was not told, a journalist can print it, an archivist digs up the record behind a legend, a medic-nin pays half for treatment",
+    "Retirement. From thirty-five you can hand the headband in and teach, open a shop, sit as a clan elder, advise the tower, farm or write it all down. Retired is not gone: your students come to dinner, the village asks your advice, and past sixty somebody may come to the door before dawn and ask for you by name, one last time",
+    "Investigations. Three shinobi disappear from the same village; a well is poisoned; a scroll vanishes; a Kage is seen in two places on the same night; a patrol comes back with one more person than it left with; the records office burns. Each clue rules out an explanation. Expose it, report it quietly, or bury it for money, and you can act before you are sure, which is how the wrong name ends up in the paper. Expose a secret experiment while you are the Arbiter and it comes up the Iron road",
+    "The named shinobi of the world live their own lives. They take squads, get wounded, lose council votes, turn down promotions, fall out with old teammates, take in war orphans and marry the people the histories say they marry, and all of it is written into their Bingo Book files, year by year",
+    "Carried to your heirs: the organisations and their histories, and the lives of the named, so the world your grandchildren grow up in is the one your grandparents left",
+  ] },
   { v: "10.17", n: "The People Under It", items: [
     "THE LANDS. Every country has people now: how many live there, how well they are doing, what things cost, what has run out and who has fled. War empties a land and raises its prices; peace and treaties fill it back up. Your own land shows what its people do for a living, and that shifts too: more smiths and doctors in a war, more merchants in a good decade, more labourers while a burned village is rebuilt",
     "War has civilians in it. \u201cYour war has caused 18,000 civilians to flee the Land of Fire this year.\u201d They go to whichever neighbour is not also at war, live in camps, and some of them go home. The ones who do not, after enough years, found a town of their own that was not on any map before, and it goes into the Chronicle",
@@ -8841,6 +9094,13 @@ const DILEMMAS = [
       { t: "Back the one the crowd wants", e: (c, L) => crisisBack(c, L, "people") },
       { t: "Stay out of it", e: (c, L) => { P(L, "You stayed out of it. Everybody noticed that too.", "n"); } },
     ] },
+  { id: "lastcall", w: () => false, t: (c) => "One last time",
+    d: (c) => "You are " + c.age + ". A runner came to your door before dawn: " + pick(["a beast is loose on the northern road", "an S-rank missing-nin is inside the walls", "the border fort has gone silent", "the Kage is missing"]) + ", and the village is asking for you by name. They know how old you are. They asked anyway.",
+    a: [
+      { t: "Answer it", e: (c, L) => { if (roll(cl(40 + (power(c) - 60) * 1.5, 15, 90))) { c.standing = cl(c.standing + 15); addTitle(c, "Answered the last call"); chron(c, { cat: "villages", line: c.name, big: true, txt: "At " + c.age + ", " + c.name + " answers one last call and brings it home." }); P(L, "You went. You were slower than you used to be and it did not matter. They will tell this one for a long time.", "e"); } else { c.health = Math.max(1, c.health - 60); chron(c, { cat: "villages", line: c.name, txt: "At " + c.age + ", " + c.name + " answers one last call and is carried home." }); P(L, "You went, and it was too much. They carried you home. You would do it again.", "b"); } } },
+      { t: "Send your students instead", e: (c, L) => { const st = pick((c.formerStudents || []).filter((s2) => !s2.dead && !s2.rogue)); if (!st) { c.standing = cl(c.standing - 4); P(L, "There was nobody left to send. The village managed without you, and did not forget that you did not come.", "n"); return; } if (roll(70)) { st.path = (st.path || []).concat([{ y: c.year, t: "answered the call in their teacher's place" }]); P(L, st.name + " went in your place and came back. They did not say it was an honour. You could see it was.", "g"); } else { st.dead = c.year; st.path = (st.path || []).concat([{ y: c.year, t: "died answering the call in their teacher's place" }]); chron(c, { cat: "deaths", line: c.name, txt: st.name + " dies answering a call their teacher, " + c.name + ", sent them to." }); P(L, st.name + " went in your place and did not come back.", "b"); } } },
+      { t: "Stay home. It is somebody else's turn", e: (c, L) => { c.standing = cl(c.standing - 5); P(L, "You stayed home. Somebody younger went. That is how it is supposed to work, and it still felt like a door closing.", "n"); } },
+    ] },
   { id: "treatychallenge", w: () => false, t: (c) => "Somebody else's signature",
     d: (c) => { const x = c.dilemmaCtx || {}; const who = x.author === c.name ? "your" : "your " + (relOf(c, x.author) || "family's"); return vName2(x.who || "konoha") + " is challenging " + (x.name || "the treaty") + " — " + who + " treaty, drawn up at Tetsu. Its envoy says it was written for a world that no longer exists. People want to know what the family thinks."; },
     a: [
@@ -9376,6 +9636,9 @@ const NAMED_ERA_ID = {};
   const order = ["warring", "founding", "wars", "third", "interwar", "boruto"];
   Object.keys(NAMED_ERA || {}).forEach((k) => { NAMED_ERA_ID[k] = order[NAMED_ERA[k]] || null; });
 })();
+function dossierLife(c, id, out) {
+  ((c.lives || {})[id] || []).forEach((x) => out.lines.push({ k: String(x.y), v: cap(x.t) + "." }));
+}
 function dossier(c, id) {
   const n = NAMED[id];
   if (!n) return null;
@@ -9452,6 +9715,7 @@ function dossier(c, id) {
   if ((c.defeated || []).includes(n.name)) add("Between you", "You beat them and let them live.");
   if ((c.titles || []).some((t) => t === "Beat " + n.name)) add("Between you", "You killed them.");
   if ((c.reanimated || []).includes(id)) add("Between you", "You raised them, and they knew what had been done to them.");
+  dossierLife(c, id, out);
   return out;
 }
 
@@ -10551,6 +10815,8 @@ export default function ShinobiLife() {
   const [chronOpen, setChronOpen] = useState(null);
   const [chronLimit, setChronLimit] = useState(120);
   const [landsTab, setLandsTab] = useState("lands");
+  const [lifeTab, setLifeTab] = useState("body");
+  const [caseGuess, setCaseGuess] = useState({});
   const [indict, setIndict] = useState({ scope: null, vid: null, sel: null, tier: "A", charge: 0, warrant: "capture" });
   const [ruleSec, setRuleSec] = useState(null);
   const ironKeys = useRef("");
@@ -12034,6 +12300,8 @@ export default function ShinobiLife() {
       }
       if (old.vault) { nc.vault = clone(old.vault); nc.vault.alert = null; }
       nc.booked = clone(old.booked || []); nc.bookHunts = clone(old.bookHunts || []);
+      nc.lives = clone(old.lives || {});
+      if (old.orgs) { nc.orgs = clone(old.orgs); nc.orgs.forEach((o) => { if (o.leader === old.name) { o.leader = freshName(nc, null); chron(nc, { y: old.year, cat: "villages", txt: o.n + " chooses " + o.leader + " to succeed " + old.name + "." }); } }); }
       const deathId = chron(nc, { y: old.year, cat: "deaths", line: old.name, big: true, kind: "life",
         txt: old.name + ", " + (old.rankName || "shinobi") + " of " + rec.village + ", " + (old.cause || "died") + " at " + old.age + ". Known for: " + rec.knownFor + "." });
       if (rec.impact !== "Minor") echo(nc, "legend", rr(35, 60), { name: old.name, entry: deathId });
@@ -12585,6 +12853,17 @@ export default function ShinobiLife() {
           P(L, "You melted the rings down yourself. Some of them are still out there, without rings, and without anybody telling them what to do.", "e");
         } else P(L, aim === "sell" ? "The Akatsuki sells its services to the villages now, openly. They hate that they need it." : aim === "war" ? "The Akatsuki goes to war with the villages directly. No more pretending to be a business." : "The Akatsuki goes back to the nine beasts. That was always the point.", "e");
       }
+    });
+  }
+  function lifeUi(kind, a, b2) {
+    commit((c2, L) => {
+      if (kind === "treat") { spend(c2); treatInjury(c2, L, a, b2); }
+      else if (kind === "career") { const Cd = CAREERS.find((x) => x.id === a); if (!Cd || !Cd.need(c2)) return; spend(c2); c2.career = { id: a, xp: 0, since: c2.year }; P(L, "You took up work as " + (/^[aeiou]/i.test(Cd.n) ? "an " : "a ") + Cd.n.toLowerCase() + ". " + Cd.d, "e"); chron(c2, { cat: "villages", line: c2.name, txt: c2.name + " takes up work as " + Cd.n.toLowerCase() + "." }); }
+      else if (kind === "work") { spend(c2); careerWork(c2, L); }
+      else if (kind === "quit") { if (c2.career) P(L, "You put that work down. The people who relied on it found somebody else, eventually.", "n"); c2.career = null; }
+      else if (kind === "retire") { spend(c2); retireLife(c2, L, a); }
+      else if (kind === "investigate") { spend(c2); investigate(c2, L, a); }
+      else if (kind === "close") { spend(c2); closeCase(c2, L, a, b2.how, b2.guess); }
     });
   }
   function orgUi(kind, id, val) { commit((c2, L) => { if (kind !== "stance" && kind !== "join") spend(c2); else if (kind === "join") spend(c2); orgAct(c2, L, kind, id, val); }); }
@@ -14738,6 +15017,7 @@ export default function ShinobiLife() {
             : ctx.story.t + " \u2014 failed. " + b.e.name + " left you bleeding in the dirt and walked away. −" + d + " health. The report will not be kind.", "b");
           if (c.team && roll(18)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come home. You carried the body.", "b"); loss(c, L, dd.name); } }
           if (ctx.type === "mission" && ctx.story && ctx.story.stake) missionStake(c, L, ctx.story, false);
+          if (d >= 32 && roll(22)) injure(c, L, "It happened on " + ctx.story.t + ".");
           if (c.health <= 0) die(c, L, "was killed in the field");
         }
       }
@@ -17345,6 +17625,7 @@ export default function ShinobiLife() {
               { k: "chronicle", n: "Chronicle", i: "records", on: () => setModal("chronicle"), tone: T.gold, badge: (c.chron || []).length || null },
               { k: "histories", n: "Histories", i: "records", on: () => setModal("histories"), tone: T.gold },
               { k: "lands", n: c.org ? "Lands & your org" : "The Lands", i: "path", on: () => setModal("lands") },
+              { k: "life", n: "Your Life", i: "people", on: () => setModal("life"), badge: (c.cases || []).filter((x) => !x.done).length || null },
               { k: "records", n: "Records", i: "records", on: () => setModal("records") },
               { k: "special", n: "Special", i: "powers", on: () => setModal("special"), tone: T.gold },
               otsuAvailable(c) ? { k: "otsu", n: "The Celestial", i: "powers", on: () => setModal("otsu"), tone: T.epic } : null,
@@ -19205,6 +19486,123 @@ export default function ShinobiLife() {
 
       {/* its own id: this and the life-log feed were both keyed on "history",
            so opening either one rendered both of them on top of each other */}
+      {modal === "life" && (() => {
+        const G = accent;
+        const H = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">{children}</div>;
+        const inj = c.injuries || [];
+        const stage = ageStage(c);
+        const Cd = c.career && CAREERS.find((x) => x.id === c.career.id);
+        const open = (c.cases || []).filter((x) => !x.done);
+        const closed = (c.cases || []).filter((x) => x.done).slice(-6).reverse();
+        return (
+          <Modal wide title="YOUR LIFE" accent={G} onClose={() => setModal(null)}>
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {[["body", "Body & years"], ["work", "Work"], ["retire", "After the headband"], ["cases", "Cases" + (open.length ? " (" + open.length + ")" : "")]].map(([k2, n2]) => (
+                <button key={k2} onClick={() => setLifeTab(k2)} style={{ background: lifeTab === k2 ? G : T.panel2, color: lifeTab === k2 ? ON() : T.soft, border: "1px solid " + (lifeTab === k2 ? G : T.line), borderRadius: 99 }} className="px-3 py-1.5 text-xs font-semibold">{n2}</button>
+              ))}
+            </div>
+
+            {lifeTab === "body" && (
+              <>
+                <div style={{ ...glass(G) }} className="p-3.5">
+                  <div style={{ color: G, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">AGE {c.age} {"·"} {stage.toUpperCase()}</div>
+                  <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, marginTop: 4 }}>{AGE_STAGES[stage]}</div>
+                  <div style={{ color: T.dim, fontSize: 11.5, marginTop: 6 }}>
+                    {c.age >= 45 ? "Speed, strength and taijutsu are slipping a little every year. " : "Nothing is slipping yet. "}
+                    {c.age >= 40 ? "Your judgment keeps improving. " : ""}{c.age >= 50 && !c.rogue ? "Your name carries more weight every year." : ""}
+                  </div>
+                </div>
+                <H col={G}>WHAT THE YEARS HAVE LEFT ON YOU</H>
+                {!inj.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nothing permanent. Yet. A bad enough year, or a bad enough fight, leaves something behind.</div>}
+                {inj.map((x) => {
+                  const I = INJURIES.find((y) => y.id === x.id); if (!I) return null;
+                  const cut = c.career && c.career.id === "medic" ? 0.5 : 1;
+                  return (
+                    <div key={x.id} style={{ background: T.panel2, border: "1px solid " + (x.treated ? T.line : T.blood + "55"), borderRadius: 10 }} className="p-3 mb-2">
+                      <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{I.n}</span><span style={{ color: T.dim, fontSize: 11 }}>since {x.y}{x.treated ? " · treated " + x.treated : ""}</span></div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{I.seen}</div>
+                      <div style={{ color: T.dim, fontSize: 11 }}>{Object.entries(I.fx).map(([k2, v2]) => (v2 > 0 ? "+" : "") + v2 + " " + k2).join(", ")}</div>
+                      {!x.treated && I.heal && <Row label={I.heal === "prosthetic" ? "A prosthetic" : "Medic-nin treatment"} sub={(I.heal === "prosthetic" ? "Good work, and mostly reliable. " : "A season of treatment. It does not always take. ") + money(Math.round((I.heal === "prosthetic" ? 280000 : 180000) * cut)) + (cut < 1 ? " (half, because you work at the hospital)" : "") + "."} right="Treat" onClick={() => lifeUi("treat", x.id, I.heal)} disabled={c.actions < 1} />}
+                      {!I.heal && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5 }}>Some things are not treated. They are carried.</div>}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {lifeTab === "work" && (
+              <>
+                <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">Not every shinobi fights for a living, and none of them only fights. A trade runs alongside everything else, and it outlasts the knees.</p>
+                {Cd && (
+                  <div style={{ ...glass(G) }} className="p-3.5 mb-3">
+                    <div style={{ color: G, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">YOUR WORK</div>
+                    <div style={{ fontFamily: SERIF, fontSize: 17 }} className="font-bold">{CAREER_LEVELS[careerLevel(c.career)]} {Cd.n.toLowerCase()}</div>
+                    <div style={{ color: T.dim, fontSize: 11.5 }}>Since {c.career.since} {"·"} {c.career.xp || 0} years at it {"·"} {careerLevel(c.career) < 2 ? "next level at " + (careerLevel(c.career) === 0 ? 4 : 10) + " years" : "a master of it"}</div>
+                    <Row label={"Work as " + (/^[aeiou]/i.test(Cd.n) ? "an " : "a ") + Cd.n.toLowerCase()} sub={Cd.d} right="Work" onClick={() => lifeUi("work")} disabled={c.actions < 1} tone={G} />
+                    <Row label="Put it down" sub="Walk away from the work." right="Quit" onClick={() => lifeUi("quit")} />
+                  </div>
+                )}
+                {!Cd && CAREERS.map((x) => (
+                  <Row key={x.id} label={x.n} sub={x.d + (x.need(c) ? "" : " · needs: " + x.needTxt)} right={x.need(c) ? "Take it up" : "Locked"} onClick={() => lifeUi("career", x.id)} disabled={!x.need(c) || c.actions < 1} />
+                ))}
+              </>
+            )}
+
+            {lifeTab === "retire" && (
+              <>
+                {c.retiredLife ? (
+                  <div style={{ ...glass(G) }} className="p-3.5">
+                    <div style={{ color: G, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">RETIRED SINCE {c.retiredLife.since}</div>
+                    <div style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{(RETIREMENTS.find((x) => x.id === c.retiredLife.id) || {}).n}</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 4 }}>{(RETIREMENTS.find((x) => x.id === c.retiredLife.id) || {}).d} Retired is not gone. Your students visit, the village asks your advice, and one day somebody may come to the door before dawn and ask for you by name.</div>
+                  </div>
+                ) : c.age < 35 ? (
+                  <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">You are {c.age}. Nobody retires at {c.age}. Come back at thirty-five, if you are still alive.</div>
+                ) : c.rogue ? (
+                  <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Missing-nin do not retire. They stop being hunted, or they do not.</div>
+                ) : (
+                  <>
+                    <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">You can hand the headband in. The world does not stop needing you, but it stops expecting you, and that is a different life.</p>
+                    {RETIREMENTS.map((r) => <Row key={r.id} label={r.n} sub={r.d + " About " + money(r.income) + " a year." + (r.need && !r.need(c) ? " · not open to you" : "")} right="Retire" onClick={() => lifeUi("retire", r.id)} disabled={(r.need && !r.need(c)) || c.actions < 1} />)}
+                  </>
+                )}
+              </>
+            )}
+
+            {lifeTab === "cases" && (
+              <>
+                <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">Things nobody has solved and nobody has handed to you solved. Each clue rules out an explanation. You can act before you are sure. That is allowed. It is also how people get the wrong name printed.</p>
+                {!open.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">No open cases. They find you more often if you work in interrogation, intelligence, the Times or ANBU.</div>}
+                {open.map((cs) => {
+                  const left = cs.options.filter((o) => !cs.ruled.includes(o));
+                  const g = caseGuess[cs.id] || (left.length === 1 ? left[0] : null);
+                  return (
+                    <div key={cs.id} style={{ background: T.panel2, border: "1px solid " + G + "55", borderRadius: 10 }} className="p-3 mb-2">
+                      <div style={{ fontFamily: SERIF, fontSize: 14.5 }} className="font-bold">{cs.t}</div>
+                      <div style={{ color: T.dim, fontSize: 11 }}>{vName2(cs.where)} {"·"} opened {cs.year} {"·"} {cs.clues.length} clue{cs.clues.length === 1 ? "" : "s"}</div>
+                      {cs.clues.map((cl2, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{"—"} {cl2}</div>)}
+                      <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".16em" }} className="font-bold mt-2 mb-1">STILL POSSIBLE</div>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {cs.options.map((o) => {
+                          const out = cs.ruled.includes(o);
+                          return <button key={o} disabled={out} onClick={() => setCaseGuess((m) => ({ ...m, [cs.id]: o }))} style={{ background: g === o ? G : T.s0, color: g === o ? ON() : out ? T.dim : T.soft, border: "1px solid " + T.line, borderRadius: 99, textDecoration: out ? "line-through" : "none", opacity: out ? .5 : 1 }} className="px-2.5 py-1 text-xs">{o}</button>;
+                        })}
+                      </div>
+                      <Row label="Keep digging" sub="A season on it. Might turn up a clue; might not." right="Investigate" onClick={() => lifeUi("investigate", cs.id)} disabled={c.actions < 1} tone={G} />
+                      <Row label={"Expose it" + (g ? ": " + g : "")} sub={g ? "Make it public. If you are right, everybody knows. If you are wrong, everybody knows that too." : "Pick an explanation first."} right="Expose" onClick={() => lifeUi("close", cs.id, { how: "expose", guess: g })} disabled={!g || c.actions < 1} />
+                      <Row label={"Report it quietly" + (g ? ": " + g : "")} sub="Take it to ANBU and let them deal with it." right="Report" onClick={() => lifeUi("close", cs.id, { how: "report", guess: g })} disabled={!g || c.actions < 1} />
+                      <Row label="Bury it" sub="Somebody will pay you to. You will know it was wrong." right="Bury" onClick={() => lifeUi("close", cs.id, { how: "bury", guess: g })} disabled={c.actions < 1} tone={T.blood} />
+                    </div>
+                  );
+                })}
+                {closed.length > 0 && <H>CLOSED</H>}
+                {closed.map((cs) => <div key={cs.id} style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>{cs.done}: {cs.t}, {vName2(cs.where)} {"—"} {cs.how === "bury" ? "buried" : cs.how === "report" ? "reported quietly" : "exposed"}{cs.guess && cs.how !== "bury" ? " as " + cs.guess : ""}.</div>)}
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
       {modal === "lands" && (() => {
         const W = c.world || {};
         const lands = W.lands || {};
