@@ -4661,7 +4661,8 @@ function missionStake(c, L, story, win) {
 }
 
 /* ---- the one yearly pass that makes all of it talk to each other ---- */
-function legacyTick(c, L) {
+function legacyTick(c, L) { safeTick(legacyTickInner, c, L); }
+function legacyTickInner(c, L) {
   chronSeed(c);
   rivalryTick(c, L);
   /* notice what changed in the world this year that nobody filed */
@@ -4692,6 +4693,415 @@ function legacyTick(c, L) {
   studentLifeTick(c, L);
   legacyEvents(c, L);
   deedsTick(c, L);
+}
+
+
+/* ============================ THE LANDS ============================
+   Every war in this game used to be fought on an empty map. There are people
+   under it now: how many live in each country, how well they are doing, what
+   things cost, what has run out, who has fled and where they went. None of it
+   is a strategy layer. It is the part of the world that pays for everything
+   the shinobi do, and it shows up in the prices, the paper and the Chronicle. */
+const LAND_POP = { konoha: 420, suna: 190, kiri: 260, kumo: 300, iwa: 280, uzu: 60, ame: 110, taki: 70, kusa: 90, yu: 80, oto: 50 };
+const SHORTAGES = ["rice", "steel", "medicine", "salt", "paper", "lamp oil", "horses"];
+const SETTLEMENT_NAMES = ["New Hope", "Second Bridge", "the Ash Terraces", "Low Ford", "Willow Camp", "the Lantern Quarter", "Stonefield", "Nameless", "Kaede Hollow", "the Returners' Town", "Shiori Crossing", "the Well of Nine"];
+const landOf = (vid) => ((VILLAGES.find((v) => v.id === vid) || {}).land || "the border country");
+function landsInit(c) {
+  const out = {};
+  VILLAGES.forEach((v) => { out[v.id] = { pop: LAND_POP[v.id] || 80, prosper: rr(45, 62), price: 100, shortage: null, rebuild: 0, displaced: 0, peak: LAND_POP[v.id] || 80 }; });
+  return out;
+}
+const landAt = (c, vid) => (c.world && c.world.lands && c.world.lands[vid]) || null;
+/* what the tower pays for a mission tracks what bread costs in the market */
+function landPayMult(c) {
+  const Ld = landAt(c, c.village);
+  return Ld ? Math.max(0.85, Math.min(1.6, Ld.price / 100)) : 1;
+}
+const atWarWith = (c, vid) => ((c.world && c.world.wars) || []).filter((w) => w.years > 0 && (w.a === vid || w.b === vid)).map((w) => (w.a === vid ? w.b : w.a));
+const CIVIL_LINES = {
+  war: ["A baker on the east road has started selling bread by weight instead of by the loaf.", "The schools in the border towns have closed. The teachers went north with the children.", "Every smith in the country is making arrowheads, and nobody can get a hinge mended.", "A woman at the gate asked you whether her son's unit was the one on the ridge. You did not know. She thanked you anyway.", "There are more funerals than priests this year. Some families have started doing their own."],
+  shortage: ["There has been no {s} in the market for a month. People trade for it in doorways.", "The price of {s} doubled again. A merchant was beaten for hoarding it, and it turned out he had not been."],
+  good: ["A teahouse has opened on the corner where the old one burned down. The owner is the old owner's daughter.", "The harvest came in early and the festival ran three days instead of one.", "A merchant caravan from three countries away arrived in the market square, and half the village went just to look.", "The road crews finished the new bridge. Children have been daring each other to walk the railings."],
+  rebuild: ["They are still rebuilding. Every morning there is the sound of saws before there is the sound of birds.", "A mason told you the new walls are better than the old ones. He did not look like he believed it."],
+};
+function landsTick(c, L) {
+  const W = c.world || (c.world = {});
+  if (!W.lands) W.lands = landsInit(c);
+  if (!W.refugees) W.refugees = [];
+  if (!W.settlements) W.settlements = [];
+  const live = VILLAGES.filter((v) => villageExists(c, v.id) && !(c.razed || []).includes(v.name));
+  const medics = orgStr(c, "medics"), monks = orgStr(c, "monks");
+  VILLAGES.forEach((v) => {
+    const Ld = W.lands[v.id] || (W.lands[v.id] = { pop: LAND_POP[v.id] || 80, prosper: 50, price: 100, shortage: null, rebuild: 0, displaced: 0, peak: LAND_POP[v.id] || 80 });
+    if (!villageExists(c, v.id)) return;
+    if ((c.razed || []).includes(v.name) && !Ld.burned) {
+      Ld.burned = c.year; const lost = Math.round(Ld.pop * 0.4); Ld.pop -= lost; Ld.prosper = 15; Ld.rebuild = rr(8, 14); Ld.price = 160;
+      W.refugees.push({ from: v.id, to: pickRefuge(c, v.id, live), n: lost, year: c.year });
+    }
+    const foes = atWarWith(c, v.id).concat(c.war && c.village === v.id ? ["you"] : []);
+    if (foes.length) {
+      Ld.prosper = cl(Ld.prosper - rr(3, 7));
+      Ld.price = Math.min(260, Ld.price + rr(4, 10));
+      const flee = Math.round(Ld.pop * rr(2, 5) / 100 * (medics >= 60 ? 0.7 : 1));
+      if (flee > 0) {
+        Ld.pop -= flee; Ld.displaced += flee;
+        const to = pickRefuge(c, v.id, live);
+        const ex = W.refugees.find((r) => r.from === v.id && r.to === to && !r.settled && c.year - r.year < 3);
+        if (ex) ex.n += flee; else W.refugees.push({ from: v.id, to, n: flee, year: c.year });
+        if (v.id === c.village && c.war && L) P(L, "Your war has caused " + (flee * 1000).toLocaleString() + " civilians to flee the " + v.land + " this year" + (to ? ", most of them into the " + landOf(to) : "") + ".", "b");
+      }
+      if (!Ld.shortage && roll(30)) {
+        Ld.shortage = pick(SHORTAGES);
+        chron(c, { cat: "villages", txt: "A shortage of " + Ld.shortage + " in the " + v.land + ", brought on by the war." });
+        if (v.id === c.village) newsItem(c, "There is no " + Ld.shortage + " to be had in the " + v.land + ". The tower has asked families not to hoard.", "THE VILLAGES");
+      }
+    } else {
+      Ld.prosper = cl(Ld.prosper + (Ld.prosper < 70 ? rr(1, 3) : 0));
+      Ld.price = Math.max(90, Ld.price - rr(2, 5));
+      if (Ld.shortage && roll(40)) { if (v.id === c.village && L) P(L, "There is " + Ld.shortage + " in the market again. People queued anyway, out of habit.", "n"); Ld.shortage = null; }
+      if (Ld.pop < Ld.peak) Ld.pop += Math.max(1, Math.round(Ld.pop * 0.01));
+    }
+    if (Ld.rebuild > 0) { Ld.rebuild -= 1; Ld.prosper = cl(Ld.prosper + 2); if (Ld.rebuild === 0) chron(c, { cat: "villages", txt: "The rebuilding of " + v.name + " is finished, " + (c.year - (Ld.burned || c.year)) + " years after it burned." }); }
+    const tr = ((c.iron && c.iron.treaties) || []).filter((t) => !t.broken && (t.a === v.id || t.b === v.id)).length;
+    if (tr) Ld.prosper = cl(Ld.prosper + tr);
+    if (W.stability) W.stability[v.id] = cl((W.stability[v.id] || 50) + (Ld.prosper >= 65 ? 1 : Ld.prosper <= 25 ? -1 : 0));
+    if (v.id === c.village && c.vil && c.vil.prosperity != null) c.vil.prosperity = cl(c.vil.prosperity + (Ld.prosper > c.vil.prosperity ? 1 : Ld.prosper < c.vil.prosperity ? -1 : 0));
+  });
+  /* the ones who never went home */
+  W.refugees.forEach((r) => {
+    if (r.settled || c.year - r.year < (r.wait || (r.wait = rr(8, 14)))) return;
+    r.settled = c.year;
+    const to = r.to && W.lands[r.to] ? r.to : null;
+    const back = Math.round(r.n * (monks >= 60 ? 0.5 : 0.3));
+    if (W.lands[r.from]) { W.lands[r.from].pop += back; W.lands[r.from].displaced = Math.max(0, W.lands[r.from].displaced - r.n); }
+    const stay = r.n - back;
+    if (stay < 3 || !to) return;
+    const nm = pick(SETTLEMENT_NAMES.filter((x) => !W.settlements.some((s) => s.name === x))) || "the new town";
+    W.settlements.push({ name: nm, land: landOf(to), in: to, from: r.from, pop: stay, founded: c.year });
+    W.lands[to].pop += stay;
+    chron(c, { cat: "villages", big: true, txt: "The refugee population from the " + landOf(r.from) + " has established a new settlement, " + nm + ", in the " + landOf(to) + ". " + (stay * 1000).toLocaleString() + " people live there." });
+    newsItem(c, (stay * 1000).toLocaleString() + " people who fled the " + landOf(r.from) + " " + (c.year - r.year) + " years ago have founded a town of their own in the " + landOf(to) + ". They are calling it " + nm + ".", "THE VILLAGES", true);
+  });
+  W.refugees = W.refugees.filter((r) => !r.settled || c.year - r.settled < 20);
+  /* ordinary life, where you live */
+  const home = W.lands[c.village];
+  if (home && L && c.age >= 8 && roll(16)) {
+    const pool = home.rebuild > 0 ? CIVIL_LINES.rebuild : home.shortage ? CIVIL_LINES.shortage : atWarWith(c, c.village).length || c.war ? CIVIL_LINES.war : home.prosper >= 60 ? CIVIL_LINES.good : null;
+    if (pool) P(L, pick(pool).replace("{s}", home.shortage || "anything"), "n");
+  }
+}
+function pickRefuge(c, from, live) {
+  const ok = (live || []).filter((v) => v.id !== from && !atWarWith(c, v.id).length);
+  if (!ok.length) return null;
+  return ok.sort((a, b) => ((landAt(c, b.id) || {}).prosper || 50) - ((landAt(c, a.id) || {}).prosper || 50))[0].id;
+}
+/* what the people of a land do for a living, which shifts with the times */
+function landTrades(Ld, war) {
+  const base = { Farmers: 46, Merchants: 12, Craftsmen: 14, Smiths: 4, Doctors: 2, Teachers: 3, Couriers: 3, "Tavern keepers": 3, Labourers: 13 };
+  if (war) { base.Smiths += 6; base.Doctors += 2; base.Merchants -= 5; base.Farmers -= 3; }
+  if (Ld.prosper >= 65) { base.Merchants += 5; base.Teachers += 2; base.Labourers -= 5; }
+  if (Ld.rebuild > 0) { base.Labourers += 8; base.Craftsmen += 4; base.Merchants -= 4; }
+  const tot = Object.values(base).reduce((a, b) => a + b, 0);
+  return Object.entries(base).map(([k, v]) => [k, Math.round((v / tot) * 100)]);
+}
+
+/* ============================ ORGANISATIONS ============================
+   The world is not villages and missing-nin. There are samurai who owe
+   nobody, merchants who own the roads, monks who take in anybody, companies
+   that fight for whoever pays, syndicates that own the fences, seal-makers,
+   spies, and a cell of former ANBU that officially does not exist. They have
+   leaders, members, rivals and histories, and you can belong to one. */
+const ORG_DEFS = [
+  { id: "samurai", n: "The Samurai of the Land of Iron", kind: "Samurai", leader: "Mifune", head: "General of the Samurai", str: 80, rival: "mercs",
+    d: "Neutral, disciplined, and the only army on the continent that has never been hired.", req: (c) => !c.rogue && c.stats.tai >= 40, reqTxt: "No village grudges and a taijutsu of 40",
+    work: "Stand a watch on the Iron road", stances: [["neutral", "Strict neutrality"], ["escort", "Escort envoys of all five"]] },
+  { id: "guild", n: "The Wave Country Shipping Guild", kind: "Merchant guild", head: "Master of the Guild", str: 60, rival: "syndicate",
+    d: "Owns half the ships on the eastern coast and most of the harbour masters.", req: (c) => c.ryo >= 50000, reqTxt: "A stake of 50,000 ryo",
+    work: "Run a cargo", stances: [["fair", "Fair prices"], ["gouge", "Charge what the war will bear"]] },
+  { id: "stations", n: "The Bounty Stations", kind: "Hunter network", head: "Keeper of the Ledger", str: 55, rival: "syndicate",
+    d: "Counting houses in every border town that pay for heads and ask no questions about the rest of the body.", req: () => true, reqTxt: "Anybody who can bring in a head",
+    work: "Collect on a bounty", stances: [["open", "Pay anyone"], ["villages", "Only pay on village listings"]] },
+  { id: "medics", n: "The Order of the Quiet Hand", kind: "Medical order", head: "First Hand", str: 45, rival: null,
+    d: "Healers who cross every front and treat whoever is bleeding. Every village has shot at them and every village has used them.", req: (c) => c.stats.con >= 35 || (c.jutsu || []).some((j) => /Mystical Palm|Healing|Medical/.test(j)), reqTxt: "Healing technique or a steady hand (control 35)",
+    work: "Tend a war zone", stances: [["all", "Treat every side"], ["civilians", "Civilians first"]] },
+  { id: "monks", n: "The Fire Temple", kind: "Monastery", head: "Head Monk", str: 50, rival: null,
+    d: "Warrior monks who guard a temple, a forest and the right of anybody fleeing a war to sleep inside their walls.", req: (c) => !c.akatsuki, reqTxt: "Anybody who is not in the Akatsuki",
+    work: "Shelter refugees", stances: [["open", "Open gates"], ["closed", "Guard the temple only"]] },
+  { id: "mercs", n: "The Red Rope Company", kind: "Mercenaries", head: "Captain of the Company", str: 50, rival: "samurai",
+    d: "Two hundred blades that fight for whoever pays, and are famous for staying bought.", req: (c) => power(c) >= 40, reqTxt: "Power 40",
+    work: "Take a contract", stances: [["highest", "Fight for the highest bidder"], ["weaker", "Fight for the weaker side"]] },
+  { id: "syndicate", n: "The Tanzaku Syndicate", kind: "Criminal syndicate", head: "Oyabun", str: 55, rival: "guild",
+    d: "Gambling houses, fences, smugglers and the bridge tolls on four rivers. Not in the Bingo Book, because nobody can prove who runs it.", req: (c) => c.rogue || (c.infamy || 0) >= 20 || (c.darkDeeds || 0) >= 2, reqTxt: "A reputation (infamy 20) or no village",
+    work: "Run a racket", stances: [["expand", "Expand into a new country"], ["low", "Lie low"]] },
+  { id: "seals", n: "The Uzushio Seal Guild", kind: "Seal masters", head: "Grand Sealer", str: 35, rival: null,
+    d: "What is left of the Uzumaki craft, sold by the scroll to anybody who can pay for it and read it.", req: (c) => c.stats.int >= 45, reqTxt: "Intellect 45",
+    work: "Draft seals for sale", stances: [["sell", "Sell to anyone"], ["guard", "Sell only to villages"]] },
+  { id: "network", n: "The Paper Lantern Network", kind: "Intelligence network", head: "The Lamplighter", str: 45, rival: "root",
+    d: "Informants in every inn, teahouse and bathhouse on the continent, and a price list for what they hear.", req: (c) => c.stats.int >= 40 || c.stats.cha >= 50, reqTxt: "Intellect 40 or presence 50",
+    work: "Gather secrets", stances: [["sell", "Sell to the highest bidder"], ["court", "Sell only to the Iron Scales"]] },
+  { id: "root", n: "Root", kind: "Former ANBU cell", leader: "Danzo Shimura", leaderId: "danzo", head: "Head of Root", str: 60, rival: "network", era: ["third", "naruto"], home: "konoha",
+    d: "A division of ANBU that the Hokage officially disbanded. It did not notice.", req: (c) => !!c.anbu && c.village === "konoha", reqTxt: "ANBU of the Leaf",
+    work: "Take an order that does not exist", stances: [["loyal", "Serve the village"], ["own", "Serve Root"]] },
+];
+const ORG_RANKS = ["Member", "Trusted", "Lieutenant"];
+const orgDef = (id) => ORG_DEFS.find((o) => o.id === id);
+const orgStr = (c, id) => { const o = c.orgs && c.orgs.find((x) => x.id === id); return o && !o.gone ? o.str : 0; };
+function orgsInit(c) {
+  return ORG_DEFS.filter((d) => !d.era || d.era.includes(c.era)).map((d) => ({
+    id: d.id, n: d.n, kind: d.kind, leader: d.leaderId && NAMED[d.leaderId] && !isDead(c, d.leaderId) ? NAMED[d.leaderId].name : d.leader || freshName(c, null), leaderId: d.leaderId || null,
+    members: rr(40, 400), str: d.str + rr(-8, 8), wealth: rr(30, 70), founded: c.year - rr(20, 140), stance: d.stances[0][0], rival: d.rival, gone: null, hist: [],
+  }));
+}
+function orgTick(c, L) {
+  if (!c.orgs) c.orgs = orgsInit(c);
+  ORG_DEFS.forEach((d) => { if (d.era && d.era.includes(c.era) && !c.orgs.some((o) => o.id === d.id)) c.orgs.push({ id: d.id, n: d.n, kind: d.kind, leader: d.leaderId && NAMED[d.leaderId] && !isDead(c, d.leaderId) ? NAMED[d.leaderId].name : d.leader || freshName(c, null), leaderId: d.leaderId || null, members: rr(40, 200), str: d.str, wealth: 50, founded: c.year, stance: d.stances[0][0], rival: d.rival, gone: null, hist: [] }); });
+  const W = c.world || {};
+  const wars = (W.wars || []).filter((w) => w.years > 0);
+  c.orgs.forEach((o) => {
+    if (o.gone) return;
+    const d = orgDef(o.id) || { head: "Leader", str: 45, stances: [] };
+    const note = (t, big) => { o.hist = (o.hist || []).concat([{ y: c.year, t }]).slice(-12); chron(c, { cat: "villages", big: !!big, txt: t }); };
+    const base = (d && d.str) || 45;
+    o.str = cl(o.str + (wars.length && ["mercs", "medics", "monks", "stations"].includes(o.id) ? 1 : 0) + (!wars.length && o.id === "guild" ? 1 : 0) + rr(-2, 2)
+      + (o.str > base + 15 ? -3 : o.str < base - 15 ? 3 : 0), 5, 95);
+    o.members = Math.max(12, Math.min(900, Math.round(o.members * (1 + (o.str - base) / 900) + rr(-3, 3))));
+    o.wealth = cl(o.wealth + rr(-3, 4));
+    /* a leader with a name in the histories goes when the histories say; anybody else, when their luck does */
+    if (o.leaderId && isDead(c, o.leaderId)) {
+      if (o.id === "root") { o.gone = c.year; note("Root dies with " + o.leader + ". What is left of it is folded quietly back into ANBU.", true); if (c.org && c.org.id === "root") { c.org = null; if (L) P(L, "Root is gone. Nobody told you in words; your orders simply stopped arriving.", "n"); } return; }
+      o.leaderId = null; const old = o.leader; o.leader = freshName(c, null); note(o.n + " has a new " + d.head + ", " + o.leader + ", after the death of " + old + ".");
+    } else if (!o.leaderId && o.leader !== c.name && roll(4)) {
+      const old = o.leader; o.leader = freshName(c, null);
+      note(pick([old + ", " + d.head + " of " + o.n + ", has died. " + o.leader + " takes their place.", old + " has been pushed out of " + o.n + ". " + o.leader + " runs it now.", old + " has retired from " + o.n + " to a house by the sea. " + o.leader + " succeeds them."]));
+    }
+    /* rivals */
+    const rv = o.rival && c.orgs.find((x) => x.id === o.rival && !x.gone);
+    if (rv && roll(7)) {
+      const win = o.str + rr(-15, 15) >= rv.str ? o : rv; const lose = win === o ? rv : o;
+      win.str = cl(win.str + 4); lose.str = cl(lose.str - 6);
+      note(win.n + " and " + lose.n + " clash " + pick(["over a harbour", "over a road", "in a gambling house in Tanzaku", "over who gets paid for the same head", "over a courier and what he was carrying"]) + ". " + win.n + " comes out ahead.");
+      if (c.org && (c.org.id === lose.id) && L) P(L, lose.n + " took a beating from " + win.n + " this year. The mood inside is not good.", "b");
+    }
+    /* what each of them does to the world */
+    if (o.id === "mercs" && wars.length && roll(40)) {
+      const w = pick(wars); const side = o.stance === "weaker" ? ((W.stability || {})[w.a] || 50) < ((W.stability || {})[w.b] || 50) ? w.a : w.b : roll(50) ? w.a : w.b;
+      if (w.line == null) w.line = 50; w.line = cl(w.line + (side === w.a ? 6 : -6));
+      note(o.n + " signs on with " + vName2(side) + " in its war with " + vName2(side === w.a ? w.b : w.a) + ".");
+    }
+    if (o.id === "guild" && o.stance === "gouge" && wars.length && W.lands) Object.values(W.lands).forEach((Ld) => { Ld.price = Math.min(260, Ld.price + 2); });
+    if (o.id === "syndicate" && o.stance === "expand" && roll(25)) { const v = pick(VILLAGES.filter((x) => villageExists(c, x.id))); if (v && W.stability) { W.stability[v.id] = cl((W.stability[v.id] || 50) - rr(3, 7)); note(o.n + " has moved into the " + v.land + ". The gambling houses opened the same week as the new tax office."); } }
+    if (o.id === "network" && roll(10)) note(o.n + " is said to have sold " + pick(["a Kage's travel schedule", "the minutes of a council meeting", "the name of an ANBU captain", "a map of a border fort"]) + ". Nobody will say to whom.");
+  });
+}
+/* a fugitive with enough friends stops being a fugitive and starts being an organisation */
+const FUGITIVE_ORGS = ["The Ashen Circle", "The Last Lantern", "The Hollow Hand", "The Children of the Burned Village", "The Unlisted", "The Grey Rain"];
+function foundOrg(c, e) {
+  const n = pick(FUGITIVE_ORGS.filter((x) => !(c.orgs || []).some((o) => o.n === x)));
+  if (!n) return null;
+  const o = { id: "f" + ((c.orgs || []).length + 1) + "_" + c.year, n, kind: "Fugitive band", leader: e.name, leaderId: e.named || null, members: (e.allies || 2) * rr(3, 8), str: cl(30 + (e.pw || 60) / 3), wealth: 25, founded: c.year, stance: "hide", rival: null, gone: null, hist: [], custom: true };
+  c.orgs = (c.orgs || []).concat([o]);
+  e.org = o.id;
+  chron(c, { cat: "outlaws", big: true, txt: e.name + ", listed in the Bingo Book, founds " + n + " with " + e.allies + " others who have nowhere else to go." });
+  newsItem(c, e.name + " has not been caught. They have, instead, founded something: " + n + ". It has members now, and a flag.", "BINGO BOOK", true);
+  return o;
+}
+function orgAct(c, L, kind, arg, val) {
+  const o = (c.orgs || []).find((x) => x.id === (arg || (c.org && c.org.id)) && !x.gone);
+  const d = o && (orgDef(o.id) || { head: "Leader", stances: [["hide", "Stay hidden"]], work: "Help", req: () => false });
+  if (!o) return;
+  if (kind === "join") {
+    if (c.org) { P(L, "You already belong to " + ((c.orgs.find((x) => x.id === c.org.id) || {}).n || "somebody") + ".", "n"); return; }
+    if (!d.req(c)) { P(L, o.n + " looked you over and said no. They were polite about it.", "b"); return; }
+    if (o.id === "guild") c.ryo = Math.max(0, c.ryo - 50000);
+    c.org = { id: o.id, rank: 0, rep: 5, since: c.year };
+    o.members += 1;
+    P(L, "You are a member of " + o.n + ". " + o.leader + ", the " + d.head + ", shook your hand and forgot your name within the hour.", "e");
+    chron(c, { cat: "villages", line: c.name, txt: c.name + " joins " + o.n + "." });
+    return;
+  }
+  if (!c.org || c.org.id !== o.id) return;
+  const M = c.org;
+  if (kind === "work") {
+    M.rep = (M.rep || 0) + rr(6, 12); o.str = cl(o.str + 1);
+    const W = c.world || {};
+    const out = {
+      samurai: () => { c.stats.tai = cl(c.stats.tai + 2); c.ryo += rr(20000, 45000); return "A month on the Iron road in grey, checking passes and turning back two squads who thought a neutral road meant an empty one."; },
+      guild: () => { const g = Math.round(rr(40000, 120000) * landPayMult(c)); c.ryo += g; return "A cargo of " + pick(["lacquer", "salt fish", "iron nails", "silk", "medicine"]) + " up the coast and back. +" + money(g) + "."; },
+      stations: () => { const g = rr(60000, 160000); c.ryo += g; c.kills += 1; c.infamy = cl((c.infamy || 0) + 2); return "You brought in a head. The keeper weighed it, checked the page, and paid you " + money(g) + " without looking up."; },
+      medics: () => { c.stats.con = cl(c.stats.con + 2); c.standing = cl(c.standing + 3); const war = (W.wars || []).find((w) => w.years > 0); if (war && W.lands && W.lands[war.a]) W.lands[war.a].pop += 2; return war ? "A season behind the lines between " + vName2(war.a) + " and " + vName2(war.b) + ", treating whoever was carried in. You stopped asking which side." : "A season in a fever town with no war to blame it on. It was worse, somehow."; },
+      monks: () => { let n = 0; if (W.refugees) W.refugees.filter((r) => !r.settled).slice(0, 2).forEach((r) => { const k = Math.min(r.n, rr(1, 4)); r.n -= k; n += k; }); c.stats.cha = cl(c.stats.cha + 2); return n ? "You opened the temple gates and kept them open. " + (n * 1000).toLocaleString() + " people slept inside the walls this winter who would have slept on the road." : "There was nobody at the gates this year. You swept the courtyard and trained until your hands bled."; },
+      mercs: () => { const g = rr(80000, 220000); c.ryo += g; c.kills += rr(1, 4); c.health = cl(c.health - rr(4, 14)); return "A contract, a fight, a purse of " + money(g) + ". Nobody asked you whose side it was."; },
+      syndicate: () => { const g = rr(90000, 260000); c.ryo += g; c.infamy = cl((c.infamy || 0) + 4); c.darkDeeds = (c.darkDeeds || 0) + (roll(30) ? 1 : 0); return "A racket on a river toll. " + money(g) + " came in, and a man who did not pay does not walk right any more."; },
+      seals: () => { c.stats.int = cl(c.stats.int + 2); c.ryo += rr(30000, 70000); if (roll(30)) { const mv = pick(["Five Elements Seal", "Barrier Seal", "Chakra Suppression Seal", "Sealing Scroll"].filter((m) => MOVES[m] && !c.jutsu.includes(m))); if (mv) learn(c, L, mv, "You drafted it a hundred times for customers and the hundred-and-first was for you."); } return "A season drafting seals by lamplight. Your hand is steadier than it has ever been."; },
+      network: () => { c.stats.int = cl(c.stats.int + 2); c.ryo += rr(40000, 90000); if (c.iron && c.iron.seated) { c.iron.legit = cl((c.iron.legit || 50) + 1); } return "You spent a season in bathhouses and teahouses, listening. You know three things now that three Kage would pay to keep quiet."; },
+      root: () => { c.stats.spd = cl(c.stats.spd + 2); c.kills += 1; c.darkDeeds = (c.darkDeeds || 0) + 1; return "An order that does not exist, carried out by somebody who was not there. You burned the scroll afterwards, as you were told to."; },
+    }[o.id] || (() => "You helped. Nobody wrote it down.");
+    P(L, out(), "n");
+    return;
+  }
+  if (kind === "rise") {
+    const need = 30 * (M.rank + 1), pw = 40 + M.rank * 15;
+    if ((M.rep || 0) < need || power(c) < pw) { P(L, "Not yet. " + o.leader + " said it kindly, which is worse.", "n"); return; }
+    if (M.rank < 2) { M.rank += 1; P(L, "You are " + ORG_RANKS[M.rank] + " in " + o.n + " now. People who used to ignore you now report to you, which is also a way of ignoring you.", "e"); return; }
+    if (o.leaderId && NAMED[o.leaderId] && !isDead(c, o.leaderId)) { P(L, o.leader + " is not going anywhere, and nobody inside " + o.n + " will move against them.", "n"); return; }
+    const old = o.leader; o.leader = c.name; o.leaderId = null; M.rank = 3;
+    addTitle(c, d.head + " of " + o.n);
+    chron(c, { cat: "villages", line: c.name, big: true, txt: c.name + " becomes " + d.head + " of " + o.n + ", succeeding " + old + "." });
+    newsItem(c, c.name + " is the new " + d.head + " of " + o.n + ".", "THE VILLAGES", true);
+    P(L, "You are the " + d.head + " of " + o.n + ". " + old + " handed you the " + pick(["seal", "ledger", "keys", "old sword", "lantern"]) + " and did not wish you luck.", "e");
+    return;
+  }
+  if (kind === "stance") {
+    if (o.leader !== c.name) return;
+    const st = (d.stances || []).find((x) => x[0] === val);
+    if (!st) return;
+    o.stance = st[0];
+    chron(c, { cat: "villages", line: c.name, txt: o.n + ", under " + c.name + ", resolves to: " + st[1].toLowerCase() + "." });
+    P(L, o.n + ": " + st[1].toLowerCase() + ", from now on, because you said so.", "n");
+    return;
+  }
+  if (kind === "leave") {
+    c.org = null; o.members = Math.max(1, o.members - 1);
+    if (o.leader === c.name) { o.leader = freshName(c, null); chron(c, { cat: "villages", txt: c.name + " steps down as " + d.head + " of " + o.n + ". " + o.leader + " succeeds them." }); }
+    if (["syndicate", "root"].includes(o.id) && roll(45)) { c.health = cl(c.health - rr(10, 30)); P(L, "Nobody leaves " + o.n + ". They sent somebody to explain that, at length, in an alley.", "b"); }
+    else P(L, "You left " + o.n + ". They let you, which you will think about for a long time.", "n");
+  }
+}
+
+/* ============================ INSIDE THE AKATSUKI ============================
+   Ten rings used to be a job board. It is an organisation now: a leader who
+   may not be the one in charge, members who like and loathe each other, and
+   factions that want different things from the same nine beasts. */
+const AKA_FACTIONS = {
+  leader: { n: "The Leader's Hand", d: "Loyal to whoever wears the Zero ring, and to the plan as it has been explained to them." },
+  treasury: { n: "The Treasury", d: "Kakuzu's view: the organisation is a business, and the beasts are its most valuable stock." },
+  art: { n: "The Artists", d: "Deidara and Sasori, who agree on nothing except that everybody else is doing it wrong." },
+  shadow: { n: "The Mask's Circle", d: "The ones who have worked out that the man behind the leader is the real leader." },
+};
+const AKA_HOME = { pain: "leader", konan: "leader", kakuzu: "treasury", hidan: "treasury", deidara: "art", sasori: "art", obito: "shadow", zetsu: "shadow", itachi: null, kisame: "shadow" };
+function akaMembers(c) { return AKATSUKI_RINGS.map((r) => r.who).filter((w) => w && NAMED[w] && !isDead(c, w) && !(c.held || []).includes(w)).concat(NAMED.zetsu && !isDead(c, "zetsu") ? ["zetsu"] : []).filter((x, i, a) => a.indexOf(x) === i); }
+function akaLeader(c) {
+  const ak = c.akatsuki; if (ak && ak.leads) return { id: null, name: c.name };
+  const m = akaMembers(c);
+  const id = ["pain", "obito", "konan"].find((x) => m.includes(x));
+  return id ? { id, name: NAMED[id].name } : { id: null, name: (ak && ak.newLeader) || "nobody anybody has met" };
+}
+function akaTick(c, L) {
+  const ak = c.akatsuki; if (!ak) return;
+  if (ak.leads) {
+    if (ak.aim === "sell") { const g = rr(200000, 500000); c.ryo += g; c.infamy = cl(c.infamy - 2); if (L && roll(40)) P(L, "The villages paid the Akatsuki " + money(g) + " this year for work they will never admit to ordering.", "n"); }
+    else if (ak.aim === "war") { const v = pick(VILLAGES.filter((x) => villageExists(c, x.id))); if (v && c.world && c.world.stability) { c.world.stability[v.id] = cl((c.world.stability[v.id] || 50) - rr(4, 9)); chron(c, { cat: "outlaws", line: c.name, txt: "The Akatsuki strikes at " + v.name + " under its new leader." }); } }
+    return;
+  }
+  const mem = akaMembers(c);
+  if (!ak.trust) { ak.trust = {}; }
+  mem.forEach((id) => { if (ak.trust[id] == null) ak.trust[id] = rr(38, 62) + (id === ak.partnerId ? 12 : 0); });
+  Object.keys(ak.trust).forEach((id) => { if (!mem.includes(id)) delete ak.trust[id]; else ak.trust[id] = cl(ak.trust[id] + (ak.trust[id] < 50 ? 1 : 0) + ((ak.jobsThisYear || 0) ? 1 : 0) - (ak.faction && AKA_HOME[id] && AKA_HOME[id] !== ak.faction && AKA_HOME[id] !== null ? 1 : 0)); });
+  ak.jobsThisYear = 0;
+  const lead = akaLeader(c);
+  if (ak.order || ak.offer) return;
+  if (!ak.leads && lead.id && (ak.trust[lead.id] || 50) < 25 && roll(45)) {
+    ak.order = { by: lead.id, year: c.year, sent: pick(mem.filter((x) => x !== lead.id && x !== ak.partnerId)) || ak.partnerId || lead.id };
+    chron(c, { cat: "outlaws", line: c.name, txt: lead.name + " orders the elimination of " + c.name + ", who wears the ring " + ak.ring + "." });
+    if (L) P(L, lead.name + " has ordered your elimination. You heard it from " + (NAMED[ak.partnerId] ? NAMED[ak.partnerId].name : ak.partner) + ", who was supposed to be the one to do it.", "b");
+    return;
+  }
+  if (!roll(30)) return;
+  const ev = pick(["offer", "offer", "betray", "rift", "leave"]);
+  if (ev === "offer") {
+    const fac = pick(Object.keys(AKA_FACTIONS).filter((f) => f !== ak.faction && mem.some((m) => AKA_HOME[m] === f)));
+    if (!fac) return;
+    const from = pick(mem.filter((m) => AKA_HOME[m] === fac));
+    ak.offer = { fac, from, year: c.year };
+    if (L) P(L, NAMED[from].name + " has offered you a place in " + AKA_FACTIONS[fac].n + ". It was not phrased as an offer.", "n");
+  } else if (ev === "betray" && mem.length >= 3) {
+    const a = pick(mem.filter((m) => m !== lead.id)), b = pick(mem.filter((m) => m !== a && m !== lead.id));
+    if (!a || !b) return;
+    chron(c, { cat: "outlaws", txt: NAMED[a].name + " sells out " + NAMED[b].name + "'s whereabouts to a village for money. Neither of them is still pretending to be friends." });
+    if (L) P(L, NAMED[a].name + " sold " + NAMED[b].name + "'s location to a village. " + NAMED[b].name + " survived it and knows exactly who did it.", "n");
+    if (ak.trust[a] != null) ak.trust[a] = cl(ak.trust[a] - 5);
+  } else if (ev === "rift") {
+    const f1 = pick(Object.keys(AKA_FACTIONS)), f2 = pick(Object.keys(AKA_FACTIONS).filter((f) => f !== f1));
+    chron(c, { cat: "outlaws", txt: AKA_FACTIONS[f1].n + " and " + AKA_FACTIONS[f2].n + " are no longer speaking inside the Akatsuki. Meetings in the cave are shorter." });
+    if (L && (ak.faction === f1 || ak.faction === f2)) P(L, "Your faction and " + AKA_FACTIONS[ak.faction === f1 ? f2 : f1].n + " have stopped speaking. You are expected to take sides in rooms where people can see you.", "n");
+  } else if (ev === "leave") {
+    if ((ak.recruits || []).length) {
+      const r2 = ak.recruits.pop();
+      chron(c, { cat: "outlaws", line: c.name, txt: r2 + ", whom " + c.name + " brought into the Akatsuki, walks away from the organisation." });
+      if (L) P(L, r2 + ", the one you vouched for, took their ring off and left. The leader looked at you for a long time afterwards.", "b");
+      if (lead.id && ak.trust[lead.id] != null) ak.trust[lead.id] = cl(ak.trust[lead.id] - 10);
+    }
+  }
+}
+
+/* ============================ THE LIVING BINGO BOOK ============================
+   A name in the book used to sit still and wait for you. They run now. */
+function threatOf(e) {
+  const pw = e.pw || 60;
+  const t = e.tier || (pw >= 88 ? "S" : pw >= 74 ? "A" : pw >= 55 ? "B" : "C");
+  const diff = pw + (e.allies || 0) * 3 + (e.hidden ? 12 : 0) + (e.org ? 8 : 0);
+  return { tier: t, diff: diff >= 105 ? "Extreme" : diff >= 88 ? "Severe" : diff >= 70 ? "High" : diff >= 55 ? "Moderate" : "Low" };
+}
+function fugitiveTick(c, L) {
+  const lands = VILLAGES.filter((v) => villageExists(c, v.id)).map((v) => v.land);
+  (c.booked || []).forEach((e) => {
+    if (e.dead || e.captured || e.pardoned || e.withdrawn) return;
+    if (e.loc == null) { e.loc = e.from ? landOf(e.from) : pick(lands); e.locs = 1; e.seen = e.year || c.year; e.allies = e.allies || 0; }
+    if (roll(40)) { e.seen = c.year; if (roll(50)) e.locs = (e.locs || 1) + 1; }
+    if (roll(14)) { const to = pick(lands.filter((x) => x !== e.loc)); if (to) { e.loc = to; e.locs = (e.locs || 1) + 1; if ((e.tier === "S" || e.tier === "A") && roll(40)) chron(c, { cat: "outlaws", txt: e.name + ", listed " + e.tier + "-rank, is seen crossing into the " + to + "." }); } }
+    if (!e.alias && roll(5)) { e.alias = freshName(c, null); chron(c, { cat: "outlaws", txt: e.name + " is believed to be living as “" + e.alias + "”." }); }
+    if (roll(10)) { e.allies = (e.allies || 0) + rr(1, 3); e.pw = Math.min(99, (e.pw || 60) + 1); }
+    if (!e.hidden && roll(7)) e.hidden = c.year;
+    if (!e.org && roll(4)) { const o = pick((c.orgs || []).filter((x) => !x.gone && ["mercs", "syndicate"].includes(x.id))); if (o) { e.org = o.id; o.members += 1; chron(c, { cat: "outlaws", txt: e.name + ", wanted in the Bingo Book, has joined " + o.n + "." }); } }
+    if (!e.org && (e.allies || 0) >= 4 && (e.pw || 0) >= 70 && roll(3)) foundOrg(c, e);
+    /* they know who has been hunting them */
+    if ((c.huntedBy || []).includes(e.name) && roll(8) && c.alive !== false) {
+      const win = roll(cl(50 + (power(c) - (e.pw || 60)) * 2.2, 8, 92));
+      if (win) { e.dead = true; c.kills += 1; if (L) P(L, e.name + " came for you in the night, which is what you would have done. You were awake. Their page is closed.", "e"); chron(c, { cat: "outlaws", line: c.name, big: true, txt: e.name + " ambushes " + c.name + ", who has been hunting them, and dies in the attempt." }); }
+      else { c.health = cl(c.health - rr(15, 35)); if (L) P(L, e.name + " came for you in the night. You lived, just, and they walked away with your blood on their blade and their page still open.", "b"); chron(c, { cat: "outlaws", line: c.name, txt: e.name + " ambushes " + c.name + ", who has been hunting them, and gets away." }); }
+    }
+  });
+}
+/* sometimes the name in the book is yours, and it should not be */
+const WRONG_WHYS = ["the murder of a border official you never met", "selling village maps to a foreign power", "the theft of a forbidden scroll from the archive", "the poisoning of a merchant envoy"];
+function wrongfulTick(c, L) {
+  if (c.rogue || c.wrongful || c.age < 16 || c.rank < 2 || (c.standing || 0) >= 85) return;
+  if (!roll(1)) return;
+  const why = pick(WRONG_WHYS);
+  const real = freshName(c, null);
+  c.wrongful = { year: c.year, why, real, tries: 0 };
+  c.bingo = c.bingo || "B"; c.bounty = Math.max(c.bounty || 0, 160000);
+  c.standing = cl(c.standing - 15);
+  const id = chron(c, { cat: "outlaws", line: c.name, big: true, txt: c.name + " is entered in the Bingo Book for " + why + ".", truth: real + " did it, and " + c.name + " was framed", reported: c.name + " did it", revealed: false });
+  c.wrongful.entry = id;
+  newsItem(c, c.name + " has been listed B-rank in the Bingo Book for " + why + ". Their village says it is “looking into it”.", "BINGO BOOK", true);
+  if (L) P(L, "You are in the Bingo Book this morning, for " + why + ". You did not do it. You know who did, roughly, and nobody is asking you.", "b");
+}
+function clearName(c, L, how) {
+  const w = c.wrongful; if (!w) return;
+  w.tries += 1;
+  const odds = how === "won" ? 100 : how === "scales" ? cl(40 + (c.standing || 0) / 3 + (c.iron && c.iron.npcArbiter ? 10 : 0), 20, 85) : how === "trial" ? 55 : cl(50 + (power(c) - 60) * 2, 15, 90);
+  if (roll(odds)) {
+    c.wrongful = null; c.bingo = c.rogue ? c.bingo : null; c.bounty = c.rogue ? c.bounty : 0; c.standing = cl(c.standing + 12);
+    const x = chronById(c, w.entry); if (x) x.revealed = c.year;
+    bookName(c, { name: w.real, rank: "Missing-nin", tier: "B", why: w.why, by: "the Iron Scales", pw: rr(55, 72) });
+    chron(c, { cat: "courts", cause: w.entry, line: c.name, big: true, txt: c.name + "'s name is cleared. The real culprit, " + w.real + ", is listed in their place." });
+    newsItem(c, c.name + " has been cleared of " + w.why + ". The Bingo Book has been corrected and " + w.real + " listed in their place.", "BINGO BOOK", true);
+    P(L, how === "scales" ? "The Iron Scales heard it and struck your page. " + w.real + " is in the book now, where they belong." : how === "trial" ? "You walked into the tribunal and let them try you. They acquitted you, and found out who did it while they were at it." : "You found " + w.real + " yourself and dragged them in. Your page is struck; theirs is open.", "e");
+  } else {
+    c.standing = cl(c.standing - 3);
+    P(L, how === "scales" ? "The Scales heard it and would not decide it. Not enough to go on, they said." : how === "trial" ? "They tried you and could not agree. You are still in the book." : "You went after " + w.real + " and they were gone before you got there.", "b");
+  }
+}
+function wrongfulHunt(c, L) {
+  if (!c.wrongful || !roll(20)) return;
+  if (roll(cl(50 + (power(c) - 55) * 2, 15, 90))) { c.kills += 1; P(L, "Hunter-nin found you, on the strength of a page that is wrong about you. You left them alive, which is more than the page would have done.", "n"); }
+  else { c.health = cl(c.health - rr(8, 22)); P(L, "Hunter-nin found you, on the strength of a page that is wrong about you. You got away, bleeding.", "b"); }
+}
+/* each of these is its own system; a fault in one must never cost the player the year */
+function safeTick(fn, c, L) { try { fn(c, L); } catch (err) { if (typeof console !== "undefined") console.warn("tick failed: " + (fn.name || "?"), err); } }
+function world2Tick(c, L) {
+  [landsTick, orgTick, akaTick, fugitiveTick, wrongfulTick, wrongfulHunt].forEach((fn) => safeTick(fn, c, L));
 }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
@@ -6062,6 +6472,7 @@ function worldTick(c, L) {
   ironTick(c, L);
   vaultTick(c, L);
   legacyTick(c, L);
+  world2Tick(c, L);
   /* hunter-nin sent after names in the book */
   (c.bookHunts || []).forEach((h) => {
     if (h.done) return;
@@ -6466,6 +6877,19 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "10.17", n: "The People Under It", items: [
+    "THE LANDS. Every country has people now: how many live there, how well they are doing, what things cost, what has run out and who has fled. War empties a land and raises its prices; peace and treaties fill it back up. Your own land shows what its people do for a living, and that shifts too: more smiths and doctors in a war, more merchants in a good decade, more labourers while a burned village is rebuilt",
+    "War has civilians in it. \u201cYour war has caused 18,000 civilians to flee the Land of Fire this year.\u201d They go to whichever neighbour is not also at war, live in camps, and some of them go home. The ones who do not, after enough years, found a town of their own that was not on any map before, and it goes into the Chronicle",
+    "Shortages and prices. A war can run a country out of rice, steel, medicine, salt, paper, lamp oil or horses, and the paper says so. Mission pay follows the price of bread, so the tower pays more in a war year and less in a good one. A Kage's village prosperity now follows the land it stands in",
+    "Ordinary life shows up in your year: the baker selling bread by weight in a war, the teahouse reopening on the corner, the saws before the birds while a village is rebuilt",
+    "ORGANISATIONS that are not villages: the Samurai of the Land of Iron, the Wave Country Shipping Guild, the Bounty Stations, the Order of the Quiet Hand (healers who cross every front), the Fire Temple, the Red Rope Company (mercenaries), the Tanzaku Syndicate, the Uzushio Seal Guild, the Paper Lantern Network (spies), and Root, while Danzo lives. Each has a leader, members, strength, a rival and a history of its own that runs whether you are in it or not",
+    "They change the world: mercenaries sign on to real wars and push the line, healers cut how many people flee a war zone, monks take refugees in and send more of them home, the syndicate moves into a country and its stability drops, the guild can charge what a war will bear, and the spies sell things to people",
+    "You can belong to one alongside everything else you are. Join, work for them, rise from Member to Trusted to Lieutenant, and take the whole organisation when you are strong enough. As its head you decide what it does: fight for the highest bidder or the weaker side, open the temple gates or close them, sell seals to anybody or only to villages. Leaving the syndicate or Root is not always allowed",
+    "INSIDE THE AKATSUKI. A leader who may not be the one in charge, members who trust you or want you gone, and four factions: the Leader's Hand, the Treasury, the Artists, and the Mask's Circle. Members offer you a place in their faction, sell each other out to villages and stop speaking to each other. Let the leader's trust in you fall far enough and they order your elimination: plead, face whoever they send, run, or walk into the cave and strike at the leader. Win that and the Akatsuki is yours, to point at the beasts, sell to the villages, turn on them, or disband",
+    "THE BINGO BOOK IS ALIVE. Every name has a threat file: threat tier, known locations, known allies, last sighting, where, and capture difficulty. They do not wait for you. They cross borders, take new names, gather allies, hide among civilians, join the mercenaries or the syndicate, and, with enough followers, found an organisation of their own. And they know who has been hunting them",
+    "You can be wanted for something you did not do. A page in the book with your name on it, hunter-nin who believe it, and three ways out: petition the Iron Scales, turn yourself in and stand trial, or find the one who actually did it. The Chronicle knows the truth the whole time",
+    "Fixed while building it: a new yearly system that fails now fails on its own, instead of taking the rest of the year down with it",
+  ] },
   { v: "10.16", n: "The World Remembers", items: [
     "THE SHINOBI CHRONICLE. One history for the whole save, under a new Chronicle button next to the Histories. Every village founding, every Great War, every Kage's death, every ruling at Tetsu, every treaty, every succession, every death in your family, grouped by era and year and filterable by wars, courts, deaths, outlaws, beasts, villages, legends, or only your own line. Open any entry to see what caused it and what it led to, and follow the chain either way",
     "History has consequences on a clock. Kill a Kage and there is a succession, then ten years later the border with your village is still doubled and may go to war over it, then twenty years later their village still lowers its flags on the day, then fifty years later historians argue over whether it prevented a war or started three. A treaty you write at Tetsu can be challenged decades later, a war the Scales ended gets a monument, an accord turns thirty and somebody is accused of breaking it, an annexed village grows an independence movement, and the survivors of a burned one found a settlement of their own",
@@ -10126,6 +10550,7 @@ export default function ShinobiLife() {
   const [chronFilter, setChronFilter] = useState("all");
   const [chronOpen, setChronOpen] = useState(null);
   const [chronLimit, setChronLimit] = useState(120);
+  const [landsTab, setLandsTab] = useState("lands");
   const [indict, setIndict] = useState({ scope: null, vid: null, sel: null, tier: "A", charge: 0, warrant: "capture" });
   const [ruleSec, setRuleSec] = useState(null);
   const ironKeys = useRef("");
@@ -12113,6 +12538,64 @@ export default function ShinobiLife() {
   }
 
   /* ---------- the organisation ---------- */
+  /* the organisation from the inside */
+  function akaPol(kind) {
+    const ak0 = c.akatsuki; if (!ak0) return;
+    if (kind === "fight" || kind === "strike") {
+      const O = ak0.order; if (!O) return;
+      const foe = kind === "strike" ? O.by : O.sent;
+      if (!foe || !NAMED[foe]) return;
+      setModal(null);
+      setTimeout(() => startBattle(foe, { type: "akaorder", mode: kind, foe }, 0, kind === "strike"
+        ? "You did not wait for whoever they would send. You walked into the cave yourself, and " + NAMED[foe].name + " was expecting you."
+        : NAMED[foe].name + " found you at dusk, exactly where you had decided to be found."), 120);
+      return;
+    }
+    commit((c2, L) => {
+      const ak = c2.akatsuki; if (!ak) return;
+      const ld = akaLeader(c2);
+      if (kind === "accept" && ak.offer) {
+        ak.faction = ak.offer.fac; ak.trust[ak.offer.from] = cl((ak.trust[ak.offer.from] || 50) + 15);
+        if (ld.id && ak.faction !== "leader" && ak.trust[ld.id] != null) ak.trust[ld.id] = cl(ak.trust[ld.id] - 5);
+        P(L, "You are one of " + AKA_FACTIONS[ak.faction].n + " now. " + NAMED[ak.offer.from].name + " nodded once and never mentioned it again.", "n");
+        chron(c2, { cat: "outlaws", line: c2.name, txt: c2.name + " joins " + AKA_FACTIONS[ak.faction].n + " inside the Akatsuki." });
+        ak.offer = null;
+      } else if (kind === "refuse" && ak.offer) {
+        ak.trust[ak.offer.from] = cl((ak.trust[ak.offer.from] || 50) - 8);
+        P(L, "You turned " + NAMED[ak.offer.from].name + " down. They said they understood. They did not.", "n");
+        ak.offer = null;
+      } else if (kind === "plead" && ak.order) {
+        spend(c2);
+        if (roll(cl(30 + c2.stats.cha * 0.5, 15, 80))) {
+          ak.order = null; if (ld.id) ak.trust[ld.id] = cl((ak.trust[ld.id] || 20) + 25);
+          P(L, "You went to " + ld.name + " and said the things that needed saying. The order was withdrawn. Nobody pretends it was never given.", "g");
+        } else P(L, ld.name + " heard you out without a word, and the order stands.", "b");
+      } else if (kind === "run" && ak.order) {
+        spend(c2);
+        c2.exAkatsuki = { ring: ak.ring, left: c2.year }; c2.akatsuki = null; c2.infamy = cl(c2.infamy + 6);
+        chron(c2, { cat: "outlaws", line: c2.name, big: true, txt: c2.name + " takes off the ring " + ak.ring + " and runs from the Akatsuki with an elimination order on their head." });
+        P(L, "You took the ring off and ran. Somewhere behind you, somebody is being told where you were last seen.", "b");
+      } else if (kind.startsWith("aim:") && ak.leads) {
+        const aim = kind.slice(4);
+        ak.aim = aim;
+        if (aim === "disband") {
+          c2.exAkatsuki = { ring: ak.ring, left: c2.year }; c2.akatsuki = null;
+          chron(c2, { cat: "outlaws", line: c2.name, big: true, txt: "THE AKATSUKI IS DISBANDED by its own leader, " + c2.name + ". The rings are melted down in the cave." });
+          newsItem(c2, "THE AKATSUKI IS FINISHED. Its leader has disbanded it. The five villages do not know whether to believe it.", "BINGO BOOK", true);
+          P(L, "You melted the rings down yourself. Some of them are still out there, without rings, and without anybody telling them what to do.", "e");
+        } else P(L, aim === "sell" ? "The Akatsuki sells its services to the villages now, openly. They hate that they need it." : aim === "war" ? "The Akatsuki goes to war with the villages directly. No more pretending to be a business." : "The Akatsuki goes back to the nine beasts. That was always the point.", "e");
+      }
+    });
+  }
+  function orgUi(kind, id, val) { commit((c2, L) => { if (kind !== "stance" && kind !== "join") spend(c2); else if (kind === "join") spend(c2); orgAct(c2, L, kind, id, val); }); }
+  function clearUi(how) {
+    if (how === "hunt" && c.wrongful) {
+      setModal(null);
+      setTimeout(() => startBattle("missing", { type: "clearname" }, 0, "You found the one who did it, which nobody else had bothered to try.", { name: c.wrongful.real, title: "The one who did it" }), 120);
+      return;
+    }
+    commit((c2, L) => { spend(c2); clearName(c2, L, how); });
+  }
   function akatsukiAct(kind) {
     if (kind === "hunt") {
       const beastIds = BEASTS.filter((b) => !yoursBeast(c, b.id)).map((b) => b.id);
@@ -12123,6 +12606,7 @@ export default function ShinobiLife() {
     }
     commit((c, L) => {
       spend(c);
+      if (c.akatsuki) c.akatsuki.jobsThisYear = (c.akatsuki.jobsThisYear || 0) + 1;
       /* ---- the four jobs the panel offered and the handler never implemented.
          Every one of these rows was rendered, enabled, pressable and did
          absolutely nothing, which is why the organisation felt empty. ---- */
@@ -12403,6 +12887,7 @@ export default function ShinobiLife() {
         if ((c2.bookHunts || []).some((h) => h.name === name && !h.done)) { P(L, "A squad is already out after " + name + ".", "n"); return; }
         spend(c2);
         c2.bookHunts = (c2.bookHunts || []).concat([{ name, years: 0 }]);
+        c2.huntedBy = (c2.huntedBy || []).filter((x) => x !== name).concat([name]).slice(-12);
         P(L, "You signed the order. A hunter-nin squad left before dawn with " + name + "'s page and nothing else.", "e");
       });
       return;
@@ -13579,7 +14064,7 @@ export default function ShinobiLife() {
     if (story.noFight) {
       commit((c, L) => {
         spend(c);
-        const pay = rr(3500, 11000); c.ryo += pay; c.missions += 1; c.standing = cl(c.standing + 2);
+        const pay = Math.round(rr(3500, 11000) * landPayMult(c)); c.ryo += pay; c.missions += 1; c.standing = cl(c.standing + 2);
         const k = pick(STAT_KEYS)[0]; c.stats[k] = cl(c.stats[k] + 1);
         P(L, story.t + ": " + story.i + " Done, badly paid. +" + money(pay), "g");
       });
@@ -14221,7 +14706,7 @@ export default function ShinobiLife() {
       if (ctx.type === "mission" || ctx.type === "crime") {
         spend(c);
         if (b.win) {
-          const pay = rr(ctx.story.pay[0], ctx.story.pay[1]);
+          const pay = Math.round(rr(ctx.story.pay[0], ctx.story.pay[1]) * (ctx.type === "mission" ? landPayMult(c) : 1));
           c.ryo += pay; c.wins += 1; c.kills += 1;
           const k = pick(STAT_KEYS)[0]; c.stats[k] = cl(c.stats[k] + rr(2, 4));
           c.health = cl(c.health - rr(3, 12));
@@ -14549,6 +15034,7 @@ export default function ShinobiLife() {
           } else {
             const d = rr(20, 44); c.health = cl(c.health - d);
             e.bounty = Math.round((e.bounty || 0) * 1.2);
+            c.huntedBy = (c.huntedBy || []).filter((x) => x !== e.name).concat([e.name]).slice(-12);
             P(L, e.name + " got away from you, and the bounty on them went up for it. \u2212" + d + " health.", "b");
             if (c.health <= 0) die(c, L, "was killed by " + e.name + ", whose page they were carrying");
           }
@@ -14558,6 +15044,35 @@ export default function ShinobiLife() {
         spend(c);
         if (b.win) { addTitle(c, "Held the Iron Vault by hand"); vaultResolve(c, L, "won"); }
         else { const d = rr(18, 40); c.health = cl(c.health - d); vaultResolve(c, L, "lost"); if (c.health <= 0) die(c, L, "was killed at the bottom of the Iron Vault's stair"); }
+      }
+      if (ctx.type === "akaorder") {
+        spend(c);
+        const ak = c.akatsuki;
+        if (ak) {
+          if (b.win) {
+            if (ctx.mode === "strike") {
+              killNamed(c, ctx.foe, L, "was killed in the cave by a member of their own organisation"); killFeat(c, L, ctx.foe);
+              ak.order = null; ak.leads = true; ak.aim = "beasts";
+              addTitle(c, "Leader of the Akatsuki");
+              chron(c, { cat: "outlaws", line: c.name, big: true, txt: c.name + " kills the leader of the Akatsuki in the cave and takes the organisation." });
+              newsItem(c, "The Akatsuki has a new leader. Nobody outside the organisation knows the face.", "BINGO BOOK", true);
+              P(L, "The leader is dead and the rings are looking at you. You lead the Akatsuki now.", "e");
+            } else {
+              ak.order = null; const ld = akaLeader(c); if (ld.id) ak.trust[ld.id] = cl((ak.trust[ld.id] || 20) + 10);
+              P(L, NAMED[ctx.foe] ? NAMED[ctx.foe].name + " went back to the cave and told the leader you were more trouble than you were worth. The order was withdrawn." : "The order was withdrawn.", "e");
+            }
+          } else {
+            const d = rr(25, 45); c.health = cl(c.health - d);
+            c.exAkatsuki = { ring: ak.ring, left: c.year }; c.akatsuki = null;
+            P(L, "You lost, and they took the ring off your hand while you were on the ground. You are out of the Akatsuki, and alive, which they will think about later. \u2212" + d + " health.", "b");
+            if (c.health <= 0) die(c, L, "was killed by the Akatsuki");
+          }
+        }
+      }
+      if (ctx.type === "clearname") {
+        spend(c);
+        if (b.win && c.wrongful) { c.kills += 0; clearName(c, L, "won"); }
+        else if (!b.win) { c.health = cl(c.health - rr(12, 28)); P(L, "The one who framed you was better at this than you expected. You are still in the book.", "b"); }
       }
       if (ctx.type === "warden") {
         spend(c);
@@ -16829,6 +17344,7 @@ export default function ShinobiLife() {
               { k: "villageroll", n: "Village Roll", i: "path", on: () => setModal("villageroll") },
               { k: "chronicle", n: "Chronicle", i: "records", on: () => setModal("chronicle"), tone: T.gold, badge: (c.chron || []).length || null },
               { k: "histories", n: "Histories", i: "records", on: () => setModal("histories"), tone: T.gold },
+              { k: "lands", n: c.org ? "Lands & your org" : "The Lands", i: "path", on: () => setModal("lands") },
               { k: "records", n: "Records", i: "records", on: () => setModal("records") },
               { k: "special", n: "Special", i: "powers", on: () => setModal("special"), tone: T.gold },
               otsuAvailable(c) ? { k: "otsu", n: "The Celestial", i: "powers", on: () => setModal("otsu"), tone: T.epic } : null,
@@ -18351,6 +18867,15 @@ export default function ShinobiLife() {
                 </div>
               </div>
             )}
+            {c.wrongful && (
+              <div style={{ ...glass(T.blood), borderLeft: "3px solid " + T.blood }} className="p-3 mb-3">
+                <div style={{ color: T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold mb-1">YOU ARE WANTED FOR SOMETHING YOU DID NOT DO</div>
+                <div style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">Listed since {c.wrongful.year} for {c.wrongful.why}. You know, roughly, who did it: {c.wrongful.real}. Hunter-nin do not.</div>
+                <Row label="Petition the Iron Scales" sub="Your standing decides how seriously they take it." right="Petition" onClick={() => clearUi("scales")} disabled={c.actions < 1} />
+                <Row label="Turn yourself in and stand trial" sub="A tribunal can clear you. It can also not." right="Trial" onClick={() => clearUi("trial")} disabled={c.actions < 1} />
+                <Row label="Find the one who did it" sub={"Drag " + c.wrongful.real + " in yourself."} right="Hunt" onClick={() => clearUi("hunt")} disabled={c.actions < 1} tone={T.blood} />
+              </div>
+            )}
             {me && NAMED[me] && (
               <div style={{ ...glass(T.gold), borderLeft: "3px solid " + T.gold }} className="p-3 mb-3">
                 <div style={{ color: T.gold, fontSize: 9, letterSpacing: ".22em" }} className="font-bold mb-1">YOUR OWN ENTRY</div>
@@ -18390,6 +18915,11 @@ export default function ShinobiLife() {
                         {cap(e.why)}. Listed {e.year} AH by {e.by}. Bounty {money(e.bounty)}.
                       </div>
                       {warrantOf(e) && <div style={{ color: IRON, fontSize: 11, marginTop: 3 }}><b>Warrant: {warrantOf(e).n}.</b> <span style={{ color: T.dim }}>{warrantOf(e).d}</span></div>}
+                      {(() => { const th = threatOf(e); const org = e.org && (c.orgs || []).find((o) => o.id === e.org); const ago = e.seen != null ? c.year - e.seen : null; return (
+                        <div style={{ color: T.dim, fontSize: 11, marginTop: 3 }}>
+                          Threat {th.tier} {"\u00b7"} known locations {e.locs || 1} {"\u00b7"} known allies {e.allies || 0} {"\u00b7"} last sighting {ago == null ? "unknown" : ago === 0 ? "this year" : ago * 12 + " months ago"}{e.loc ? ", " + e.loc : ""} {"\u00b7"} capture difficulty <b style={{ color: th.diff === "Extreme" || th.diff === "Severe" ? T.blood : T.soft }}>{th.diff}</b>
+                          {e.alias ? <span> {"\u00b7"} may be living as {"\u201c"}{e.alias}{"\u201d"}</span> : null}{org ? <span> {"\u00b7"} with {org.n}</span> : null}{e.hidden ? <span> {"\u00b7"} hiding among civilians</span> : null}
+                        </div>); })()}
                       <div className="flex gap-3 mt-2 flex-wrap" style={{ fontSize: 11.5 }}>
                         {!warrantAlive(e) && <button onClick={() => bookAct("hunt", e.name)} disabled={c.actions < 1} style={{ color: T.blood }}>hunt them down {"·"} ~{Math.round(odds)}%</button>}
                         <button onClick={() => bookAct("capture", e.name)} disabled={c.actions < 1} style={{ color: IRON }}>take them alive {"→"} the Iron Vault</button>
@@ -18675,6 +19205,106 @@ export default function ShinobiLife() {
 
       {/* its own id: this and the life-log feed were both keyed on "history",
            so opening either one rendered both of them on top of each other */}
+      {modal === "lands" && (() => {
+        const W = c.world || {};
+        const lands = W.lands || {};
+        const vs = VILLAGES.filter((v) => villageExists(c, v.id));
+        const orgs = (c.orgs || []).filter((o) => !o.gone);
+        const mine = c.org && orgs.find((o) => o.id === c.org.id);
+        const H = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">{children}</div>;
+        const Bar = ({ v, col }) => <div style={{ height: 4, background: "rgba(0,0,0,.5)", borderRadius: 99 }}><div style={{ width: cl(v) + "%", height: "100%", background: col, borderRadius: 99 }} /></div>;
+        const G = T.gold;
+        return (
+          <Modal wide title="THE LANDS" accent={G} onClose={() => setModal(null)}>
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {[["lands", "The People"], ["orgs", "Organisations"]].map(([k2, n2]) => (
+                <button key={k2} onClick={() => setLandsTab(k2)} style={{ background: landsTab === k2 ? G : T.panel2, color: landsTab === k2 ? "#0b0d11" : T.soft, border: "1px solid " + (landsTab === k2 ? G : T.line), borderRadius: 99 }} className="px-3 py-1.5 text-xs font-semibold">{n2}</button>
+              ))}
+            </div>
+            {landsTab === "lands" && (
+              <>
+                <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">The people who pay for every war in this world, and what it costs them. Mission pay follows the price of bread: the tower pays more when everything costs more.</p>
+                {vs.map((v) => {
+                  const Ld = lands[v.id]; if (!Ld) return null;
+                  const foes = atWarWith(c, v.id);
+                  const pcol = Ld.prosper >= 60 ? T.good : Ld.prosper >= 35 ? G : T.blood;
+                  return (
+                    <div key={v.id} style={{ background: T.panel2, border: "1px solid " + (v.id === c.village ? G + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2">
+                      <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                        <span style={{ fontFamily: SERIF, fontSize: 14.5 }} className="font-bold">{v.land}{v.id === c.village ? " · home" : ""}</span>
+                        <span style={{ color: T.dim, fontSize: 11 }}>{(Ld.pop * 1000).toLocaleString()} people {"·"} prices {Ld.price}{Ld.price > 110 ? " ↑" : Ld.price < 98 ? " ↓" : ""}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 78 }}>PROSPERITY</span><div style={{ flex: 1 }}><Bar v={Ld.prosper} col={pcol} /></div><span style={{ color: pcol, fontSize: 11 }}>{Ld.prosper}</span></div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginTop: 5 }}>
+                        {foes.length ? "At war with " + joinList(foes.map(vName2)) + ". " : ""}
+                        {Ld.shortage ? "There is no " + Ld.shortage + " to be had. " : ""}
+                        {Ld.displaced ? (Ld.displaced * 1000).toLocaleString() + " have fled in living memory. " : ""}
+                        {Ld.rebuild ? "Still rebuilding, " + Ld.rebuild + " years to go. " : ""}
+                        {!foes.length && !Ld.shortage && !Ld.rebuild ? (Ld.prosper >= 60 ? "A good time to be alive here." : "Getting by.") : ""}
+                      </div>
+                      {v.id === c.village && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2" style={{ fontSize: 11 }}>
+                          {landTrades(Ld, !!(foes.length || c.war)).map(([k2, v2]) => <span key={k2} style={{ color: T.dim }}>{k2} <b style={{ color: T.soft }}>{v2}%</b></span>)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {(W.refugees || []).filter((r) => !r.settled).length > 0 && <H col={G}>ON THE ROADS</H>}
+                {(W.refugees || []).filter((r) => !r.settled).map((r, i) => (
+                  <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1">{(r.n * 1000).toLocaleString()} from the {landOf(r.from)}{r.to ? ", living in camps in the " + landOf(r.to) : ", with nowhere to go"}, since {r.year}.</div>
+                ))}
+                {(W.settlements || []).length > 0 && <H col={G}>TOWNS THAT WERE NOT THERE BEFORE</H>}
+                {(W.settlements || []).map((s2, i) => (
+                  <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><b>{s2.name}</b>, in the {s2.land}: founded {s2.founded} by {(s2.pop * 1000).toLocaleString()} who fled the {landOf(s2.from)}.</div>
+                ))}
+              </>
+            )}
+            {landsTab === "orgs" && (
+              <>
+                <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-2">Not every life runs through a village or away from one. These answer to their own leaders, keep their own histories and fight their own rivals, and you can belong to one of them as well as to whatever else you are.</p>
+                {mine && (() => {
+                  const d = orgDef(mine.id) || { head: "Leader", work: "Help", stances: [] };
+                  const lead = mine.leader === c.name;
+                  const rankN = lead ? d.head : ORG_RANKS[c.org.rank] || "Member";
+                  return (
+                    <div style={{ ...glass(G) }} className="p-3.5 mb-3">
+                      <div style={{ color: G, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">YOUR ORGANISATION</div>
+                      <div style={{ fontFamily: SERIF, fontSize: 17 }} className="font-bold">{mine.n}</div>
+                      <div style={{ color: T.dim, fontSize: 11.5 }}>{rankN} {"·"} standing inside {c.org.rep || 0} {"·"} since {c.org.since}</div>
+                      <div className="mt-2">
+                        <Row label={d.work} sub="A season's work for them. Pays, and they notice." right="Work" onClick={() => orgUi("work", mine.id)} disabled={c.actions < 1} tone={G} />
+                        {!lead && <Row label={c.org.rank < 2 ? "Ask to rise to " + ORG_RANKS[c.org.rank + 1] : "Take the organisation"} sub={"Needs standing " + 30 * (c.org.rank + 1) + " inside it and power " + (40 + c.org.rank * 15) + "."} right="Rise" onClick={() => orgUi("rise", mine.id)} disabled={c.actions < 1} />}
+                        {lead && (d.stances || []).map(([k2, n2]) => <Row key={k2} label={n2} sub={mine.stance === k2 ? "This is what the organisation does now." : "Change what the organisation does."} right={mine.stance === k2 ? "Current" : "Decide"} onClick={() => orgUi("stance", mine.id, k2)} disabled={mine.stance === k2} tone={mine.stance === k2 ? T.good : null} />)}
+                        <Row label="Leave them" sub="Some of them let you." right="Leave" onClick={() => orgUi("leave", mine.id)} disabled={c.actions < 1} tone={T.blood} />
+                      </div>
+                    </div>
+                  );
+                })()}
+                {orgs.map((o) => {
+                  const d = orgDef(o.id) || { head: "Leader", d: "A band of people with nowhere else to go.", req: () => false, reqTxt: "They do not take applications", stances: [] };
+                  const rv = o.rival && orgs.find((x) => x.id === o.rival);
+                  const st = (d.stances || []).find((x) => x[0] === o.stance);
+                  return (
+                    <div key={o.id} style={{ background: T.panel2, border: "1px solid " + (c.org && c.org.id === o.id ? G + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2">
+                      <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                        <span style={{ fontFamily: SERIF, fontSize: 14.5 }} className="font-bold">{o.n}</span>
+                        <span style={{ color: T.dim, fontSize: 10.5, letterSpacing: ".08em" }}>{o.kind.toUpperCase()}</span>
+                      </div>
+                      <div style={{ color: T.dim, fontSize: 11.5 }}>{d.head}: {o.leader === c.name ? "you" : o.leader} {"·"} {o.members} members {"·"} founded {o.founded}{rv ? " · rival: " + rv.n : ""}</div>
+                      <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 70 }}>STRENGTH</span><div style={{ flex: 1 }}><Bar v={o.str} col={G} /></div><span style={{ color: T.soft, fontSize: 11 }}>{o.str}</span></div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>{d.d}{st ? " Right now: " + st[1].toLowerCase() + "." : ""}</div>
+                      {(o.hist || []).slice(-2).map((h, i) => <div key={i} style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5 }}>{h.y}: {h.t}</div>)}
+                      {!c.org && !o.custom && <button onClick={() => orgUi("join", o.id)} disabled={c.actions < 1 || !d.req(c)} style={{ color: d.req(c) ? G : T.dim, fontSize: 11.5, marginTop: 4 }}>{d.req(c) ? "Join them" : "They want: " + d.reqTxt}</button>}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
       {modal === "chronicle" && (() => {
         const GOLD = T.gold;
         const all = (c.chron || []).slice();
@@ -20021,6 +20651,60 @@ export default function ShinobiLife() {
               </div>
               {(ak.brought || []).length > 0 && <div style={{ color: T.dim, fontSize: 11, marginTop: 3 }}>Brought in: {joinList(ak.brought)}</div>}
             </div>
+            {(() => {
+              const ld = akaLeader(c);
+              const mem = akaMembers(c);
+              return (
+                <div style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 12 }} className="p-3.5 mb-3">
+                  <div style={{ color: T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold mb-1">INSIDE THE ORGANISATION</div>
+                  <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>
+                    Led by <b>{ak.leads ? "you" : ld.name}</b>{!ak.leads && ld.id === "pain" && mem.includes("obito") ? ", or so everybody is told. There is a man in a mask who stands a little behind him, and never quite in the light" : ""}.
+                    {" "}Your faction: <b>{ak.faction ? AKA_FACTIONS[ak.faction].n : "none, which is its own kind of answer"}</b>.
+                  </div>
+                  {!ak.leads && mem.length > 0 && (
+                    <div className="grid gap-1.5 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+                      {mem.map((id) => {
+                        const t = (ak.trust || {})[id] == null ? 50 : ak.trust[id];
+                        const col = t >= 60 ? T.good : t >= 35 ? T.soft : T.blood;
+                        return (
+                          <div key={id} style={{ fontSize: 11 }}>
+                            <div className="flex justify-between"><span style={{ color: T.text }}>{NAMED[id].name}</span><span style={{ color: col }}>{t >= 60 ? "trusts you" : t >= 35 ? "wary" : "wants you gone"}</span></div>
+                            <div style={{ height: 3, background: "rgba(0,0,0,.5)", borderRadius: 99, marginTop: 3 }}><div style={{ width: t + "%", height: "100%", background: col, borderRadius: 99 }} /></div>
+                            <div style={{ color: T.dim, fontSize: 10 }}>{AKA_HOME[id] ? AKA_FACTIONS[AKA_HOME[id]].n : "keeps their own counsel"}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {ak.offer && NAMED[ak.offer.from] && (
+                    <div className="mt-3">
+                      <div style={{ color: T.gold, fontSize: 9.5, letterSpacing: ".18em" }} className="font-bold">AN OFFER</div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1">{NAMED[ak.offer.from].name} wants you in {AKA_FACTIONS[ak.offer.fac].n}. {AKA_FACTIONS[ak.offer.fac].d}</div>
+                      <Row label="Accept" sub="They will remember that you did. So will everybody else." right="Accept" onClick={() => akaPol("accept")} />
+                      <Row label="Turn it down" sub="They will remember that too." right="Refuse" onClick={() => akaPol("refuse")} />
+                    </div>
+                  )}
+                  {ak.order && (
+                    <div className="mt-3">
+                      <div style={{ color: T.blood, fontSize: 9.5, letterSpacing: ".18em" }} className="font-bold">{(NAMED[ak.order.by] ? NAMED[ak.order.by].name : ld.name).toUpperCase()} HAS ORDERED YOUR ELIMINATION</div>
+                      <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1">{NAMED[ak.order.sent] ? NAMED[ak.order.sent].name + " is the one they are sending." : "Somebody is being sent."}</div>
+                      <Row label="Plead your case" sub="Presence decides it." right="Plead" onClick={() => akaPol("plead")} disabled={c.actions < 1} />
+                      <Row label="Face whoever they send" sub="Win and the order is withdrawn. Lose and they take the ring off your hand." right="Fight" onClick={() => akaPol("fight")} disabled={c.actions < 1} tone={T.blood} />
+                      <Row label="Strike first, at the leader" sub="Walk into the cave and end it. Win, and the Akatsuki is yours." right="Strike" onClick={() => akaPol("strike")} disabled={c.actions < 1} tone={T.blood} />
+                      <Row label="Run" sub="Take the ring off and go. Now." right="Run" onClick={() => akaPol("run")} disabled={c.actions < 1} />
+                    </div>
+                  )}
+                  {ak.leads && (
+                    <div className="mt-3">
+                      <div style={{ color: T.blood, fontSize: 9.5, letterSpacing: ".18em" }} className="font-bold">WHAT THE AKATSUKI IS FOR, NOW THAT YOU SAY SO</div>
+                      {[["beasts", "The nine beasts", "What it was always for."], ["sell", "Sell to the villages", "Openly, for money, and let them hate needing it."], ["war", "War on the villages", "No more pretending to be a business."], ["disband", "Disband it", "Melt the rings down. Let them all go."]].map(([k2, n2, d2]) => (
+                        <Row key={k2} label={n2} sub={d2} right={ak.aim === k2 ? "Current" : "Decide"} onClick={() => akaPol("aim:" + k2)} disabled={ak.aim === k2} tone={k2 === "disband" ? T.blood : null} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {AKATSUKI_JOBS.map((j) => (
               <Row key={j.id} label={j.n} sub={j.d}
                 right={j.pay[1] ? money(j.pay[0]) + "+" : "+" + j.inf + " infamy"}
