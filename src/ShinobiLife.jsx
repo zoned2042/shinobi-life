@@ -4528,7 +4528,10 @@ function crisisStart(c, vid, why) {
   const ln = c.line && c.line[vid]; if (!ln || !ln.current || ln.current.player || ln.annexedYear) return;
   if ((c.crises || []).some((k) => k.vid === vid && !k.done)) return;
   const named = !!ln.current.id;
-  if (!roll(named ? 18 : ln.current.caretaker ? 55 : 40)) return;
+  /* an Acting Kage is holding the seat for an heir the histories already named;
+     that is not a vacancy anybody gets to contest */
+  if (ln.current.caretaker) return;
+  if (!roll(named ? 18 : 40)) return;
   const clan = pick(CLANS.filter((x) => x.v === vid && !x.celestial).map((x) => x.n)) || null;
   const k = { vid, year: c.year, why: why || "died", named, holder: ln.current.name, done: false, backed: null,
     cands: [{ k: "council", n: ln.current.name }, { k: "daimyo", n: freshName(c, null) }, { k: "clans", n: clan ? freshName(c, clan) : freshName(c, null) }, { k: "people", n: freshName(c, null) }] };
@@ -4547,6 +4550,7 @@ function crisisTick(c, L) {
        no longer in the chair is over, and a canon holder is never dice-rolled out */
     if (ln.current.name !== k.holder) { chron(c, { cat: "villages", cause: k.root, txt: "The succession crisis in " + vName2(k.vid) + " ends without a winner. The seat changed hands again before anybody could settle it." }); return; }
     if (ln.current.id) k.named = true;
+    if (ln.current.caretaker) { chron(c, { cat: "villages", cause: k.root, txt: "The succession crisis in " + vName2(k.vid) + " ends when the seat passes to an Acting Kage who holds it for the heir." }); return; }
     const W = c.world || {};
     const weights = { council: k.named ? 85 : 55, daimyo: 15, clans: 15, people: 15 };
     if (k.backed && weights[k.backed] != null) weights[k.backed] += 10 + Math.round((c.standing || 0) / 4);
@@ -4566,7 +4570,7 @@ function crisisTick(c, L) {
       txt = contested ? ln.current.name + " keeps the seat of " + vName2(k.vid) + " after a year of challenges from every side." : ln.current.name + " is confirmed in the seat of " + vName2(k.vid) + ". The other claimants withdraw.";
     } else {
       const old = ln.current.name;
-      ln.current = { ...ln.current, name: cand.n, id: null, caretaker: false };
+      ln.current = { ...ln.current, name: cand.n, id: null };
       if (c.kages && c.kages[k.vid]) c.kages[k.vid] = { ...c.kages[k.vid], named: null, name: cand.n };
       txt = win === "daimyo" ? "The daimyo's candidate, " + cand.n + ", is installed in " + vName2(k.vid) + "'s tower. " + old + " is sent to the coast."
         : win === "clans" ? "A coalition of the clans puts " + cand.n + " in the seat of " + vName2(k.vid) + ". " + old + " steps down rather than fight them all."
@@ -7129,6 +7133,7 @@ const CHANGELOG = [
     "Investigations. Three shinobi disappear from the same village; a well is poisoned; a scroll vanishes; a Kage is seen in two places on the same night; a patrol comes back with one more person than it left with; the records office burns. Each clue rules out an explanation. Expose it, report it quietly, or bury it for money, and you can act before you are sure, which is how the wrong name ends up in the paper. Expose a secret experiment while you are the Arbiter and it comes up the Iron road",
     "The named shinobi of the world live their own lives. They take squads, get wounded, lose council votes, turn down promotions, fall out with old teammates, take in war orphans and marry the people the histories say they marry, and all of it is written into their Bingo Book files, year by year",
     "Carried to your heirs: the organisations and their histories, and the lives of the named, so the world your grandchildren grow up in is the one your grandparents left",
+    "Fixed: a succession crisis could break out while an Acting Kage was holding a seat for a canon heir, and whoever won it became a numbered Kage. That put a stranger in as Fourth Mizukage and pushed Yagura and Mei down a number. An Acting Kage's seat can no longer be contested, and a crisis can never turn a caretaker into a numbered Kage",
   ] },
   { v: "10.17", n: "The People Under It", items: [
     "THE LANDS. Every country has people now: how many live there, how well they are doing, what things cost, what has run out and who has fled. War empties a land and raises its prices; peace and treaties fill it back up. Your own land shows what its people do for a living, and that shifts too: more smiths and doctors in a war, more merchants in a good decade, more labourers while a burned village is rebuilt",
