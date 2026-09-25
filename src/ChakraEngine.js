@@ -42,6 +42,8 @@ uniform vec3  uTone2;
 uniform float uHeat;
 uniform float uFade;
 uniform vec4  uRipples[${MAX_RIPPLES}];
+/* the body the field belongs to: x low chakra, y near death, z sage, w transformed */
+uniform vec4  uBody;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 
@@ -61,7 +63,10 @@ float fbm(vec2 p) {
 void main() {
   vec2 asp = vec2(uRes.x / max(uRes.y, 1.0), 1.0);
   vec2 p = (vUv - 0.5) * asp * 2.4;
-  float t = uTime * 0.06;
+  /* sage mode stills the field; a transformation drives it harder */
+  float t = uTime * 0.06 * (1.0 - uBody.z * 0.55 + uBody.w * 0.9);
+  /* near death the surface will not hold still: a tremor, not a wobble */
+  p += vec2(sin(uTime * 37.0 + vUv.y * 41.0), cos(uTime * 29.0 + vUv.x * 33.0)) * 0.018 * uBody.y;
 
   /* ---- the drop ----------------------------------------------------------
      A real struck-water surface, not a expanding circle: each drop is a wave
@@ -132,6 +137,21 @@ void main() {
   col *= 1.0 + wave * 0.55;
   col += vec3(1.0) * pow(max(wave, 0.0), 4.0) * 0.85;
 
+  /* sage mode: the edges of everything take on the pigment around the eyes */
+  float rim = smoothstep(0.35, 0.95, length((vUv - 0.5) * asp));
+  col = mix(col, col * vec3(1.15, 0.85, 0.55) + vec3(0.30, 0.16, 0.04) * rim, uBody.z * 0.8);
+  /* a transformation pulses, slow and heavy, like something breathing through you */
+  col *= 1.0 + uBody.w * 0.28 * (0.5 + 0.5 * sin(uTime * 2.1));
+  col += uTone2 * uBody.w * band * 0.45;
+  /* near death: colour drains toward a cold red, and it flickers */
+  float grey = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, vec3(grey * 1.1, grey * 0.35, grey * 0.32), uBody.y * 0.6);
+  col *= 1.0 - uBody.y * 0.22 * step(0.82, hash(vec2(floor(uTime * 11.0), 3.0)));
+  /* low chakra: the field is thinner, the threads go out first */
+  col *= 1.0 - uBody.x * 0.5;
+  col -= uTone2 * fil * uBody.x * 1.2;
+  col = max(col, vec3(0.0));
+
   /* vignette, but never all the way to black — the corners are where this is
      most visible between the cards, so crushing them defeats the point */
   float vig = 1.0 - pow(length((vUv - 0.5) * 1.30), 2.4);
@@ -145,6 +165,7 @@ attribute vec3 aSeed;   /* x: lane, y: rate, z: size */
 uniform float uTime;
 uniform float uDpr;
 uniform float uHeat;
+uniform vec4  uBody;
 varying float vA;
 void main() {
   float life = fract(uTime * aSeed.y + aSeed.x * 7.13);
@@ -153,7 +174,7 @@ void main() {
   float y = -1.15 + life * 2.4;
   gl_Position = vec4(x, y, 0.0, 1.0);
   gl_PointSize = aSeed.z * uDpr * (1.0 + uHeat * 0.8) * (1.0 - life * 0.45);
-  vA = sin(life * 3.14159) * (0.72 + uHeat * 0.6);
+  vA = sin(life * 3.14159) * (0.72 + uHeat * 0.6 + uBody.w * 0.5) * (1.0 - uBody.x * 0.7);
 }`;
 
 const MOTE_FS = `
@@ -232,6 +253,7 @@ export function createChakraEngine(canvas) {
     uHeat: gl.getUniformLocation(fieldProg, "uHeat"),
     uFade: gl.getUniformLocation(fieldProg, "uFade"),
     uRipples: gl.getUniformLocation(fieldProg, "uRipples[0]"),
+    uBody: gl.getUniformLocation(fieldProg, "uBody"),
   };
   const ml = {
     aSeed: gl.getAttribLocation(moteProg, "aSeed"),
@@ -239,6 +261,7 @@ export function createChakraEngine(canvas) {
     uDpr: gl.getUniformLocation(moteProg, "uDpr"),
     uHeat: gl.getUniformLocation(moteProg, "uHeat"),
     uTone2: gl.getUniformLocation(moteProg, "uTone2"),
+    uBody: gl.getUniformLocation(moteProg, "uBody"),
   };
 
   const ripples = new Float32Array(MAX_RIPPLES * 4);
@@ -247,6 +270,7 @@ export function createChakraEngine(canvas) {
   let tone2 = [0.85, 0.66, 0.28];
   let toneT = tone.slice(), tone2T = tone2.slice();
   let heat = 0, heatT = 0;
+  const body = [0, 0, 0, 0], bodyT = [0, 0, 0, 0];
   let fade = 0;
   let dpr = 1;
   let start = 0;
@@ -298,6 +322,7 @@ export function createChakraEngine(canvas) {
       tone2[i] += (tone2T[i] - tone2[i]) * 0.045;
     }
     heat += (heatT - heat) * 0.05;
+    for (let i = 0; i < 4; i++) body[i] += (bodyT[i] - body[i]) * 0.04;
     fade += (1 - fade) * 0.03;
 
     resize();
@@ -314,6 +339,7 @@ export function createChakraEngine(canvas) {
     gl.uniform1f(fl.uHeat, heat);
     gl.uniform1f(fl.uFade, fade);
     gl.uniform4fv(fl.uRipples, ripples);
+    gl.uniform4fv(fl.uBody, body);
     gl.disable(gl.BLEND);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -325,6 +351,7 @@ export function createChakraEngine(canvas) {
     gl.uniform1f(ml.uDpr, dpr);
     gl.uniform1f(ml.uHeat, heat);
     gl.uniform3fv(ml.uTone2, tone2);
+    gl.uniform4fv(ml.uBody, body);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     gl.drawArrays(gl.POINTS, 0, MOTES);
@@ -343,6 +370,13 @@ export function createChakraEngine(canvas) {
     tone(a, b) {
       if (a) toneT = hexRgb(a);
       if (b) tone2T = hexRgb(b);
+    },
+    /* the state of the body the field belongs to, each 0..1:
+       low chakra dims it, near death makes it shake, sage mode stills it,
+       a transformation makes it breathe */
+    body(b) {
+      const k = (v) => Math.max(0, Math.min(1, v || 0));
+      bodyT[0] = k(b && b.low); bodyT[1] = k(b && b.dying); bodyT[2] = k(b && b.sage); bodyT[3] = k(b && b.surge);
     },
     /* 0 idle, 1 mid-fight */
     heat(v) { heatT = Math.max(0, Math.min(1, v || 0)); },
