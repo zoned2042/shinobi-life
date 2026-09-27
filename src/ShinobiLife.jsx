@@ -4337,6 +4337,7 @@ function lifeRecord(c) {
     children: (c.kids || []).length, rulings: (wasArbiter ? I.heard || 0 : 0) + ((c.bench && c.bench.heard) || 0),
     knownFor, cause: c.cause || "is still alive", impact, tags, kills: c.kills || 0, epithet: c.epithet || null, wins: c.wins || 0,
     spouse: c.spouse ? c.spouse.name : null,
+    command: c.command && c.command.wars ? { wars: c.command.wars, battles: c.command.battles, wins: c.command.wins, doctrine: (commandDoctrine(c.command) || {}).n || null, dd: (commandDoctrine(c.command) || {}).d || null } : null,
   };
 }
 
@@ -6526,8 +6527,14 @@ function situationOf(c) {
   if (c.war) {
     const w = c.war; const R = w.room;
     add({ k: "war", sev: "red", chip: w.name, title: "WAR — " + w.name.toUpperCase(), lines: [liveFoes(w).length + " front" + (liveFoes(w).length === 1 ? "" : "s") + " open against " + foeSummary(w, 2) + ".", "The war overall is at " + w.momentum + "%."], status: R ? "Month " + (R.month || 0) + " of 12" + (R.exhaust >= 60 ? " · exhaustion " + Math.round(R.exhaust) + "%" : "") : "The War Room is open", go: { modal: "warroom" } });
+    if (R && R.council) add({ k: "council", sev: "red", chip: "War council is sitting", title: "WAR COUNCIL", lines: ["Your advisers are waiting for a decision."], status: "The council is sitting", go: { modal: "warroom" } });
+    if (R && R.incident) add({ k: "incident", sev: "red", chip: "Incident at " + R.incident.site, title: "INCIDENT — " + R.incident.site.toUpperCase(), lines: [R.incident.cmd + " " + INCIDENT_TEXT[R.incident.kind].us + "."], status: "Your decision", go: { modal: "warroom" } });
+    if (R && R.crisis) add({ k: "ncrisis", sev: "red", chip: "National crisis", title: "NATIONAL CRISIS", lines: ["The country is exhausted by the war."], status: "Continue, or negotiate from weakness", go: { modal: "warroom" } });
+    if (R && R.eplans) Object.values(R.eplans).forEach((P2) => { const sn = eplanSeen(R, P2); if (P2 && !P2.done && sn && sn.lvl >= 2) add({ k: "eplan" + P2.key, sev: "orange", chip: "Enemy: " + P2.n.replace("OPERATION ", "Operation ").toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()), title: "ENEMY " + P2.n, lines: [sn.t], status: P2.run ? "Under way" : "Expected soon", go: { modal: "warroom", tab: "intel" } }); });
+    if (R && R.occ) Object.entries(R.occ).forEach(([k, O2]) => { if (!O2.mode) add({ k: "occ" + k, sev: "yellow", chip: "Occupation: decide", title: "OCCUPATION — " + O2.land.toUpperCase(), lines: ["You hold ground there. Somebody has to decide how it is governed."], status: "Undecided", go: { modal: "warroom", tab: "occupation" } }); });
     if (R) Object.keys(R.offers || {}).forEach((k) => { const f = liveFoes(w).find((x) => x.key === k); if (f) add({ k: "offer" + k, sev: "yellow", chip: "Peace offer: " + f.name, title: "PEACE OFFER — " + f.name.toUpperCase(), lines: [cap(f.name) + " has asked for talks."], status: "The peace table is open", go: { modal: "warroom", tab: "peace" } }); });
   }
+  (c.occupations || []).forEach((O2) => { if (O2.resist >= 50) add({ k: "pocc" + O2.key, sev: O2.resist >= 75 ? "red" : "orange", chip: "Insurgency in " + O2.land, title: "OCCUPATION — " + O2.land.toUpperCase(), lines: ["Since " + O2.war + ". Resistance " + O2.resist + ", control " + O2.control + "."], status: OCC_MODES[O2.mode].n, go: { hub: "politics" } }); });
   (c.crises || []).filter((k) => !k.done).forEach((k) => add({ k: "cr" + k.vid, sev: k.vid === c.village ? "red" : "orange", chip: "Succession crisis in " + vName2(k.vid), title: "SUCCESSION CRISIS — " + vName2(k.vid).toUpperCase(), lines: [k.cands.length + " claimants for the seat.", k.student ? k.student + ", your line's student, is one of the names." : k.backed ? "You have declared." : "You have not declared."], status: "Settles within the year", go: { hub: "politics" } }));
   (W.wars || []).filter((w) => w.years > 0 && !(c.war && [w.a, w.b].includes(c.village))).slice(0, 3).forEach((w) => add({ k: "w" + w.a + w.b, sev: "orange", chip: "War: " + vName2(w.a) + " and " + vName2(w.b), title: vName2(w.a).replace(/gakure$/, "").toUpperCase() + "–" + vName2(w.b).replace(/gakure$/, "").toUpperCase() + " WAR", lines: ["Somebody else's war. Prices are moving because of it anyway."], status: w.years + " year" + (w.years === 1 ? "" : "s") + " left, by the look of it", go: { modal: "map" } }));
   (c.chains || []).filter((ch) => !ch.done).forEach((ch) => { const last = chronById(c, ch.last); const mine = ch.data && (ch.data.killer === c.name || isAncestor(c, ch.data.killer)); add({ k: "ch" + ch.id, sev: mine ? "red" : "purple", chip: ch.name, title: ch.name.toUpperCase(), lines: [last ? shortTxt(last.txt, 110) : "It has only just begun.", mine ? "It runs back to your family." : ""].filter(Boolean), status: "Stage " + (ch.stage + 1) + " of " + (CHAIN_STAGES[ch.kind] || []).length, go: { event: ch.last } }); });
@@ -6721,12 +6728,6 @@ const PRIORITIES = {
   fortify: { n: "Border fortification", d: "Every line is harder to push.", def: 1.25, prosper: 0.5 },
   total: { n: "Total mobilisation", d: "Everything for the war. Prosperity, approval and food pay for it, and people start to flee.", men: 1.03, atk: 1.15, prosper: 3, exhaust: 1.5, refugees: true },
 };
-const DOCTRINES_WAR = {
-  quality: { n: "Shinobi first", d: "Fewer, better. Elite units, precise strikes.", atk: 1.08, cas: 0.9, men: 0.9 },
-  mass: { n: "Mass levies", d: "Everybody who can hold a kunai.", men: 1.25, cas: 1.15 },
-  depth: { n: "Defence in depth", d: "Give ground slowly and make them pay for every step.", def: 1.2, atk: 0.92 },
-  mobile: { n: "Mobile warfare", d: "Never where they expect. Breakthroughs and encirclements come easier.", brk: 10, enc: 10 },
-};
 const ALLOC = [["weapons", "Weapons", "More equipment: attacks hit harder"], ["medicine", "Medicine", "Faster recovery, fewer dead"], ["fort", "Fortifications", "Lines are harder to push"], ["research", "Research", "Better techniques over time"], ["intel", "Intelligence", "Better information about the enemy"], ["food", "Food", "Keeps armies supplied"], ["relief", "Civilian relief", "Less unrest, fewer refugees"]];
 const OP_NAMES = ["IRON FANG", "RED LANTERN", "SILENT RAIN", "BROKEN MOON", "WHITE CRANE", "FALLING ASH", "LONG SHADOW", "NINE GATES", "BLACK TIDE", "PAPER STORM"];
 const OP_PHASES = [["break", "Break the front", "Push the line past 60."], ["encircle", "Encircle an army", "Destroy one of their armies in the field."], ["advance", "Advance on their capital", "Push the line past 85."], ["surrender", "Force surrender", "Take them out of the war."]];
@@ -6762,7 +6763,7 @@ function roomAddFoe(c, R, f) {
   const n = 1 + (f.strength >= 55 ? 1 : 0) + (w && w.great ? 1 : 0);
   const ecmd = vid ? commanderPool(c, vid, n) : [{ name: f.leaderName, id: f.leaderId || null, traits: ["Aggressive"] }];
   R.foes[f.key] = [];
-  for (let i = 0; i < n; i++) R.foes[f.key].push(makeArmy(c, i, vid || f.key, Math.round(f.strength * rr(420, 700)), ecmd[i] || ecmd[0], f.key, true));
+  for (let i = 0; i < n; i++) R.foes[f.key].push(makeArmy(c, i, vid || f.key, Math.round(f.strength * rr(300, 480)), ecmd[i] || ecmd[0], f.key, true));
   if (!vid) R.foes[f.key].forEach((a, i2) => { a.n = ORDINAL_N[i2] + " " + f.key + " war band"; });
   if (!R.fronts[f.key]) R.fronts[f.key] = { key: f.key, site: f.front, line: 50, order: "hold", occupied: false, encircled: 0, cas: 0 };
 }
@@ -6771,7 +6772,7 @@ function warRoomInit(c) {
   if (w.room) return w.room;
   const foes = liveFoes(w);
   const home = c.village;
-  const base = c.vil ? Math.max(20000, (c.vil.shinobi || 600) * 45) : rr(40000, 70000);
+  const base = c.vil ? Math.max(45000, (c.vil.shinobi || 600) * 90) : rr(45000, 75000);
   const nA = Math.min(6, 2 + foes.length + (w.great ? 1 : 0));
   const cmds = commanderPool(c, home, nA);
   const R = {
@@ -6785,6 +6786,8 @@ function warRoomInit(c) {
   }
   foes.forEach((f) => roomAddFoe(c, R, f));
   w.room = R;
+  roomFix(c, R);
+  cmdTally(c, "wars");
   chron(c, { cat: "war", line: c.rank >= 6 ? c.name : null, txt: w.name + ": the War Room opens. " + R.armies.length + " armies, " + foes.length + " front" + (foes.length === 1 ? "" : "s") + "." });
   return R;
 }
@@ -6797,129 +6800,6 @@ function armyStr(a, R) {
 function spreadLoss(list, n) {
   const tot = list.reduce((s, a) => s + a.men, 0) || 1;
   list.forEach((a) => { a.men = Math.max(0, a.men - Math.round(n * a.men / tot)); });
-}
-/* one month of your side of the war */
-function warMonth(c, L, quiet) {
-  const w = c.war; const R = w && w.room; if (!R) return { cas: 0, theirs: 0, events: [] };
-  R.month += 1;
-  const A = R.alloc; const pr = PRIORITIES[R.priority] || {}; const dc = DOCTRINES_WAR[R.doctrine] || {};
-  const Ld = landAt(c, c.village);
-  const ev = [];
-  let casM = 0, casT = 0;
-  /* your side grows or shrinks with what the country gives it */
-  const grow = (pr.men || 1) * (dc.men ? 1 + (dc.men - 1) / 12 : 1);
-  R.armies.forEach((a) => {
-    if (a.men > 0) a.men = Math.round(a.men * grow + (a.men < 3000 ? 400 : 0));
-    a.supply = cl(a.supply + Math.round((A.food - 20) / 4) + rr(-2, 2) - (R.fronts[a.front] && R.fronts[a.front].line > 70 ? 3 : 0));
-    a.morale = cl(a.morale + trAdd(a, "morale") / 3 + (A.relief >= 15 ? 1 : 0) - (R.exhaust > 70 ? 2 : 0));
-    if (a.wounded) a.wounded -= 1;
-  });
-  R.research = Math.min(60, R.research + A.research / 20);
-  R.intel = cl(R.intel + (A.intel - 10) / 4 - 1 + R.armies.reduce((s, a) => s + trAdd(a, "intel"), 0) / 3);
-  liveFoes(w).forEach((f) => {
-    if (!R.foes[f.key]) { roomAddFoe(c, R, f); ev.push([cap(f.name) + " has entered the war. A new front is open at " + f.front + ".", "b"]); }
-    const F = R.fronts[f.key];
-    const O = ORDERS[F.order] || ORDERS.hold;
-    const mine = R.armies.filter((a) => a.front === f.key && a.men > 0);
-    const theirs = (R.foes[f.key] || []).filter((a) => a.men > 0);
-    const lead = mine.slice().sort((a, b) => b.men - a.men)[0];
-    const myStr = mine.reduce((s, a) => s + armyStr(a, R), 0) + 2;
-    const foeStr = theirs.reduce((s, a) => s + (a.men / 1000) * (a.morale / 70), 0) * (0.6 + foeWill(f) / 175) + f.pressure / 3;
-    const atk = O.atk * (1 + (A.weapons - 20) / 100) * (pr.atk || 1) * (dc.atk || 1) * trMul(lead, "atk");
-    const def = O.def * (1 + (A.fort - 15) / 90) * (pr.def || 1) * (dc.def || 1) * trMul(lead, "def");
-    /* the enemy moves too: an offensive you can see coming is half beaten */
-    let foeOff = 1;
-    if (roll(14)) {
-      const seen = roll(R.intel);
-      foeOff = seen ? 0.85 : 1.35;
-      ev.push([seen ? "Your sensors saw " + (theirs[0] ? theirs[0].n : f.army) + " massing at " + F.site + " a week early. You were waiting for them." : cap(f.army) + " attacked at " + F.site + " without warning.", seen ? "g" : "b"]);
-    }
-    const ratio = (myStr * atk) / Math.max(1, foeStr * foeOff);
-    const dratio = (myStr * def) / Math.max(1, foeStr * foeOff);
-    let delta;
-    if (O.brk) {
-      const ok = roll(cl(38 + (ratio - 1) * 30 + trAdd(lead, "brk") + (dc.brk || 0), 8, 85));
-      delta = ok ? rr(9, 14) : -rr(1, 3);
-      ev.push([ok ? "Breakthrough at " + F.site + ". " + (lead ? lead.n : "Your army") + " is through their line." : "The breakthrough at " + F.site + " stalled in the second line of trenches.", ok ? "e" : "b"]);
-      if (ok) F.bigMonth = true;
-    } else if (O.enc) {
-      if (F.line < 55) { delta = rr(-1, 2); ev.push(["There is not enough ground at " + F.site + " to encircle anybody yet. Push the line first.", "n"]); }
-      else {
-        const target = theirs.slice().sort((a, b) => b.men - a.men)[0];
-        const ok = target && roll(cl(28 + (ratio - 1) * 25 + trAdd(lead, "enc") + (dc.enc || 0), 6, 80));
-        if (ok) {
-          const lost = Math.round(target.men * 0.6); target.men -= lost; casT += lost; F.encircled += 1; f.will = cl(foeWill(f) - 14); delta = rr(5, 8); F.bigMonth = true;
-          ev.push([cap(target.n) + " has been encircled at " + F.site + ". " + lost.toLocaleString() + " of them will not be going home.", "e"]);
-          chron(c, { cat: "war", big: true, line: c.rank >= 6 ? c.name : null, txt: "The " + target.n + " is encircled and destroyed at " + F.site + " in " + lowerName(w.name) + ": " + lost.toLocaleString() + " lost." });
-        } else { delta = -rr(2, 4); mine.forEach((a) => { a.org = cl(a.org - 20); }); ev.push(["The encirclement at " + F.site + " closed on nothing. Your armies are strung out and disorganised.", "b"]); }
-      }
-    } else if (O.push) delta = Math.max(-6, Math.min(8, Math.round((ratio - 1) * 6 + rr(-2, 2))));
-    else if (O.line) delta = O.line;
-    else delta = Math.max(-4, Math.min(2, Math.round((dratio - 1) * 3 + rr(-2, 1))));
-    if (lead && trAdd(lead, "swing") && delta < 0 && roll(35)) delta += trAdd(lead, "swing");
-    F.line = cl(F.line + delta);
-    /* the dead */
-    const heavy = F.bigMonth ? 3 : 1;
-    const cm = Math.round(foeStr * rr(15, 28) * O.cas * (pr.cas || 1) * (dc.cas || 1) * trMul(lead, "cas") * (1 - (A.medicine - 15) / 110) * heavy * foeOff);
-    const ct = Math.round(myStr * rr(15, 28) * (O.push ? 1.2 : 0.8) * atk * heavy);
-    spreadLoss(mine, cm); spreadLoss(theirs, ct);
-    casM += cm; casT += ct; F.cas = (F.cas || 0) + cm + ct;
-    f.strength = Math.max(0, f.strength - ct / 900);
-    f.will = cl(foeWill(f) - ct / 1600 - (F.line > 65 ? 1 : 0) + (F.line < 35 ? 1 : 0));
-    mine.forEach((a) => { a.morale = cl(a.morale + (delta > 0 ? 2 : delta < 0 ? -2 : 0)); a.org = cl(a.org + (O.line ? 8 : O.push ? -4 : 3)); if (F.bigMonth && a.xp < 3 && roll(20)) a.xp += 1; });
-    /* generals get hurt */
-    mine.forEach((a) => {
-      if (!a.cmd || a.wounded || !roll(1.5 * trMul(a, "wound") * (F.bigMonth ? 2 : 1))) return;
-      if (!a.cmd.id && roll(30)) {
-        chron(c, { cat: "deaths", txt: a.cmd.name + ", commanding the " + a.n + ", is killed at " + F.site + "." });
-        ev.push([a.cmd.name + ", who commanded the " + a.n + ", is dead. Somebody else has the army by nightfall.", "b"]);
-        a.cmd = commanderPool(c, c.village, 1).find((x) => !R.armies.some((b) => b.cmd && b.cmd.name === x.name)) || { name: freshName(c, null), id: null, traits: [pick(Object.keys(GEN_TRAITS))] };
-      } else {
-        a.wounded = rr(2, 5);
-        if (a.cmd.id) { const Lv = c.lives || (c.lives = {}); (Lv[a.cmd.id] || (Lv[a.cmd.id] = [])).push({ y: c.year, t: "was carried off the field at " + F.site + ", commanding the " + a.n }); }
-        ev.push([a.cmd.name + " was wounded at " + F.site + ". The " + a.n + " fights without its commander for a while.", "b"]);
-      }
-    });
-    /* occupation and sieges */
-    const was = F.occupied; F.occupied = F.line >= 70;
-    if (F.occupied && !was) { chron(c, { cat: "war", big: true, txt: cap(w.side) + " occupies the border country of " + (f.kind === "village" ? "the " + landOf(f.key) : f.name) + " past " + F.site + "." }); }
-    if (F.occupied && f.kind === "village") { const L2 = landAt(c, f.key); if (L2) { L2.prosper = cl(L2.prosper - 1); if (roll(12)) { const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: f.key, to: pick(VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== f.key && v.id !== c.village).map((v) => v.id)) || null, n: rr(1, 4), year: c.year }); } } }
-    if (F.line >= 92) { f.will = cl(foeWill(f) - 8); if (!F.siege) { F.siege = c.year; chron(c, { cat: "war", big: true, txt: "The siege of " + (f.kind === "village" ? vName2(f.key) : f.name) + " begins. " + cap(w.side) + " is at their gates." }); } }
-    if (F.line <= 8 && Ld) { Ld.prosper = cl(Ld.prosper - 2); if (!F.atWalls) { F.atWalls = c.year; chron(c, { cat: "war", big: true, txt: cap(f.army) + " reaches the walls of " + (villageExists(c, c.village) ? vName2(c.village) : "your home") + "." }); momentOf(c, "THEY ARE AT THE WALLS", cap(f.army) + " has broken through at " + F.site + ".", "blood"); } }
-    if (O.scorched) {
-      if (Ld) Ld.prosper = cl(Ld.prosper - 6);
-      theirs.forEach((a) => { a.supply = cl(a.supply - 25); a.morale = cl(a.morale - 5); });
-      const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: c.village, to: null, n: rr(3, 9), year: c.year });
-      if (!F.scorchedY) { F.scorchedY = c.year; R.crimes = (R.crimes || 0) + 1; chron(c, { cat: "war", big: true, line: c.rank >= 6 ? c.name : null, txt: cap(w.side) + " burns its own country behind it at " + F.site + ": bridges, granaries and villages, so the enemy finds nothing. The people who lived there find nothing either." }); VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, cap(w.side) + " burned its own country in " + c.year, -2); }); }
-    }
-    /* a battle big enough to have a name */
-    if (Math.abs(delta) >= 7 || F.bigMonth) {
-      const dead = cm + ct;
-      const fav = delta > 0;
-      chron(c, { cat: "war", big: dead >= 3000, txt: "The Battle of " + F.site.replace(/^the /, "") + ": " + (fav ? cap(w.side) + " breaks " + f.army : cap(f.army) + " breaks " + w.side) + ". " + dead.toLocaleString() + " dead." });
-      const pl = placeAdd(c, { n: "The field at " + F.site.replace(/^the /, ""), kind: "battlefield", vid: f.kind === "village" && F.line > 55 ? f.key : c.village, dead: 0, first: "The fighting in " + lowerName(w.name) + " came here" });
-      if (pl) pl.dead = (pl.dead || 0) + dead;
-    }
-    F.bigMonth = false;
-    /* they have had enough */
-    if (foeWill(f) <= 25 && !R.offers[f.key]) { R.offers[f.key] = c.year; ev.push([cap(f.name) + " has sent an envoy under a white flag. They want to talk.", "e"]); rumour(c, cap(f.name) + " is looking for a way out of " + lowerName(w.name) + ".", "suspected"); }
-  });
-  /* the home front */
-  R.cas.mine += casM; R.cas.theirs += casT;
-  R.exhaust = cl(R.exhaust + casM / 2200 + 0.5 * (pr.exhaust || 1) - (A.relief - 10) / 25);
-  if (Ld) {
-    Ld.prosper = cl(Ld.prosper - (pr.prosper || 0) / 1.5 + (A.relief >= 18 ? 0.5 : 0));
-    if (A.medicine < 10 && casM > 1500) { Ld.shortage = "medicine"; Ld.price = Math.min(260, Ld.price + 2); }
-    if (pr.refugees && roll(20)) { const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: c.village, to: pick(VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== c.village && !atWarWith(c, v.id).length).map((v) => v.id)) || null, n: rr(1, 3), year: c.year }); }
-  }
-  const lines = Object.values(R.fronts).filter((F) => liveFoes(w).some((f) => f.key === F.key));
-  if (lines.length) w.momentum = cl(Math.round(lines.reduce((s, F) => s + F.line, 0) / lines.length));
-  /* operations advance on their own */
-  (R.ops || []).forEach((op) => opCheck(c, L, op, ev));
-  /* anybody left? */
-  liveFoes(w).filter((f) => f.strength <= 0 || foeWill(f) <= 0).forEach((f) => { knockFoeOut(c, L, f, true); });
-  if (!quiet) ev.slice(0, 3).forEach(([t, k]) => P(L, t, k));
-  return { cas: casM, theirs: casT, events: ev };
 }
 /* what several months of it did to everybody else */
 function warAftermath(c, L, months, cas, theirs) {
@@ -6945,6 +6825,7 @@ function opStart(c, L, key, armyId) {
   const n = "OPERATION " + pick(OP_NAMES.filter((x) => !(R.ops || []).some((o) => o.n.endsWith(x))) || OP_NAMES);
   const op = { id: (R.opNo = (R.opNo || 0) + 1), n, key, phase: 0, started: c.year, month: R.month, age: 0, army: a ? a.id : null, done: null };
   R.ops.push(op);
+  cmdTally(c, "ops");
   if (a) a.front = key;
   F.order = "breakthrough";
   chron(c, { cat: "war", line: c.name, txt: n + " begins against " + (liveFoes(c.war).find((f) => f.key === key) || {}).name + " at " + F.site + "." });
@@ -6960,7 +6841,7 @@ function opCheck(c, L, op, ev) {
   if (met) {
     op.phase += 1; op.age = 0;
     if (op.phase >= OP_PHASES.length) {
-      op.done = "success";
+      op.done = "success"; cmdTally(c, "opsWon");
       chron(c, { cat: "war", big: true, line: c.name, txt: op.n + " succeeds: " + (f ? f.name : "the enemy") + " is out of the war." });
       c.standing = cl(c.standing + 8); addTitle(c, "Planner of " + op.n.replace("OPERATION ", "Operation ").toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()));
       momentOf(c, op.n, "Every phase, as planned.", "gold");
@@ -6991,25 +6872,33 @@ function useAsset(c, L, id, key) {
   const w = c.war; const R = w && w.room; const A = ASSETS.find((x) => x.id === id); if (!R || !A || !A.ok(c) || R.assets.includes(id)) return;
   const F = R.fronts[key]; const f = liveFoes(w).find((x) => x.key === key); if (!F || !f) return;
   R.assets.push(id);
-  const push = rr(A.push[0], A.push[1]); const dead = rr(A.kill[0], A.kill[1]);
-  F.line = cl(F.line + push); f.will = cl(foeWill(f) - A.fear); f.strength = Math.max(0, f.strength - dead / 900);
+  roomFix(c, R);
+  const dcA = docOf(R);
+  const push = Math.round(rr(A.push[0], A.push[1]) * (dcA.asset || 1)); const dead = Math.round(rr(A.kill[0], A.kill[1]) * (dcA.asset || 1));
+  F.line = cl(F.line + push); f.will = cl(foeWill(f) - A.fear * (dcA.fear || 1));
+  styleTally(c, R, "assets");
+  const breach = R.roe.forbidden && ["edo", "forbidden", "baryon"].includes(id);
+  if (breach) { polAdd(R, "civilian", -5); polAdd(R, "council", -5); P(L, "You broke your own rules of engagement: forbidden techniques were prohibited in this war. You prohibited them.", "b"); }
+  const blameX = (A.blame || 0) * (dcA.blame || 1) * (breach ? 2 : 1); f.strength = Math.max(0, f.strength - dead / 900);
   spreadLoss((R.foes[key] || []).filter((a) => a.men > 0), dead);
   R.cas.theirs += dead;
   if (A.self) A.self(c, L);
   const root = chron(c, { cat: "war", big: true, line: c.name, txt: cap(w.side) + " uses " + A.t + " at " + F.site + " in " + lowerName(w.name) + ". " + dead.toLocaleString() + " dead in an afternoon." });
   momentOf(c, A.n(c).toUpperCase(), dead.toLocaleString() + " dead at " + F.site + ".", "blood");
-  if (A.blame) {
-    newsItem(c, cap(w.side) + " has used " + A.t + " at " + F.site + ". Every major nation has condemned the action.", "WAR", true);
-    VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, cap(w.side) + " used " + A.t + " in " + c.year, -Math.round(A.blame / 2)); });
-    if (c.rogue) c.infamy = cl(c.infamy + A.blame); else c.standing = cl(c.standing - Math.round(A.blame / 3));
+  if (blameX) {
+    newsItem(c, cap(w.side) + " has used " + A.t + " at " + F.site + ". Every major nation has condemned the action." + (breach ? " It had promised not to." : ""), "WAR", true);
+    VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, cap(w.side) + " used " + A.t + " in " + c.year, -Math.round(blameX / 2)); });
+    if (c.rogue) c.infamy = cl(c.infamy + blameX); else c.standing = cl(c.standing - Math.round(blameX / 3));
     R.crimes = (R.crimes || 0) + 1;
     const I = c.iron;
-    if (I && !I.seated && roll(40 + A.blame * 2)) chron(c, { cat: "courts", cause: root, big: true, txt: "The Iron Scales opens an inquiry into the use of " + A.t + " at " + F.site + "." });
+    if (I && !I.seated && roll(40 + blameX * 2)) chron(c, { cat: "courts", cause: root, big: true, txt: "The Iron Scales opens an inquiry into the use of " + A.t + " at " + F.site + "." });
     else if (I && I.seated && typeof buildIronCase === "function" && roll(50)) { try { const k2 = buildIronCase(c, { kind: "orders" }); if (k2) I.docket.push(k2); } catch (e) { /* not every era has the case */ } }
   } else newsItem(c, cap(w.side) + " turned " + F.site + " with " + A.t + ".", "WAR", true);
 }
 
 /* ---- the table where it ends ---- */
+/* what you cannot ask for when you came to the table because you had to */
+const WEAK_BARRED = ["annex", "abdicate", "disarm", "reparations"];
 const PEACE_TERMS = [
   { id: "annex", g: "Territory", n: "Annex their land", w: 60, kind: "land", need: (F) => F.line >= 85, needTxt: "your line past 85", not: ["return"] },
   { id: "return", g: "Territory", n: "Return occupied ground", w: -10, not: ["annex"] },
@@ -7028,12 +6917,15 @@ const PEACE_TERMS = [
 function peaceOdds(c, key, terms) {
   const w = c.war; const R = w && w.room; const f = w && (w.foes || []).find((x) => x.key === key); if (!R || !f) return 0;
   const F = R.fronts[key] || { line: 50 };
-  const wsum = terms.reduce((s, t) => s + ((PEACE_TERMS.find((x) => x.id === t) || {}).w || 0), 0);
-  return cl(Math.round(45 + (F.line - 50) * 1.4 + (65 - foeWill(f)) * 0.9 + (R.mediated ? 10 : 0) - wsum), 3, 97);
+  const occ = (R.occ || {})[key];
+  const wsum = terms.reduce((s, t) => { let x = (PEACE_TERMS.find((y) => y.id === t) || {}).w || 0; if (t === "annex" && occ && occ.mode === "annex" && occ.control >= 50) x = 20; if (t === "crimes" && R.enemyCrimes) x -= 10; return s + x; }, 0);
+  return cl(Math.round(45 + (F.line - 50) * 1.4 + (65 - foeWill(f)) * 0.9 + (R.mediated ? 10 : 0) + (R.weak ? 20 : 0) - wsum), 3, 97);
 }
 function peaceTable(c, L, key, terms) {
   const w = c.war; const R = w && w.room; const f = w && liveFoes(w).find((x) => x.key === key); if (!R || !f) return false;
   const F = R.fronts[key];
+  if (R.weak) terms = terms.filter((t) => !WEAK_BARRED.includes(t));
+  R.proposed = R.clock || 0;
   const odds = peaceOdds(c, key, terms);
   if (!roll(odds)) {
     f.will = cl(foeWill(f) + 4);
@@ -7058,6 +6950,8 @@ function peaceTable(c, L, key, terms) {
     done.push(T2.n.toLowerCase());
   });
   f.peace = true;
+  cmdTally(c, "peaces"); styleTally(c, R, "peace", 3);
+  if (R.occ && R.occ[f.key] && terms.includes("return")) delete R.occ[f.key];
   knockFoeOut(c, L, f, true);
   const harsh = terms.some((t) => ["annex", "abdicate", "disarm"].includes(t));
   if (f.kind === "village") { kageDecide(c, f.key, "signed", "signed " + named); if (f.leaderName) remember(c, f.leaderName, harsh ? "You dictated the peace to my village" : "You made a peace my village could live with", harsh ? -6 : 4); }
@@ -7096,14 +6990,16 @@ function roomRole(c, L, act, key) {
     if (roll(role === "genin" ? 9 : 6) && typeof injure === "function") injure(c, L, "It happened at " + F.site + ", in " + lowerName(w.name) + ".");
     P(L, (role === "genin" ? "You held your place in the line at " : role === "chunin" ? "Your squad took and held a ridge at " : "Your company pushed through at ") + F.site + ". " + (d ? "The line moved " + d + "." : "The line did not move. You did not lose it either."), d ? "g" : "n");
   } else if (act === "sabotage") {
-    (R.foes[F.key] || []).forEach((a) => { a.supply = cl(a.supply - 20); a.morale = cl(a.morale - 6); });
+    const cv = docOf(roomFix(c, R)).covert || 1; styleTally(c, R, "covert");
+    (R.foes[F.key] || []).forEach((a) => { a.supply = cl((a.supply || 70) - Math.round(20 * cv)); a.morale = cl(a.morale - Math.round(6 * cv)); });
     P(L, "Your team burned a supply depot behind their lines at " + F.site + ". Their armies will be hungry for a month.", "e");
   } else if (act === "assassinate") {
     const tg = (R.foes[F.key] || []).filter((a) => a.men > 0 && a.cmd)[0];
-    if (tg && roll(40)) { const old = tg.cmd.name; if (tg.cmd.id && NAMED[tg.cmd.id]) { tg.wounded = 4; P(L, "You reached " + old + ". They lived, but they will not be commanding the " + tg.n + " for a while.", "e"); } else { tg.cmd = { name: freshName(c, null), id: null, traits: [] }; chron(c, { cat: "war", line: c.name, txt: old + ", commanding the " + tg.n + ", is assassinated at " + F.site + "." }); P(L, old + " is dead. The " + tg.n + " has a commander nobody has heard of.", "e"); } }
+    styleTally(c, roomFix(c, R), "covert");
+    if (tg && roll(40 * (docOf(R).covert || 1))) { const old = tg.cmd.name; if (tg.cmd.id && NAMED[tg.cmd.id]) { tg.wounded = 4; P(L, "You reached " + old + ". They lived, but they will not be commanding the " + tg.n + " for a while.", "e"); } else { tg.cmd = { name: freshName(c, null), id: null, traits: [] }; chron(c, { cat: "war", line: c.name, txt: old + ", commanding the " + tg.n + ", is assassinated at " + F.site + "." }); P(L, old + " is dead. The " + tg.n + " has a commander nobody has heard of.", "e"); } }
     else { c.health = cl(c.health - rr(10, 25)); P(L, "The assassination failed. You got out. Two of your team did not.", "b"); }
   } else if (act === "intel") {
-    R.intel = cl(R.intel + 22);
+    R.intel = cl(R.intel + Math.round(22 * (docOf(roomFix(c, R)).covert || 1))); styleTally(c, R, "covert");
     P(L, "A raid on their signals post at " + F.site + ". You know their order of battle now, or most of it.", "g");
   } else if (act === "inquiry") {
     const I = c.iron; if (I) I.legit = cl((I.legit || 50) + 3);
@@ -7115,6 +7011,609 @@ function roomRole(c, L, act, key) {
   }
 }
 function v112Tick(c, L) { safeTick(tradeTick, c, L); }
+
+/* ============================================================
+   11.3 — THE ART OF WAR
+   Deeper, not wider. Doctrines that change how a war is fought, armies
+   with histories, fronts with ground and weather and roads under them,
+   supply that comes from somewhere, a council that argues, a government
+   that can lose patience, an enemy with plans of its own, rules you can
+   break, land you have to hold after you take it, and a record of how
+   you commanded that outlives you.
+   ============================================================ */
+const DOCTRINES_WAR = {
+  shock: { n: "Shock doctrine", d: "Faster attacks and better breakthroughs. Higher casualties, heavy supply use.", atk: 1.18, brk: 15, cas: 1.22, supply: -3 },
+  fortress: { n: "Fortress doctrine", d: "Much stronger defence, better against invasion. Offensives crawl.", def: 1.45, atk: 0.85, push: 0.6 },
+  shadow: { n: "Shadow doctrine", d: "ANBU and intelligence first: sabotage, assassination, knowing more. Weaker armies in the line.", atk: 0.88, def: 0.95, covert: 1.6, intel: 2 },
+  beast: { n: "Beast doctrine", d: "Strategic assets hit harder and frighten more. The politics of it are far worse.", asset: 1.4, fear: 1.5, blame: 1.6 },
+  people: { n: "People's defence", d: "Militia and resilience. The country takes less damage and the ranks refill. Poor at attacking.", men: 1.1, prosper: 0.5, exhaust: 0.7, atk: 0.85, def: 1.1 },
+};
+const DOCTRINE_OLD = { quality: "shock", mass: "people", depth: "fortress", mobile: "shock" };
+/* a doctrine gets better the longer you actually fight by it */
+function docOf(R) {
+  const D = DOCTRINES_WAR[R.doctrine] || DOCTRINES_WAR[DOCTRINE_OLD[R.doctrine]];
+  if (!D) return {};
+  const m = Math.min(1.5, 1 + (R.docMonths || 0) / 24);
+  const out = { ...D };
+  ["atk", "def", "cas", "men", "asset", "fear", "blame", "covert", "push"].forEach((k) => { if (typeof D[k] === "number") out[k] = 1 + (D[k] - 1) * m; });
+  ["brk", "enc", "intel", "supply"].forEach((k) => { if (typeof D[k] === "number") out[k] = D[k] * m; });
+  out.mastery = m;
+  return out;
+}
+GEN_TRAITS.Political = { d: "Will not sacrifice their clan's forces", cas: 0.7, atk: 0.9 };
+
+/* ---- the ground under a front ---- */
+const TERRAIN = {
+  Mountains: { def: 1.25, atk: 0.9, d: "Defenders have every advantage." },
+  Forest: { def: 1.1, amb: true, d: "Ambushes, on both sides." },
+  Plains: { atk: 1.15, def: 0.9, flank: 10, d: "Room to manoeuvre, and room to die in." },
+  River: { cross: true, d: "Whoever crosses without a bridge pays for it." },
+  Village: { def: 1.15, civ: true, d: "People still live here." },
+  Fortress: { def: 1.5, atk: 0.8, d: "Walls older than the villages." },
+};
+const SITE_TERRAIN = { "Kannabi Bridge": "River", "the Kikyo Pass": "Mountains", "the Kamizuru Flats": "Plains", "the Valley of Clouds": "Mountains", "the Tenchi Bridge": "River", "the Rain border": "Village", "the Grass corridor": "Plains", "the Salt Flats": "Plains", "Sanshu Beach": "Plains", "the Northern Hills": "Forest" };
+const terrainOf = (site) => SITE_TERRAIN[site] || Object.keys(TERRAIN)[String(site || "").split("").reduce((a, ch) => a + ch.charCodeAt(0), 0) % 6];
+const WEATHER = { Clear: { d: "Clear." }, Rain: { atk: 0.92, d: "Rain. Rivers rise, roads turn to mud." }, Snow: { atk: 0.85, supply: -3, d: "Snow. Everything is slower and everybody is cold." }, Fog: { intel: -10, amb: true, d: "Fog. Nobody sees anybody coming." }, Storm: { atk: 0.9, def: 0.95, d: "A storm. Nothing works the way it should." }, Heat: { supply: -2, d: "Heat. Water matters more than kunai." } };
+function weatherFor(month) {
+  const m = (month % 12 + 12) % 12;
+  const pool = m <= 1 || m === 11 ? ["Snow", "Snow", "Clear", "Fog", "Storm"] : m >= 5 && m <= 7 ? ["Heat", "Clear", "Clear", "Storm", "Rain"] : ["Clear", "Rain", "Fog", "Clear", "Rain"];
+  return pick(pool);
+}
+const DEPOT_NAMES = ["the Northern Depot", "the River Depot", "the Old Mill Depot", "the Pass Depot", "the Cedar Depot", "the Crossroads Depot", "the Salt Road Depot", "the Hill Fort Depot"];
+const ROAD_NAMES = ["The Northern Road", "The Salt Road", "The Old Imperial Road", "The River Road", "The Cedar Road"];
+const EOP_NAMES = ["STONE HAMMER", "IRON CLOUD", "SAND COFFIN", "BLACK MIST", "THUNDER GATE", "RED TIDE", "FALLING PEAK", "GREY WOLF", "DEEP ROOT"];
+
+/* everything 11.3 hangs on a room, added to rooms opened before it existed too */
+function roomFix(c, R) {
+  if (!R) return R;
+  if (R.clock == null) R.clock = R.month || 0;
+  if (!R.pol) R.pol = { council: 60, daimyo: 60, military: 60, civilian: 62, clan: 60 };
+  if (!R.roe) R.roe = { prisoners: true, medical: true, civilians: true, forbidden: false, neutral: true };
+  if (!R.routes) R.routes = {};
+  if (!R.eplans) R.eplans = {};
+  if (!R.occ) R.occ = {};
+  if (!R.exThr) R.exThr = [];
+  if (!R.beat) R.beat = {};
+  if (!R.style) R.style = { attack: 0, defend: 0, encircle: 0, covert: 0, assets: 0, scorched: 0, peace: 0 };
+  if (DOCTRINE_OLD[R.doctrine]) R.doctrine = DOCTRINE_OLD[R.doctrine];
+  Object.values(R.fronts || {}).forEach((F) => {
+    if (!F.terrain) F.terrain = terrainOf(F.site);
+    if (!F.infra) F.infra = { road: true, bridge: F.terrain === "River" ? true : null, depot: true, medical: false };
+    if (!F.weather) F.weather = weatherFor(R.clock);
+    if (!R.routes[F.key]) R.routes[F.key] = { depot: pick(DEPOT_NAMES), secure: rr(55, 80), cut: 0 };
+  });
+  if (!R.foeDoc) R.foeDoc = {};
+  Object.keys(R.foes || {}).forEach((k) => { if (!R.foeDoc[k]) R.foeDoc[k] = pick(Object.keys(DOCTRINES_WAR)); });
+  if (!R.road && Object.keys(R.fronts || {}).length) { const k = pick(Object.keys(R.fronts)); R.road = { n: pick(ROAD_NAMES), front: k, owner: null }; }
+  (R.armies || []).forEach((a) => { if (a.formed == null) { a.formed = c.year; a.battles = 0; a.wins = 0; a.losses = 0; a.withdrawals = 0; a.honors = []; } });
+  return R;
+}
+const approvalOf = (R) => Math.round((R.pol.council + R.pol.daimyo + R.pol.military + R.pol.civilian + R.pol.clan) / 5);
+const polAdd = (R, k, v) => { if (R && R.pol) R.pol[k] = cl(R.pol[k] + v); };
+function commandRec(c) {
+  if (!c.command) c.command = { wars: 0, battles: 0, wins: 0, defeats: 0, peaces: 0, lost: 0, ops: 0, opsWon: 0, style: { attack: 0, defend: 0, encircle: 0, covert: 0, assets: 0, scorched: 0, peace: 0 } };
+  return c.command;
+}
+const cmdTally = (c, k, n) => { if (warRole(c) !== "kage") return; const C = commandRec(c); C[k] = (C[k] || 0) + (n == null ? 1 : n); };
+const styleTally = (c, R, k, n) => { if (R && R.style) R.style[k] = (R.style[k] || 0) + (n || 1); if (warRole(c) === "kage") { const C = commandRec(c); C.style[k] = (C.style[k] || 0) + (n || 1); } };
+const COMMAND_DOCTRINES = {
+  attack: ["The Iron Spear", "emphasized rapid concentration against weak points"],
+  defend: ["The Stone Wall", "held ground at any cost and let the enemy break themselves on it"],
+  encircle: ["The Closing Hand", "never fought an army it could surround instead"],
+  covert: ["The Quiet Blade", "won wars behind the lines before they were fought in front of them"],
+  assets: ["The Beast's Leash", "relied on weapons nobody else was willing to use"],
+  scorched: ["The Ash Road", "left nothing behind it for anybody"],
+  peace: ["The Open Hand", "ended wars at the table as often as in the field"],
+};
+function commandDoctrine(C) {
+  if (!C || !C.style) return null;
+  const w = { ...C.style }; w.assets *= 4; w.scorched *= 3; w.encircle *= 3; w.covert *= 2; w.peace *= 6;
+  const tot = Object.values(C.style).reduce((a, b) => a + b, 0);
+  if (tot < 10) return null;
+  const k = Object.entries(w).sort((a, b) => b[1] - a[1])[0][0];
+  return { k, n: COMMAND_DOCTRINES[k][0], d: COMMAND_DOCTRINES[k][1] };
+}
+
+/* ---- the enemy has plans too ---- */
+function eplanMake(c, R, f) {
+  const ts = (R.foes[f.key] || []).filter((a) => a.men > 0); if (!ts.length) return null;
+  const mine = R.armies.filter((a) => a.front === f.key && a.men > 0);
+  const tgt = mine.length && roll(55) ? mine.slice().sort((a, b) => b.men - a.men)[0] : null;
+  const P2 = { n: "OPERATION " + pick(EOP_NAMES), key: f.key, target: tgt ? tgt.id : null, obj: tgt ? "Destroy your " + tgt.n : "Seize " + (R.fronts[f.key] || {}).site, forces: Math.round(ts.reduce((s2, a) => s2 + a.men, 0) * (0.6 + Math.random() * 0.3)), start: R.clock + rr(2, 4), run: 0, done: null, line0: null };
+  R.eplans[f.key] = P2;
+  return P2;
+}
+function eplanSeen(R, P2) {
+  if (!P2) return null;
+  if (R.intel < 35) return { lvl: 0, t: "ENEMY STRATEGIC INTENT UNKNOWN" };
+  if (R.intel < 55) return { lvl: 1, t: "Likely objective: " + P2.obj.replace(/^Seize /, "").replace(/^Destroy your /, "your ") + "." };
+  if (R.intel < 75) return { lvl: 2, t: "The enemy is preparing " + P2.n + "." };
+  return { lvl: 3, t: P2.n + ". Objective: " + P2.obj.charAt(0).toLowerCase() + P2.obj.slice(1) + ". Forces: " + (Math.round(P2.forces / 1000) * 1000).toLocaleString() + " estimated. Expected start: " + Math.max(0, P2.start - R.clock) + "–" + (Math.max(0, P2.start - R.clock) + 2) + " months." };
+}
+
+/* ---- one month of your side of the war ---- */
+function warMonth(c, L, quiet) {
+  const w = c.war; const R = roomFix(c, w && w.room); if (!R) return { cas: 0, theirs: 0, events: [] };
+  R.month += 1; R.clock += 1;
+  if (R.doctrine) R.docMonths = (R.docMonths || 0) + 1;
+  const A = R.alloc; const pr = PRIORITIES[R.priority] || {}; const dc = docOf(R);
+  const Ld = landAt(c, c.village);
+  const ev = [];
+  let casM = 0, casT = 0;
+  const refusing = R.refuse && R.clock <= R.refuse && R.pol.military < 65;
+  const grow = (pr.men || 1) * (dc.men ? 1 + (dc.men - 1) / 12 : 1);
+  R.armies.forEach((a) => {
+    if (a.men > 0) a.men = Math.round(a.men * grow + (a.men < 3000 ? 400 : 0));
+    const rt = R.routes[a.front] || { cut: 0 };
+    const F0 = R.fronts[a.front] || {};
+    const Wx = WEATHER[F0.weather] || {};
+    a.supply = cl(a.supply + Math.round((A.food - 20) / 4) + rr(-2, 2) - (F0.line > 70 ? 3 : 0) + (dc.supply || 0) + (Wx.supply || 0) + (rt.cut ? -15 : 2) + (R.road && R.road.owner === "us" ? 4 : R.road && R.road.owner === "them" ? -3 : 0) + (F0.infra && F0.infra.depot === false ? -5 : 0));
+    a.morale = cl(a.morale + trAdd(a, "morale") / 3 + (A.relief >= 15 ? 1 : 0) - (R.exhaust > 70 ? 2 : 0) + (F0.infra && F0.infra.medical ? 1 : 0));
+    if (a.wounded) a.wounded -= 1;
+  });
+  R.research = Math.min(60, R.research + A.research / 20);
+  R.intel = cl(R.intel + (A.intel - 10) / 4 - 1 + R.armies.reduce((s2, a) => s2 + trAdd(a, "intel"), 0) / 3 + (dc.intel || 0));
+  let netAll = 0;
+  liveFoes(w).forEach((f) => {
+    if (!R.foes[f.key]) { roomAddFoe(c, R, f); roomFix(c, R); ev.push([cap(f.name) + " has entered the war. A new front is open at " + f.front + ".", "b"]); }
+    const F = R.fronts[f.key];
+    F.weather = weatherFor(R.clock);
+    const Tn = TERRAIN[F.terrain] || {}; const Wx = WEATHER[F.weather] || {};
+    let order = F.order;
+    if (refusing && ["attack", "breakthrough", "encircle"].includes(order)) { order = "hold"; if (!F.refusedMsg) { F.refusedMsg = R.clock; ev.push(["The commanders at " + F.site + " have refused another offensive. They are holding, and they are not asking you.", "b"]); } }
+    const O = ORDERS[order] || ORDERS.hold;
+    styleTally(c, R, O.push ? (O.enc ? "encircle" : "attack") : O.scorched ? "scorched" : "defend");
+    const mine = R.armies.filter((a) => a.front === f.key && a.men > 0);
+    const theirs = (R.foes[f.key] || []).filter((a) => a.men > 0);
+    const lead = mine.slice().sort((a, b) => b.men - a.men)[0];
+    const elead = theirs.slice().sort((a, b) => b.men - a.men)[0];
+    const myStr = mine.reduce((s2, a) => s2 + armyStr(a, R), 0) + 2;
+    let foeStr = theirs.reduce((s2, a) => s2 + (a.men / 1000) * (a.morale / 70) * (0.55 + (a.supply || 70) / 170) * trMul(a, "atk"), 0) * (0.6 + foeWill(f) / 175) + f.pressure / 3;
+    const edoc = (R.foeDoc || {})[f.key];
+    if (edoc === "fortress" && O.push) foeStr *= 1.15;
+    if (edoc === "shock") foeStr *= 1.06;
+    const bridgeOut = F.terrain === "River" && F.infra.bridge === false;
+    const atk = O.atk * (1 + (A.weapons - 20) / 100) * (pr.atk || 1) * (dc.atk || 1) * trMul(lead, "atk") * (Tn.atk || 1) * (Wx.atk || 1) * (bridgeOut ? 0.7 : 1) * (F.terrain === "River" && !bridgeOut ? 0.95 : 1);
+    const def = O.def * (1 + (A.fort - 15) / 90) * (pr.def || 1) * (dc.def || 1) * trMul(lead, "def") * (Tn.def || 1) * (Wx.def || 1);
+    /* their plan, when it comes */
+    let foeOff = 1;
+    let P2 = R.eplans[f.key];
+    if (!P2 || P2.done) { if (!P2 || R.clock - (P2.doneAt || 0) >= rr(3, 6)) P2 = eplanMake(c, R, f); }
+    if (P2 && !P2.done && R.clock >= P2.start) {
+      if (!P2.run) { P2.line0 = F.line; const seen = R.intel >= 55; ev.push([(seen ? "As your intelligence warned, " : "") + cap(f.name) + " has launched " + P2.n + ". Objective: " + P2.obj.charAt(0).toLowerCase() + P2.obj.slice(1) + ".", seen ? "n" : "b"]); if (!seen) momentOf(c, P2.n, cap(f.name) + " attacks at " + F.site + ".", "blood"); }
+      P2.run += 1;
+      const ready = R.intel >= 55 && ["hold", "defend"].includes(order);
+      foeOff = ready ? 1.1 : 1.6;
+      if (P2.target) { const t = R.armies.find((a) => a.id === P2.target && a.men > 0); if (t) { const l = Math.round(t.men * (ready ? 0.05 : 0.15)); t.men -= l; casM += l; } }
+      if (P2.run >= 2) {
+        P2.done = F.line < (P2.line0 || 50) - 4 ? "success" : "failed"; P2.doneAt = R.clock;
+        chron(c, { cat: "war", big: P2.done === "success", txt: P2.n + ", " + f.name + "'s offensive at " + F.site + ", " + (P2.done === "success" ? "succeeds: the line gives " + ((P2.line0 || 50) - F.line) + "." : "fails against " + w.side + ".") });
+        ev.push([P2.n + (P2.done === "success" ? " has pushed your line back at " + F.site + "." : " has broken on your defences at " + F.site + "."), P2.done === "success" ? "b" : "e"]);
+      }
+    } else if (roll(10)) {
+      const seen = roll(R.intel);
+      foeOff = seen ? 0.85 : Wx.amb || Tn.amb ? 1.45 : 1.3;
+      ev.push([seen ? "Your sensors saw " + (theirs[0] ? theirs[0].n : f.army) + " massing at " + F.site + " a week early. You were waiting for them." : cap(f.army) + " attacked at " + F.site + (Wx.amb ? " out of the fog" : "") + " without warning.", seen ? "g" : "b"]);
+    }
+    /* a reckless enemy commander who is losing does something desperate */
+    if (elead && F.line >= 65 && elead.cmd && (elead.cmd.traits || []).some((t) => t === "Reckless" || t === "Aggressive") && roll(25)) { foeOff *= 1.5; ev.push([elead.cmd.name + " has thrown everything the " + elead.n + " has left at " + F.site + ". It is a desperate counterattack and it is costing them.", "b"]); F.desperate = true; }
+    const ratio = (myStr * atk) / Math.max(1, foeStr * foeOff);
+    const dratio = (myStr * def) / Math.max(1, foeStr * foeOff);
+    let delta; let brokeThrough = false;
+    if (O.brk) {
+      const ok = roll(cl(38 + (ratio - 1) * 30 + trAdd(lead, "brk") + (dc.brk || 0) + (Tn.flank || 0), 8, 88));
+      delta = ok ? rr(9, 14) : -rr(1, 3);
+      ev.push([ok ? "Breakthrough at " + F.site + ". " + (lead ? lead.n : "Your army") + " is through their line." : "The breakthrough at " + F.site + " stalled in the second line of trenches.", ok ? "e" : "b"]);
+      if (ok) { F.bigMonth = true; brokeThrough = true; }
+    } else if (O.enc) {
+      if (F.line < 55) { delta = rr(-1, 2); ev.push(["There is not enough ground at " + F.site + " to encircle anybody yet. Push the line first.", "n"]); }
+      else {
+        const target = theirs.slice().sort((a, b) => b.men - a.men)[0];
+        const ok = target && roll(cl(28 + (ratio - 1) * 25 + trAdd(lead, "enc") + (dc.enc || 0), 6, 80));
+        const slippery = target && target.cmd && (target.cmd.traits || []).some((t) => ["Brilliant", "Cautious", "Strategic"].includes(t)) && roll(50);
+        if (ok && slippery) {
+          const lost = Math.round(target.men * 0.25); target.men -= lost; casT += lost; delta = rr(3, 5);
+          ev.push([target.cmd.name + " saw the encirclement coming and pulled the " + target.n + " out of " + F.site + " before it closed. They left " + lost.toLocaleString() + " behind.", "n"]);
+        } else if (ok) {
+          const lost = Math.round(target.men * 0.6); target.men -= lost; casT += lost; F.encircled += 1; f.will = cl(foeWill(f) - 14); delta = rr(5, 8); F.bigMonth = true;
+          ev.push([cap(target.n) + " has been encircled at " + F.site + ". " + lost.toLocaleString() + " of them will not be going home.", "e"]);
+          chron(c, { cat: "war", big: true, line: c.rank >= 6 ? c.name : null, txt: "The " + target.n + " is encircled and destroyed at " + F.site + " in " + lowerName(w.name) + ": " + lost.toLocaleString() + " lost." });
+          mine.forEach((a) => { a.honors.push({ n: "Encirclement at " + F.site.replace(/^the /, ""), y: c.year, r: "Victory" }); });
+        } else { delta = -rr(2, 4); mine.forEach((a) => { a.org = cl(a.org - 20); }); ev.push(["The encirclement at " + F.site + " closed on nothing. Your armies are strung out and disorganised.", "b"]); }
+      }
+    } else if (O.push) delta = Math.max(-6, Math.min(8, Math.round((ratio - 1) * 6 + rr(-2, 2))));
+    else if (O.line) delta = O.line;
+    else delta = Math.max(-4, Math.min(2, Math.round((dratio - 1) * 3 + rr(-2, 1))));
+    if (delta > 0 && dc.push) delta = Math.max(1, Math.round(delta * dc.push));
+    if (lead && trAdd(lead, "swing") && delta < 0 && roll(35)) delta += trAdd(lead, "swing");
+    if (bridgeOut && delta > 0) delta = Math.round(delta * 0.6);
+    F.line = cl(F.line + delta);
+    netAll += delta;
+    /* the dead */
+    const heavy = F.bigMonth ? 3 : 1;
+    const elPol = elead && (elead.cmd && (elead.cmd.traits || []).includes("Political"));
+    const cm = Math.round(foeStr * rr(15, 28) * O.cas * (pr.cas || 1) * (dc.cas || 1) * trMul(lead, "cas") * (1 - (A.medicine - 15) / 110) * (F.infra.medical ? 0.85 : 1) * (R.roe.medical ? 0.97 : 1) * heavy * foeOff);
+    const ct = Math.round(myStr * rr(15, 28) * (O.push ? 1.2 : 0.8) * atk * heavy * (elPol ? 0.6 : 1) * (F.desperate ? 1.5 : 1));
+    F.desperate = false;
+    spreadLoss(mine, cm); spreadLoss(theirs, ct);
+    casM += cm; casT += ct; F.cas = (F.cas || 0) + cm + ct;
+    f.strength = Math.max(0, f.strength - ct / 900);
+    f.will = cl(foeWill(f) - ct / 1600 - (F.line > 65 ? 1 : 0) + (F.line < 35 ? 1 : 0) - (R.roe.prisoners ? 0.5 : 0));
+    mine.forEach((a) => { a.morale = cl(a.morale + (delta > 0 ? 2 : delta < 0 ? -2 : 0)); a.org = cl(a.org + (O.line ? 8 : O.push ? -4 : 3)); if (F.bigMonth && a.xp < 3 && roll(20)) a.xp += 1; });
+    /* generals get hurt */
+    mine.forEach((a) => {
+      if (!a.cmd || a.wounded || !roll(1.5 * trMul(a, "wound") * (F.bigMonth ? 2 : 1))) return;
+      if (!a.cmd.id && roll(30)) {
+        chron(c, { cat: "deaths", txt: a.cmd.name + ", commanding the " + a.n + ", is killed at " + F.site + "." });
+        ev.push([a.cmd.name + ", who commanded the " + a.n + ", is dead. Somebody else has the army by nightfall.", "b"]);
+        cmdTally(c, "lost");
+        a.cmd = commanderPool(c, c.village, 1).find((x) => !R.armies.some((b2) => b2.cmd && b2.cmd.name === x.name)) || { name: freshName(c, null), id: null, traits: [pick(Object.keys(GEN_TRAITS))] };
+      } else {
+        a.wounded = rr(2, 5);
+        if (a.cmd.id) { const Lv = c.lives || (c.lives = {}); (Lv[a.cmd.id] || (Lv[a.cmd.id] = [])).push({ y: c.year, t: "was carried off the field at " + F.site + ", commanding the " + a.n }); }
+        ev.push([a.cmd.name + " was wounded at " + F.site + ". The " + a.n + " fights without its commander for a while.", "b"]);
+      }
+    });
+    /* occupation, sieges, the walls */
+    const was = F.occupied; F.occupied = F.line >= 70;
+    if (F.occupied && !was) {
+      chron(c, { cat: "war", big: true, txt: cap(w.side) + " occupies the border country of " + (f.kind === "village" ? "the " + landOf(f.key) : f.name) + " past " + F.site + "." });
+      if (!R.occ[f.key]) { R.occ[f.key] = { mode: null, control: 30, resist: 20, since: c.year, site: F.site, land: f.kind === "village" ? landOf(f.key) : f.name, name: f.name }; ev.push(["You hold ground in " + (f.kind === "village" ? "the " + landOf(f.key) : f.name) + " now. Somebody has to decide how it is governed.", "e"]); }
+    }
+    if (F.occupied && f.kind === "village") { const L2 = landAt(c, f.key); if (L2) { L2.prosper = cl(L2.prosper - 1); if (roll(R.roe.civilians ? 7 : 14)) { const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: f.key, to: pick(VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== f.key && v.id !== c.village).map((v) => v.id)) || null, n: rr(1, 4), year: c.year }); } } }
+    if (F.line >= 92) { f.will = cl(foeWill(f) - 8); if (!F.siege) { F.siege = c.year; chron(c, { cat: "war", big: true, txt: "The siege of " + (f.kind === "village" ? vName2(f.key) : f.name) + " begins. " + cap(w.side) + " is at their gates." }); mine.forEach((a) => a.honors.push({ n: "Siege of " + (f.kind === "village" ? vName2(f.key) : f.name), y: c.year, r: "Victory" })); } }
+    if (F.line <= 8 && Ld) { Ld.prosper = cl(Ld.prosper - 2); if (!F.atWalls) { F.atWalls = c.year; chron(c, { cat: "war", big: true, txt: cap(f.army) + " reaches the walls of " + (villageExists(c, c.village) ? vName2(c.village) : "your home") + "." }); momentOf(c, "THEY ARE AT THE WALLS", cap(f.army) + " has broken through at " + F.site + ".", "blood"); } }
+    if (O.scorched) {
+      if (Ld) Ld.prosper = cl(Ld.prosper - 6);
+      theirs.forEach((a) => { a.supply = cl(a.supply - 25); a.morale = cl(a.morale - 5); });
+      const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: c.village, to: null, n: rr(3, 9), year: c.year });
+      if (!F.scorchedY) { F.scorchedY = c.year; R.crimes = (R.crimes || 0) + 1; chron(c, { cat: "war", big: true, line: c.rank >= 6 ? c.name : null, txt: cap(w.side) + " burns its own country behind it at " + F.site + ": bridges, granaries and villages, so the enemy finds nothing. The people who lived there find nothing either." }); VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, cap(w.side) + " burned its own country in " + c.year, -2); }); if (R.roe.civilians) { polAdd(R, "civilian", -6); polAdd(R, "council", -4); ev.push(["Scorched earth breaks your own rules of engagement. Civilian settlements were meant to be protected.", "b"]); } F.infra.bridge = F.infra.bridge === true ? false : F.infra.bridge; }
+    }
+    /* a battle big enough to have a name, and the armies that were in it */
+    if (Math.abs(delta) >= 7 || F.bigMonth) {
+      const dead = cm + ct;
+      const fav = delta > 0;
+      const bn = "Battle of " + F.site.replace(/^the /, "");
+      chron(c, { cat: "war", big: dead >= 3000, txt: "The " + bn + ": " + (fav ? cap(w.side) + " breaks " + f.army : cap(f.army) + " breaks " + w.side) + ". " + dead.toLocaleString() + " dead." });
+      const pl = placeAdd(c, { n: "The field at " + F.site.replace(/^the /, ""), kind: "battlefield", vid: f.kind === "village" && F.line > 55 ? f.key : c.village, dead: 0, first: "The fighting in " + lowerName(w.name) + " came here" });
+      if (pl) pl.dead = (pl.dead || 0) + dead;
+      mine.forEach((a) => {
+        a.battles += 1; if (fav) a.wins += 1; else a.losses += 1; if (O.line) a.withdrawals += 1;
+        a.honors.push({ n: bn, y: c.year, r: O.line ? "Withdrawal" : fav ? "Victory" : "Defeat" });
+        if (a.honors.length > 14) a.honors.shift();
+        if (a.cmd && a.cmd.name) remember(c, a.cmd.name, fav ? "We won at " + F.site.replace(/^the /, "") + " under your orders" : "You sent us into " + F.site.replace(/^the /, "") + " and we lost", fav ? 1 : -1);
+      });
+      cmdTally(c, "battles"); cmdTally(c, fav ? "wins" : "defeats");
+      /* beat the same enemy commander often enough and it becomes personal */
+      if (fav && elead && elead.cmd && elead.cmd.name) {
+        R.beat[elead.cmd.name] = (R.beat[elead.cmd.name] || 0) + 1;
+        if (R.beat[elead.cmd.name] === 3 && warRole(c) === "kage") {
+          remember(c, elead.cmd.name, "You beat me three times in " + lowerName(w.name), -4);
+          chron(c, { cat: "war", line: c.name, txt: elead.cmd.name + ", commanding the " + elead.n + ", now considers " + c.name + " a personal rival." });
+          rumour(c, elead.cmd.name + " is said to keep a copy of " + c.name + "'s orders on their desk.", "rumoured", elead.cmd.name);
+          ev.push([elead.cmd.name + " now considers you their personal rival.", "e"]);
+          if (!(elead.cmd.traits || []).includes("Relentless")) elead.cmd.traits = (elead.cmd.traits || []).concat(["Relentless"]).slice(-3);
+        }
+      }
+    }
+    F.bigMonth = false;
+    /* supply routes */
+    const rt = R.routes[f.key];
+    if (rt) {
+      if (rt.cut > 0) { rt.cut -= 1; if (!rt.cut) ev.push(["The route through " + rt.depot + " is open again.", "g"]); }
+      else if (roll(cl(6 + (rt.secure < 40 ? 10 : 0) + (docOf({ doctrine: (R.foeDoc || {})[f.key] }).covert ? 6 : 0) - rt.secure / 20, 2, 30))) {
+        if (!roll(rt.secure)) { rt.cut = rr(2, 4); rt.secure = cl(rt.secure - 15); ev.push([cap(f.name) + " raided " + rt.depot + ". The " + (mine[0] ? mine[0].n : "army at " + F.site) + " is cut off from its supply.", "b"]); chron(c, { cat: "war", txt: cap(f.name) + " raids " + rt.depot + " behind the " + F.site.replace(/^the /, "") + " front." }); }
+        else ev.push(["A raid on " + rt.depot + " was beaten off by the escort.", "g"]);
+      }
+      rt.secure = cl(rt.secure - 1);
+    }
+    if (R.road && R.road.front === f.key) {
+      const was2 = R.road.owner;
+      if (F.line >= 65) R.road.owner = "us"; else if (F.line <= 35) R.road.owner = "them";
+      if (R.road.owner !== was2 && R.road.owner) { chron(c, { cat: "war", big: true, txt: (R.road.owner === "us" ? cap(w.side) + " captures " : cap(f.name) + " takes ") + R.road.n + ". Supply " + (R.road.owner === "us" ? "improves" : "worsens") + " on every front." }); ev.push([R.road.n + (R.road.owner === "us" ? " is yours. Every front will eat better." : " has fallen to " + f.name + ". Every front will feel it."), R.road.owner === "us" ? "e" : "b"]); }
+    }
+    /* incidents: your commanders, and theirs */
+    if (!R.incident) mine.forEach((a) => {
+      if (R.incident || !a.cmd) return;
+      const odds = 1.4 * ((a.cmd.traits || []).includes("Reckless") ? 3 : (a.cmd.traits || []).includes("Aggressive") ? 1.5 : 1) * (F.bigMonth ? 2 : 1);
+      if (!roll(odds)) return;
+      const K = pick(["prisoners", "medical", "civilians", "neutral", "forbidden"]);
+      R.incident = { kind: K, cmd: a.cmd.name, cmdId: a.cmd.id || null, army: a.id, site: F.site, key: f.key, y: c.year, rule: !!R.roe[K] };
+    });
+    if (roll(3)) {
+      const K = pick(["prisoners", "medical", "civilians"]);
+      R.enemyCrimes = (R.enemyCrimes || 0) + 1; polAdd(R, "civilian", 3); polAdd(R, "military", 2);
+      const t = cap(f.army) + " " + INCIDENT_TEXT[K].them + " at " + F.site + ".";
+      chron(c, { cat: "war", txt: t }); newsItem(c, t + " " + cap(w.side) + " has reported it to Tetsu.", "WAR");
+    }
+    /* they have had enough */
+    if (foeWill(f) <= 25 && !R.offers[f.key]) { R.offers[f.key] = c.year; ev.push([cap(f.name) + " has sent an envoy under a white flag. They want to talk.", "e"]); rumour(c, cap(f.name) + " is looking for a way out of " + lowerName(w.name) + ".", "suspected"); }
+  });
+  /* the land you are holding */
+  Object.entries(R.occ).forEach(([k, O2]) => occMonth(c, L, R, k, O2, ev));
+  /* the home front */
+  R.cas.mine += casM; R.cas.theirs += casT;
+  R.exhaust = cl(R.exhaust + (casM / 2200 + 0.5 * (pr.exhaust || 1) - (A.relief - 10) / 25) * (dc.exhaust || 1));
+  if (Ld) {
+    Ld.prosper = cl(Ld.prosper - ((pr.prosper || 0) / 1.5) * (dc.prosper || 1) + (A.relief >= 18 ? 0.5 : 0));
+    if (A.medicine < 10 && casM > 1500) { Ld.shortage = "medicine"; Ld.price = Math.min(260, Ld.price + 2); }
+    if (pr.refugees && roll(20)) { const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: c.village, to: pick(VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== c.village && !atWarWith(c, v.id).length).map((v) => v.id)) || null, n: rr(1, 3), year: c.year }); }
+  }
+  /* the politics of it */
+  polAdd(R, "civilian", -casM / 1500 - (R.priority === "total" ? 1.5 : 0) + (A.relief - 10) / 10 + (dc.exhaust ? 0.5 : 0));
+  polAdd(R, "military", netAll > 0 ? 2 : netAll < 0 ? -2 : 0);
+  polAdd(R, "daimyo", -((pr.prosper || 0) * (dc.prosper || 1)) - (Ld && Ld.prosper < 40 ? 1 : 0) + (Object.keys(R.occ).length ? 0.5 : 0));
+  polAdd(R, "council", (55 - R.exhaust) / 40);
+  polAdd(R, "clan", -casM / 4000 + (netAll > 0 ? 0.5 : 0));
+  Object.keys(R.pol).forEach((k) => { R.pol[k] = cl(R.pol[k] + (60 - R.pol[k]) / 40); });
+  if (warRole(c) === "kage") {
+    if (!R.govPeace && (R.pol.council < 35 || R.pol.daimyo < 25)) {
+      R.govPeace = R.clock; liveFoes(w).forEach((f) => { R.offers[f.key] = R.offers[f.key] || c.year; });
+      c.standing = cl(c.standing - 3);
+      chron(c, { cat: "villages", line: c.name, big: true, txt: "In " + (villageExists(c, c.village) ? vName2(c.village) : "the village") + ", the Kage's own government asks for negotiations to end " + lowerName(w.name) + "." });
+      ev.push(["Your own government wants negotiations. Council support " + Math.round(R.pol.council) + "%, the daimyo " + Math.round(R.pol.daimyo) + "%.", "b"]);
+    } else if (R.govPeace && R.clock - R.govPeace >= 4 && approvalOf(R) < 30 && !R.govForced) {
+      R.govForced = R.clock; R.refuse = R.clock + 6; c.standing = cl(c.standing - 10);
+      chron(c, { cat: "villages", line: c.name, big: true, txt: "The council of " + (villageExists(c, c.village) ? vName2(c.village) : "the village") + " votes to stop offensives in " + lowerName(w.name) + " without the Kage's consent." });
+      ev.push(["The council has voted, without you, to stop every offensive. The armies are holding and they are not asking you.", "b"]);
+    }
+  }
+  exhaustionEvents(c, L, R, ev);
+  const lines = Object.values(R.fronts).filter((F) => liveFoes(w).some((f) => f.key === F.key));
+  if (lines.length) w.momentum = cl(Math.round(lines.reduce((s2, F) => s2 + F.line, 0) / lines.length));
+  (R.ops || []).forEach((op) => opCheck(c, L, op, ev));
+  /* the council sits every three months */
+  if (warRole(c) === "kage" && R.clock % 3 === 0 && !R.council && liveFoes(w).length) R.council = councilMake(c, R);
+  liveFoes(w).filter((f) => f.strength <= 0 || foeWill(f) <= 0).forEach((f) => { knockFoeOut(c, L, f, true); });
+  if (!quiet) ev.slice(0, 4).forEach(([t, k]) => P(L, t, k));
+  return { cas: casM, theirs: casT, events: ev };
+}
+
+/* ---- rules of engagement, and breaking them ---- */
+const ROE_RULES = [["prisoners", "Prisoners must be accepted"], ["medical", "Medical camps are protected"], ["civilians", "Civilian settlements are protected"], ["forbidden", "Forbidden jutsu are prohibited"], ["neutral", "Neutral territory is respected"]];
+const INCIDENT_TEXT = {
+  prisoners: { us: "executed prisoners who had surrendered", them: "executed prisoners who had surrendered" },
+  medical: { us: "shelled a medical camp", them: "burned a medical camp" },
+  civilians: { us: "burned a village that was sheltering nobody", them: "burned a village full of civilians" },
+  neutral: { us: "marched through neutral territory", them: "marched through neutral territory" },
+  forbidden: { us: "used a forbidden technique", them: "used a forbidden technique" },
+};
+function incidentDecide(c, L, how) {
+  const w = c.war; const R = w && w.room; const I2 = R && R.incident; if (!I2) return;
+  R.incident = null;
+  const what = I2.cmd + " " + INCIDENT_TEXT[I2.kind].us + " at " + I2.site;
+  const a = R.armies.find((x) => x.id === I2.army);
+  if (how === "allow") {
+    polAdd(R, "military", 3); polAdd(R, "civilian", I2.rule ? -5 : -2); R.crimes = (R.crimes || 0) + 1;
+    const id = chron(c, { cat: "war", big: I2.rule, line: c.name, txt: cap(what) + ". " + c.name + " let it stand." });
+    echo(c, "warcrimeReview", rr(3, 10), { root: id, what, who: c.name, severity: I2.rule ? 2 : 1 });
+    P(L, "You let it stand. The army noticed. So will everybody else, eventually.", "b");
+  } else if (how === "punish") {
+    polAdd(R, "military", -5); polAdd(R, "civilian", 3); if (c.iron) c.iron.legit = cl((c.iron.legit || 50) + 2);
+    remember(c, I2.cmd, "You relieved me of command over " + I2.site.replace(/^the /, ""), -6);
+    if (a) a.cmd = commanderPool(c, c.village, 3).find((x) => x.name !== I2.cmd && !R.armies.some((b2) => b2.cmd && b2.cmd.name === x.name)) || { name: freshName(c, null), id: null, traits: [pick(Object.keys(GEN_TRAITS))] };
+    chron(c, { cat: "war", line: c.name, txt: cap(what) + ". " + c.name + " relieves " + I2.cmd + " of command." });
+    P(L, "You relieved " + I2.cmd + " of command. The army thinks you are soft. The world thinks you are serious.", "n");
+  } else if (how === "deny") {
+    polAdd(R, "military", 1);
+    const id = chron(c, { cat: "war", line: c.name, txt: cap(w.side) + " denies reports that its forces " + INCIDENT_TEXT[I2.kind].us + " at " + I2.site + ".", reported: "the reports were enemy propaganda", truth: what + ", and " + c.name + " covered it up", revealed: false });
+    echo(c, "truth", rr(5, 20), { entry: id });
+    P(L, "You denied it. It is on paper now that it did not happen. Paper is not the only thing that remembers.", "n");
+  } else {
+    c.standing = cl(c.standing + 4); polAdd(R, "military", -3); polAdd(R, "civilian", 2); if (c.iron) c.iron.legit = cl((c.iron.legit || 50) + 3);
+    remember(c, I2.cmd, "You reported me to Tetsu", -4);
+    const id = chron(c, { cat: "courts", big: true, line: c.name, txt: c.name + " reports " + I2.cmd + " to the Iron Scales: " + INCIDENT_TEXT[I2.kind].us + " at " + I2.site + "." });
+    echo(c, "warcrimeReview", rr(2, 6), { root: id, what, who: I2.cmd, severity: 1, reported: true });
+    P(L, "You reported it to Tetsu yourself. Nobody in the army will thank you for it. Everybody outside it will remember.", "e");
+  }
+}
+ECHOES.warcrimeReview = (c, L, e) => {
+  const guilty = roll(e.reported ? 75 : 55 + (e.severity || 1) * 10);
+  chron(c, { cat: "courts", cause: e.root, big: true, txt: "The Iron Scales rules on what happened: " + e.what + ". " + (guilty ? (e.reported ? e.who + " is found guilty." : "The court finds that it was a crime, and that " + e.who + " allowed it.") : "The court finds the evidence insufficient.") });
+  if (guilty && !e.reported && isAncestor(c, e.who) && L) P(L, "Tetsu has ruled on something your " + relOf(c, e.who) + " allowed in a war a long time ago. The name is in the ruling.", "b");
+  if (guilty && !e.reported && e.who === c.name) c.standing = cl(c.standing - 8);
+};
+
+/* ---- the council sits ---- */
+const COUNCIL_OPTS = { hold: "Hold the line", attack: "Attack", aid: "Request aid", negotiate: "Begin negotiations", mobilize: "Mobilise civilians" };
+function councilMake(c, R) {
+  const w = c.war; const foes = liveFoes(w);
+  const Fs = foes.map((f) => R.fronts[f.key]).filter(Boolean);
+  const weak = Fs.slice().sort((a, b) => a.line - b.line)[0];
+  const strong = Fs.slice().sort((a, b) => b.line - a.line)[0];
+  const softest = foes.slice().sort((a, b) => ((R.foes[a.key] || []).reduce((s2, x) => s2 + x.men, 0) * foeWill(a)) - ((R.foes[b.key] || []).reduce((s2, x) => s2 + x.men, 0) * foeWill(b)))[0];
+  const alive = (id) => NAMED[id] && !isDead(c, id) && namedVillage(id) === c.village && (livingAge(c, id) == null || livingAge(c, id) >= 16);
+  const gen = R.armies.filter((a) => a.men > 0 && a.cmd).sort((a, b) => b.men - a.men)[0];
+  const medic = ["sakura", "tsunade", "shizune"].find(alive);
+  const strat = ["shikamaru", "shikaku"].find(alive);
+  const dm = c.daimyo && c.daimyo[c.village];
+  const elder = c.vil && c.vil.council && c.vil.council[0] ? c.vil.council[0].name : freshName(c, null);
+  const sp = [];
+  if (gen) sp.push(Fs.length > 1 && weak && weak.line < 45 ? { name: gen.cmd.name, role: "Commander, " + gen.n, line: "We can hold " + strong.site + ", but not both fronts.", rec: "hold" } : { name: gen.cmd.name, role: "Commander, " + gen.n, line: (strong ? strong.site : "The front") + " is ready. Give me the order.", rec: "attack" });
+  const mName = medic ? NAMED[medic].name : "Chief medic " + (R.medicName || (R.medicName = freshName(c, null)));
+  sp.push(R.alloc.medicine < 15 || R.cas.mine > 12000 ? { name: mName, role: "Medical corps", line: "Medical supplies won't last another offensive.", rec: R.exhaust > 45 ? "negotiate" : "hold" } : { name: mName, role: "Medical corps", line: "The hospitals can take one more push. One.", rec: "attack" });
+  const sName = strat ? NAMED[strat].name : gen && (gen.cmd.traits || []).some((t) => ["Strategic", "Intelligent"].includes(t)) ? gen.cmd.name : "Strategist " + (R.stratName || (R.stratName = freshName(c, null)));
+  sp.push(R.intel >= 45 && softest ? { name: sName, role: "Strategy", line: "Their army facing " + (R.fronts[softest.key] || {}).site + " is weaker than they're letting us see.", rec: "attack" } : { name: sName, role: "Strategy", line: "We are blind out there. Hold until we can see.", rec: "hold" });
+  sp.push({ name: dm ? "Daimyo " + dm.name : "The daimyo's envoy", role: "The court", line: R.exhaust >= 40 || R.pol.daimyo < 50 ? "The war is becoming too expensive." : "The court will pay for a victory. It will not pay for a stalemate.", rec: R.exhaust >= 40 || R.pol.daimyo < 50 ? "negotiate" : "attack" });
+  sp.push(foes.length > 1 && !committedAllies(w).length ? { name: elder, role: "Village council", line: "We cannot do this alone. Ask somebody for help.", rec: "aid" } : R.pol.civilian < 45 ? { name: elder, role: "Village council", line: "The people are tired. Give them a reason, or give them peace.", rec: R.pol.civilian < 30 ? "negotiate" : "mobilize" } : { name: elder, role: "Village council", line: "The people will carry more if you ask them properly.", rec: "mobilize" });
+  return { clock: R.clock, sp, weak: weak ? weak.key : null, soft: softest ? softest.key : null };
+}
+function councilDecide(c, L, choice) {
+  const w = c.war; const R = w && w.room; const K = R && R.council; if (!K) return;
+  R.council = null;
+  const foes = liveFoes(w);
+  if (choice === "hold") { Object.values(R.fronts).forEach((F) => { if (!["defend"].includes(F.order)) F.order = "hold"; }); polAdd(R, "military", 2); P(L, "The council agreed: hold. Every front was told to dig in.", "n"); }
+  else if (choice === "attack") { const k = K.soft || K.weak; if (k && R.fronts[k]) R.fronts[k].order = "attack"; polAdd(R, "military", 5); polAdd(R, "civilian", -3); P(L, "The council agreed: attack at " + ((R.fronts[k] || {}).site || "the front") + ".", "n"); }
+  else if (choice === "aid") {
+    const cand = VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== c.village && !foes.some((f) => f.key === v.id) && !(w.allies || []).some((a) => a.key === v.id && a.committed) && !atWarWith(c, v.id).length);
+    const pickV = pick(cand);
+    if (pickV && roll(cl(30 + c.standing / 3 + attitudeOf(c, pickV.id).score * 3, 10, 85))) {
+      const ae = allyEntry(c, pickV.id, true); w.allies = (w.allies || []).filter((a) => a.key !== pickV.id).concat([ae]);
+      chron(c, { cat: "war", big: true, line: c.name, txt: pickV.name + " answers " + w.side + "'s request and enters " + lowerName(w.name) + "." });
+      P(L, pickV.name + " said yes. They are sending people.", "e"); polAdd(R, "council", 4);
+    } else { P(L, "You asked. " + (pickV ? pickV.name + " said no, politely." : "There was nobody left to ask."), "b"); polAdd(R, "council", -2); }
+  } else if (choice === "negotiate") { foes.forEach((f) => { f.will = cl(foeWill(f) - 4); if (foeWill(f) < 50) R.offers[f.key] = R.offers[f.key] || c.year; }); polAdd(R, "council", 5); polAdd(R, "daimyo", 4); polAdd(R, "military", -5); R.proposed = R.clock; P(L, "Envoys went out under white flags. Talks have started, quietly.", "n"); styleTally(c, R, "peace"); }
+  else if (choice === "mobilize") { R.armies.forEach((a) => { if (a.men > 0) a.men = Math.round(a.men * 1.1); }); R.exhaust = cl(R.exhaust + 6); polAdd(R, "civilian", -6); polAdd(R, "military", 3); P(L, "The civilians were called up. Bakers, teachers, the old. The armies are ten percent larger.", "n"); }
+  K.sp.forEach((s2) => { const nm = s2.name.replace(/^(Daimyo |Chief medic |Strategist )/, ""); remember(c, nm, s2.rec === choice ? "You listened to me in the war council" : "You overruled me in the war council", s2.rec === choice ? 2 : -1); });
+  R.councilLog = (R.councilLog || []).concat([{ y: c.year, choice, agreed: K.sp.filter((s2) => s2.rec === choice).map((s2) => s2.name) }]).slice(-8);
+}
+
+/* ---- the land you take ---- */
+const OCC_MODES = {
+  military: { n: "Military administration", d: "High control, high resentment.", control: 6, resist: 3 },
+  local: { n: "Local government", d: "Less control, much less resistance.", control: 3, resist: -1 },
+  puppet: { n: "Puppet administration", d: "Cheap, and politically dangerous.", control: 2, resist: 1 },
+  annex: { n: "Annexation", d: "Maximum control, maximum diplomatic consequences.", control: 7, resist: 4 },
+  withdraw: { n: "Withdraw", d: "Give it back.", control: 0, resist: 0 },
+};
+function occMonth(c, L, R, k, O2, ev) {
+  if (!O2.mode || O2.mode === "withdraw") return;
+  const M = OCC_MODES[O2.mode];
+  O2.control = cl(O2.control + M.control / 2 + rr(-1, 1));
+  O2.resist = cl(O2.resist + M.resist / 2 + rr(-1, 2) - (R.roe.civilians ? 0.5 : 0));
+  if (O2.resist >= 45 && roll(O2.resist / 4)) {
+    const F = R.fronts[k];
+    R.armies.filter((a) => a.front === k && a.men > 0).forEach((a) => { a.supply = cl(a.supply - 8); const l = rr(80, 400); a.men = Math.max(0, a.men - l); R.cas.mine += l; });
+    if (!O2.insurg || R.clock - O2.insurg >= 6) { O2.insurg = R.clock; ev.push(["Insurgency detected in " + (O2.site || (F || {}).site || O2.land) + ". Your garrisons are being hit at night.", "b"]); chron(c, { cat: "war", txt: "An insurgency begins against the occupation of " + O2.land + "." }); }
+  }
+}
+function occDecide(c, L, k, mode, post) {
+  const list = post ? c.occupations || [] : null;
+  const R = !post && c.war && c.war.room;
+  const O2 = post ? list.find((x) => x.key === k) : R && R.occ[k]; if (!O2) return;
+  const was = O2.mode; O2.mode = mode;
+  const land = O2.land;
+  if (mode === "withdraw") {
+    rememberVillage(c, k, "They gave back the land they took from us", 4);
+    chron(c, { cat: "war", line: c.name, big: true, txt: cap(c.war ? c.war.side : (villageExists(c, c.village) ? vName2(c.village) : "your village")) + " withdraws from " + land + " and hands it back." });
+    if (R) { const F = R.fronts[k]; if (F) F.line = Math.min(F.line, 60); const f = liveFoes(c.war).find((x) => x.key === k); if (f) f.will = cl(foeWill(f) - 3); delete R.occ[k]; }
+    else c.occupations = list.filter((x) => x.key !== k);
+    P(L, "You gave " + land + " back. Some of your commanders will never understand it. Some of the people there will never forget it.", "n");
+    return;
+  }
+  if (mode === "annex" && was !== "annex") { VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, "They declared " + land + " annexed", v.id === k ? -8 : -3); }); newsItem(c, cap(villageExists(c, c.village) ? vName2(c.village) : "A village") + " has declared the occupied part of " + land + " annexed. Every other village has recalled its envoy.", "WAR", true); if (R) { const f = liveFoes(c.war).find((x) => x.key === k); if (f) f.will = cl(foeWill(f) - 10); } }
+  if (mode === "puppet" && was !== "puppet") { VILLAGES.forEach((v) => { if (villageExists(c, v.id) && v.id !== c.village) rememberVillage(c, v.id, "They set up a puppet government in " + land, -2); }); }
+  chron(c, { cat: "war", line: c.name, txt: cap(land) + " is placed under " + OCC_MODES[mode].n.toLowerCase() + "." });
+  P(L, cap(land) + " is under " + OCC_MODES[mode].n.toLowerCase() + " now. " + OCC_MODES[mode].d, "n");
+}
+/* the war ends; the occupation does not */
+function occupationCarry(c) {
+  const R = c.war && c.war.room; if (!R || !R.occ) return;
+  Object.entries(R.occ).forEach(([k, O2]) => {
+    if (!O2.mode || O2.mode === "withdraw") return;
+    c.occupations = (c.occupations || []).filter((x) => x.key !== k).concat([{ key: k, land: O2.land, name: O2.name, mode: O2.mode, control: O2.control, resist: O2.resist, since: O2.since, war: c.war.name, calm: 0 }]);
+  });
+}
+function occYearTick(c, L) {
+  (c.occupations || []).slice().forEach((O2) => {
+    const M = OCC_MODES[O2.mode] || OCC_MODES.military;
+    O2.control = cl(O2.control + M.control + rr(-2, 2));
+    O2.resist = cl(O2.resist + M.resist * 1.5 + rr(-3, 4) - (O2.control >= 80 ? 3 : 0));
+    O2.calm = O2.control >= 85 && O2.resist < 30 ? (O2.calm || 0) + 1 : 0;
+    if (O2.resist >= 50 && roll(O2.resist / 2)) {
+      c.standing = cl(c.standing - 1);
+      chron(c, { cat: "war", txt: "Insurgents attack the occupation garrison in " + O2.land + ". " + rr(12, 140) + " dead." });
+      if (L && roll(40)) P(L, "More trouble in " + O2.land + ". The war there never quite ended.", "b");
+    }
+    if (O2.resist >= 90) {
+      c.occupations = c.occupations.filter((x) => x !== O2);
+      rememberVillage(c, O2.key, "We threw them out of " + O2.land, -6); c.standing = cl(c.standing - 8);
+      chron(c, { cat: "war", big: true, txt: "The occupation of " + O2.land + " ends in an uprising, " + (c.year - O2.since) + " years after " + O2.war + "." });
+      newsItem(c, "UPRISING IN " + O2.land.toUpperCase() + ". The occupation that began in " + O2.war + " is over, and not on anybody's terms but theirs.", "WAR", true);
+      if (L) momentOf(c, "UPRISING", "The occupation of " + O2.land + " is over.", "blood");
+    } else if (O2.calm >= 5) {
+      c.occupations = c.occupations.filter((x) => x !== O2);
+      chron(c, { cat: "war", big: true, txt: cap(O2.land) + " is pacified, " + (c.year - O2.since) + " years after " + O2.war + ". The occupation " + (O2.mode === "annex" ? "has become ordinary government." : "is wound down.") });
+    }
+  });
+}
+
+/* ---- exhaustion, getting personal ---- */
+function exhaustionEvents(c, L, R, ev) {
+  const w = c.war; const vn = villageExists(c, c.village) ? vName2(c.village) : "the village";
+  [20, 40, 60, 80, 95].forEach((t) => {
+    if (R.exhaust < t || R.exThr.includes(t)) return;
+    R.exThr.push(t);
+    if (t === 20) { polAdd(R, "civilian", -3); newsItem(c, "EDITORIAL: What is " + lowerName(w.name) + " for? The Times asks the question the tower will not answer.", "THE VILLAGES"); ev.push(["The papers have started criticising the war.", "n"]); }
+    if (t === 40) { polAdd(R, "civilian", -6); chron(c, { cat: "villages", txt: "Families march against conscription in " + vn + "." }); movementStart(c, "antiwar", c.village); ev.push(["Families are marching against conscription in the streets of " + vn + ".", "b"]); }
+    if (t === 60) { polAdd(R, "council", -5); R.demand = R.clock + 3; chron(c, { cat: "villages", txt: "The council of " + vn + " demands a peace proposal within three months." }); ev.push(["The council demands a peace proposal. Three months.", "b"]); }
+    if (t === 80) { R.refuse = R.clock + 3; chron(c, { cat: "war", big: true, txt: "The army of " + vn + " refuses another offensive in " + lowerName(w.name) + "." }); ev.push(["The military refuses another offensive. Unless their support for you is high, every attack order will be held for three months.", "b"]); }
+    if (t === 95 && warRole(c) === "kage") { R.crisis = { clock: R.clock }; chron(c, { cat: "villages", big: true, txt: "NATIONAL CRISIS in " + vn + ": the country is exhausted by " + lowerName(w.name) + "." }); }
+  });
+  if (R.demand && R.clock >= R.demand && !(R.proposed >= R.demand - 3)) { R.demand = null; polAdd(R, "council", -10); ev.push(["You did not put a peace proposal forward. The council has noticed.", "b"]); }
+}
+function crisisDecide(c, L, how) {
+  const w = c.war; const R = w && w.room; if (!R || !R.crisis) return;
+  R.crisis = null;
+  if (how === "continue") {
+    c.standing = cl(c.standing - 15); if (c.vil && c.vil.council) c.vil.council.forEach((m) => { m.loyalty = cl(m.loyalty - 15); });
+    polAdd(R, "military", 4); polAdd(R, "council", -10);
+    chron(c, { cat: "villages", big: true, line: c.name, txt: c.name + " refuses to end " + lowerName(w.name) + " in the middle of a national crisis, and stakes the government on it." });
+    P(L, "You told them the war goes on. The council has started counting votes. So have you.", "b");
+  } else {
+    R.weak = R.clock; liveFoes(w).forEach((f) => { R.offers[f.key] = c.year; f.will = cl(foeWill(f) + 10); });
+    polAdd(R, "council", 8); polAdd(R, "civilian", 8);
+    chron(c, { cat: "villages", big: true, line: c.name, txt: c.name + " opens talks to end " + lowerName(w.name) + " from a position of weakness." });
+    P(L, "You opened talks. They know why. You cannot ask for much now, but they will listen.", "n");
+  }
+}
+
+/* ---- the battlefield ---- */
+function fieldAct(c, L, key, act) {
+  const w = c.war; const R = roomFix(c, w && w.room); if (!R) return;
+  const F = R.fronts[key]; const f = liveFoes(w).find((x) => x.key === key); if (!F || !f) return;
+  if (F.fought === R.clock) return;
+  F.fought = R.clock;
+  const mine = R.armies.filter((a) => a.front === key && a.men > 0);
+  const lead = mine.slice().sort((a, b) => b.men - a.men)[0];
+  const Tn = TERRAIN[F.terrain] || {};
+  const bn = "the Battle of " + F.site.replace(/^the /, "");
+  let d = 0; let cas = 0;
+  if (act === "reserves") {
+    const other = R.armies.filter((a) => a.front !== key && a.men > 4000).sort((a, b) => b.men - a.men)[0];
+    if (other) { const moved = Math.round(other.men * 0.1); other.men -= moved; if (lead) lead.men += Math.round(moved * 0.8); d = rr(3, 6); cas = rr(800, 2000); P(L, "You committed the reserves from the " + other.n + ". " + moved.toLocaleString() + " fresh troops hit the line at " + F.site + ".", "e"); }
+    else { d = rr(1, 3); cas = rr(400, 900); P(L, "There were no real reserves to commit. You sent what there was.", "n"); }
+  } else if (act === "retreat") { d = -3; cas = rr(100, 300); mine.forEach((a) => { a.org = cl(a.org + 10); a.withdrawals += 1; }); P(L, "You ordered the retreat before it became a rout. The army is intact. The ground is not yours any more.", "n"); }
+  else if (act === "flank") { const ok = roll(cl(45 + (Tn.flank || 0) - (F.terrain === "Mountains" ? 10 : 0) + trAdd(lead, "brk") / 2, 15, 80)); d = ok ? rr(5, 8) : -rr(2, 4); cas = rr(600, 1500); P(L, ok ? "The flank attack went in where they were thinnest, and their line folded." : "The flank attack walked into a second line nobody had seen.", ok ? "e" : "b"); }
+  else if (act === "commander") { const tr = lead && lead.cmd ? lead.cmd.traits : []; const ok = roll(50 + tr.length * 8); d = ok ? rr(4, 7) : -1; cas = rr(300, 900); P(L, lead && lead.cmd ? lead.cmd.name + " took personal charge" + (tr.length ? ", " + tr[0].toLowerCase() + " as ever" : "") + ". " + (ok ? "It worked." : "It was not enough.") : "There was nobody to call.", ok ? "g" : "n"); }
+  else { P(L, "You left " + bn + " to the commanders on the ground.", "n"); }
+  F.line = cl(F.line + d);
+  spreadLoss(mine, cas); R.cas.mine += cas;
+  if (d) { const th = Math.round(cas * (d > 0 ? 1.4 : 0.6)); spreadLoss((R.foes[key] || []).filter((a) => a.men > 0), th); R.cas.theirs += th; f.strength = Math.max(0, f.strength - th / 900); }
+}
+/* you went in yourself */
+function battleFront(c, L, key, won) {
+  const w = c.war; const R = w && w.room; if (!R) return;
+  const F = R.fronts[key]; const f = liveFoes(w).find((x) => x.key === key); if (!F || !f) return;
+  F.fought = R.clock;
+  const bn = "Battle of " + F.site.replace(/^the /, "");
+  if (won) {
+    F.line = cl(F.line + 8); f.will = cl(foeWill(f) - 6); c.standing = cl(c.standing + 4); w.contribution = (w.contribution || 0) + 2;
+    R.armies.filter((a) => a.front === key && a.men > 0).forEach((a) => { a.honors.push({ n: bn + " (led in person by " + c.name + ")", y: c.year, r: "Victory" }); a.morale = cl(a.morale + 10); });
+    cmdTally(c, "battles"); cmdTally(c, "wins");
+    chron(c, { cat: "war", big: true, line: c.name, txt: c.name + " goes into the " + bn + " in person and breaks " + f.army + "." });
+    P(L, "You went in yourself, and the line went forward behind you. They will tell this one at the Academy.", "e");
+  } else {
+    F.line = cl(F.line - 6); c.health = cl(c.health - rr(10, 25));
+    cmdTally(c, "battles"); cmdTally(c, "defeats");
+    chron(c, { cat: "war", line: c.name, txt: c.name + " goes into the " + bn + " in person and is carried out of it." });
+    P(L, "You went in yourself and it went wrong. The army saw you carried off the field.", "b");
+  }
+}
+/* logistics orders */
+function routeAct(c, L, key, act) {
+  const w = c.war; const R = roomFix(c, w && w.room); if (!R) return;
+  const rt = R.routes[key]; const F = R.fronts[key]; if (!rt || !F) return;
+  const mine = R.armies.filter((a) => a.front === key && a.men > 0);
+  if (act === "protect") { rt.secure = cl(rt.secure + 25); mine.forEach((a) => { a.org = cl(a.org - 6); }); P(L, "You pulled a regiment back to guard " + rt.depot + ". The route is safer; the line is a little thinner.", "n"); }
+  else if (act === "reroute") { if (c.ryo < 60000) { P(L, "A new route costs sixty thousand ryo you do not have.", "b"); return; } c.ryo -= 60000; rt.depot = pick(DEPOT_NAMES.filter((x) => x !== rt.depot)); rt.cut = Math.min(rt.cut, 1); rt.secure = 55; P(L, "Engineers cut a new road to " + rt.depot + ". Supply will be moving again within the month.", "g"); }
+  else if (act === "airlift") { const cost = c.summon ? 20000 : 50000; if (c.ryo < cost) { P(L, "You cannot pay for it.", "b"); return; } c.ryo -= cost; mine.forEach((a) => { a.supply = cl(a.supply + 25); }); P(L, c.summon ? "Your summons carried supplies over the enemy's heads. They were not pleased to be used as pack animals." : "Bird-borne sealing scrolls carried a month of supplies to the front.", "g"); }
+  else if (act === "raid") { const ok = roll(cl(35 + R.intel / 3 + (docOf(R).covert ? 15 : 0), 10, 85)); styleTally(c, R, "covert"); if (ok) { (R.foes[key] || []).forEach((a) => { a.supply = cl((a.supply || 70) - 30); a.morale = cl(a.morale - 5); }); mine.forEach((a) => { a.supply = cl(a.supply + 10); }); chron(c, { cat: "war", line: c.name, txt: cap(w.side) + " captures an enemy supply train behind " + F.site + "." }); P(L, "You took their supply train intact. Their army will be hungry, and yours will eat their rice.", "e"); } else { const l = rr(200, 700); spreadLoss(mine, l); R.cas.mine += l; mine.forEach((a) => { a.org = cl(a.org - 15); }); P(L, "The raid on their logistics was expected. " + l + " did not come back.", "b"); } }
+  else if (act === "bridge") { if (F.infra.bridge === true) { F.infra.bridge = false; chron(c, { cat: "war", line: c.name, txt: cap(w.side) + " destroys the bridge at " + F.site + "." }); P(L, "The bridge at " + F.site + " is gone. Nobody is crossing that river quickly now, in either direction.", "n"); } else if (F.infra.bridge === false) { if (c.ryo < 50000) { P(L, "Rebuilding the bridge costs fifty thousand ryo.", "b"); return; } c.ryo -= 50000; F.infra.bridge = true; P(L, "Engineers rebuilt the bridge at " + F.site + " under fire.", "g"); } }
+  else if (act === "medical") { if (c.ryo < 80000 || F.infra.medical) return; c.ryo -= 80000; F.infra.medical = true; P(L, "A medical station is up behind " + F.site + ". Fewer of the wounded will die on the way back.", "g"); }
+  else if (act === "depot") { if (c.ryo < 40000) return; c.ryo -= 40000; F.infra.depot = true; P(L, "A forward depot is stocked behind " + F.site + ".", "g"); }
+}
+function v113Tick(c, L) { safeTick(occYearTick, c, L); }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
    Only the people with a date in DEATH_YEAR were ever mortal. Thirty-seven of
@@ -8502,6 +9001,7 @@ function worldTick(c, L) {
   safeTick(v11Tick, c, L);
   safeTick(v111Tick, c, L);
   safeTick(v112Tick, c, L);
+  safeTick(v113Tick, c, L);
   /* hunter-nin sent after names in the book */
   (c.bookHunts || []).forEach((h) => {
     if (h.done) return;
@@ -8906,6 +9406,21 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "11.3", n: "The Art of War", items: [
+    "Five doctrines that change how a war is fought. Shock: faster attacks and better breakthroughs, for more dead and more supply. Fortress: a much stronger defence and very slow offensives. Shadow: ANBU, sabotage, assassination and intelligence work better, and the armies in the line are weaker. Beast: strategic assets hit harder and frighten more, and the politics are far worse. People's defence: militia, resilience, less damage to the country, and poor at attacking. A doctrine gets stronger the longer you fight by it, and every enemy has one of its own",
+    "Armies have histories: when they were formed, battles, victories, defeats, withdrawals, and battle honours such as Battle of the Northern Hills: Victory, Siege of Iwagakure: Victory, Encirclement at Kannabi Bridge. Their commanders remember what you sent them into",
+    "Fronts have ground under them: mountains, forest, plains, river, village or fortress, each changing who wins, and weather every month. Rivers have bridges you can destroy, which slows every crossing for months, and rebuild. Build medical stations behind the line",
+    "Logistics. Every army is supplied from a depot along a route. The enemy raids depots, and a cut route starves the army in weeks. Protect the route, open another one, carry supplies by summons or scroll, retreat, or capture their logistics instead. Every war has one road that matters; take it and every front eats better",
+    "The war council sits every three months. Your commanders, your medics, your strategist, the daimyo and the village council each say what they think (“We can hold the north, but not both fronts.” “Medical supplies won't last another offensive.”) and recommend something: hold, attack, ask for aid, open negotiations, or mobilise the civilians. You decide, and they remember whether you listened",
+    "War politics: support from the council, the daimyo, the military, the civilians and the clans, and your approval overall. Win every battle and you can still lose the war at home: your own government can ask for negotiations, and later vote to stop your offensives without you",
+    "The enemy plans too. At first its intent is unknown; with better intelligence you learn the likely objective, then the name of the operation, then its target, forces and start date. OPERATION STONE HAMMER will come for your 3rd Army in two to four months whether you are ready or not; if you saw it coming and are holding, it breaks on you",
+    "Enemy commanders have personalities. A brilliant or cautious one gets out before an encirclement closes. A reckless one throws a desperate counterattack when losing. A political one will not spend their clan's forces. Beat the same one three times and they make it personal",
+    "Rules of engagement: prisoners, medical camps, civilians, forbidden jutsu, neutral territory. Your commanders will sometimes break them anyway, and you choose: allow it, punish the commander, deny it (and hope the truth never comes out), or report it to Tetsu yourself. The Iron Scales rules on it later. The enemy breaks them too",
+    "Occupation is its own phase. Take ground past 70 and decide how to hold it: military administration, local government, a puppet administration, annexation (which every other village remembers), or withdrawal. Resistance grows into insurgency. The occupation outlasts the war, and can end in pacification or an uprising years later",
+    "War exhaustion gets personal: at 20% the papers turn on the war, at 40% families march against conscription, at 60% the council demands a peace proposal within three months, at 80% the military refuses another offensive, and at 95% there is a national crisis: continue and risk your government, or negotiate from a weaker position",
+    "YOUR COMMAND: wars commanded, battles, victories, defeats, peace settlements, generals lost and operations. Your doctrine is named from how you actually fight: The Iron Spear, The Stone Wall, The Closing Hand, The Quiet Blade, The Beast's Leash, The Ash Road, The Open Hand. When you die, historians write it into the Chronicle",
+    "The battlefield view: open any front for its terrain, weather and forces, then commit reserves, order a retreat, attack the flank, call on the commander, deploy an asset, delegate, or go in personally, which drops you into a real fight against their commander. Win it and the line goes forward behind you",
+  ] },
   { v: "11.2", n: "The Age of War", items: [
     "THE WAR ROOM. Open it from any war you are in. It sits on top of the war that was already there: every enemy is a front, the war's momentum is the average of your front lines, and once the room is open your side of the war runs month by month",
     "Month by month: Continue one month or Advance the war three months. A year is twelve months. When it is over you age up to carry on, and you get older with the war",
@@ -12749,6 +13264,7 @@ export default function ShinobiLife() {
   const [warTab, setWarTab] = useState("fronts");
   const [wrFront, setWrFront] = useState(null);
   const [peaceSel, setPeaceSel] = useState({});
+  const [bvFront, setBvFront] = useState(null);
   const [indict, setIndict] = useState({ scope: null, vid: null, sel: null, tier: "A", charge: 0, warrant: "capture" });
   const [ruleSec, setRuleSec] = useState(null);
   const ironKeys = useRef("");
@@ -13680,6 +14196,7 @@ export default function ShinobiLife() {
     setModal(null);
   }
   function endWar(c, L) {
+    occupationCarry(c);
     const w = c.war; const won = w.momentum >= 60;
     const clanFoes = (w.foes || []).filter((f) => f.kind === "clan").map((f) => f.key);
     if (won && clanFoes.length) {
@@ -14194,6 +14711,8 @@ export default function ShinobiLife() {
       nc.lives = clone(old.lives || {});
       /* V11: the family's feuds, the world's secrets, what people are whispering,
          every chain still unwinding, and every case nobody closed */
+      nc.occupations = clone(old.occupations || []);
+      if (rec.command && rec.command.doctrine) chron(nc, { y: old.year, cat: "legend", line: old.name, big: true, txt: "Historians describe the way " + old.name + " made war as " + rec.command.doctrine + ": a doctrine that " + rec.command.dd + ". " + rec.command.wars + " war" + (rec.command.wars === 1 ? "" : "s") + " commanded, " + rec.command.wins + " victories in " + rec.command.battles + " battles." });
       nc.mem = clone(old.mem || {}); nc.vmem = clone(old.vmem || {}); nc.decisions = clone(old.decisions || {}); nc.ages = clone(old.ages || []); nc.warLog = old.warLog || ""; nc.collided = clone(old.collided || {});
       nc.vendettas = clone(old.vendettas || []); nc.agendas = clone(old.agendas || {}); nc.secrets = clone(old.secrets || []); nc.secretNo = old.secretNo || 0;
       nc.rumours = clone(old.rumours || []); nc.chains = clone(old.chains || []); nc.chainNo = old.chainNo || 0;
@@ -14800,8 +15319,10 @@ export default function ShinobiLife() {
       const w = c2.war; const R = w && w.room; if (!R) return;
       const boss = warRole(c2) === "kage";
       if (kind === "advance") {
+        roomFix(c2, R);
+        if (R.council || R.incident || R.crisis) return;
         let cas = 0, th = 0, m = 0;
-        for (let i = 0; i < a && c2.war && R.month < 12 && liveFoes(c2.war).length; i++) { const r = warMonth(c2, L, false); cas += r.cas; th += r.theirs; m += 1; }
+        for (let i = 0; i < a && c2.war && R.month < 12 && liveFoes(c2.war).length && !R.council && !R.incident && !R.crisis; i++) { const r = warMonth(c2, L, false); cas += r.cas; th += r.theirs; m += 1; }
         if (c2.war && !liveFoes(c2.war).length) endWar(c2, L);
         else if (c2.war && m) warAftermath(c2, L, m, cas, th);
       } else if (kind === "order" && boss) { if (R.fronts[a]) { R.fronts[a].order = b2; (R.ops || []).forEach((op) => { if (!op.done && op.key === a) op.manual = true; }); } }
@@ -14819,6 +15340,13 @@ export default function ShinobiLife() {
       else if (kind === "spies") { R.spyMonth = R.month + "/" + c2.year; if (roll(80)) { R.intel = cl(R.intel + 12); P(L, "The agents came back. You know more about what is across the line than you did.", "g"); } else P(L, "One of the agents did not come back, and the others learned nothing worth the loss.", "b"); }
       else if (kind === "peace" && boss) { const ok = peaceTable(c2, L, a, b2 || []); if (ok && c2.war && !liveFoes(c2.war).length) endWar(c2, L); }
       else if (kind === "role") { if (R.part === R.month) return; roomRole(c2, L, a, b2); }
+      else if (kind === "council" && boss) councilDecide(c2, L, a);
+      else if (kind === "incident" && boss) incidentDecide(c2, L, a);
+      else if (kind === "crisis" && boss) crisisDecide(c2, L, a);
+      else if (kind === "occ" && boss) occDecide(c2, L, a, b2);
+      else if (kind === "route" && boss) routeAct(c2, L, a, b2);
+      else if (kind === "field" && boss) fieldAct(c2, L, a, b2);
+      else if (kind === "roe" && boss) { roomFix(c2, R); R.roe[a] = !R.roe[a]; }
     });
   }
   /* WHY? — every number that moved can say what moved it */
@@ -14890,6 +15418,17 @@ export default function ShinobiLife() {
       </>
     );
   }
+  /* you go into the battle yourself: the War Room drops into the fight */
+  function fightFront(key) {
+    const R = c.war && c.war.room; if (!R) return;
+    const F = R.fronts[key]; if (!F || F.fought === R.clock) return;
+    const ea = ((R.foes || {})[key] || []).filter((a) => a.men > 0).sort((a, b) => b.men - a.men)[0];
+    const id = ea && ea.cmd && ea.cmd.id && NAMED[ea.cmd.id] && !isDead(c, ea.cmd.id) ? ea.cmd.id : null;
+    const pool = (c.war.pool || eraOf(c).pool || ["hunter"]);
+    setModal(null);
+    setTimeout(() => startBattle(id || pool[pool.length - 1], { type: "warfront", key }, 0, "You went down to " + F.site + " yourself. " + (ea ? "The " + ea.n + " is in front of you, and so is the one who commands it." : "The enemy line is in front of you."), id ? undefined : { name: ea && ea.cmd ? ea.cmd.name : freshName(c, null), title: ea ? "commander of the " + ea.n : "enemy commander" }), 120);
+  }
+  function occUi(key, mode) { commit((c2, L) => occDecide(c2, L, key, mode, true)); }
   function watchTheWorld(years) {
     const out = watchWorld(c, years);
     setWatchOut(out);
@@ -17384,6 +17923,7 @@ export default function ShinobiLife() {
           }
         }
       }
+      if (ctx.type === "warfront") { battleFront(c, L, ctx.key, !!b.win); }
       if (ctx.type === "clearname") {
         spend(c);
         if (b.win && c.wrongful) { c.kills += 0; clearName(c, L, "won"); }
@@ -18532,6 +19072,18 @@ export default function ShinobiLife() {
                   </div>
                   <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, marginTop: 8 }}><b>Known for:</b> {a.knownFor}. <b>Cause of death:</b> {a.cause}.</div>
                   {a.tags.length > 0 && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>Whoever carries the name next inherits it as {a.tags.map((t) => (FAMILY_TAGS[t] || { n: t }).n.toLowerCase()).join(", ")}.</div>}
+                </div>
+              );
+            })()}
+            {c.command && c.command.wars > 0 && (() => {
+              const C = c.command; const dct = commandDoctrine(C);
+              return (
+                <div style={{ ...glass(T.blood), marginTop: 16 }} className="p-3.5 sl-command-rec">
+                  <div style={{ color: T.blood, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">YOUR COMMAND</div>
+                  <div className="grid gap-x-4 gap-y-0.5 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", fontSize: 12.5 }}>
+                    {[["Wars commanded", C.wars], ["Battles", C.battles || 0], ["Victories", C.wins || 0], ["Defeats", C.defeats || 0], ["Peace settlements", C.peaces || 0], ["Generals lost", C.lost || 0], ["Major operations", C.ops || 0]].map(([k2, v2]) => <div key={k2} className="flex justify-between gap-2" style={{ borderBottom: "1px dotted " + T.line, padding: "2px 0" }}><span style={{ color: T.dim }}>{k2}</span><span>{v2}</span></div>)}
+                  </div>
+                  {dct && <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, marginTop: 8 }}>Historians will call it <b style={{ color: T.gold }}>{dct.n}</b>: a doctrine that {dct.d}.</div>}
                 </div>
               );
             })()}
@@ -21803,8 +22355,11 @@ export default function ShinobiLife() {
         const H = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">{children}</div>;
         const Bar = ({ v, col, h }) => <div style={{ height: h || 4, background: "rgba(0,0,0,.5)", borderRadius: 99 }}><div style={{ width: cl(v) + "%", height: "100%", background: col, borderRadius: 99 }} /></div>;
         const est = (men) => { if (R.intel >= 80) return "Confirmed strength: " + Math.round(men / 100) * 100; if (R.intel < 20) return "Unknown force"; const e = (100 - R.intel) / 140; return "Estimated " + (Math.round(men * (1 - e) / 1000) * 1000).toLocaleString() + "–" + (Math.round(men * (1 + e) / 1000) * 1000).toLocaleString(); };
-        const tabs = [["fronts", "Fronts"], ["armies", "Armies"], ["plans", "Plans"], ["production", "Production"], ["intel", "Intelligence"], ["assets", "Assets"], ["peace", "Peace" + (Object.keys(R.offers || {}).filter((k) => foes.some((f) => f.key === k)).length ? " •" : "")], ["part", "Your part"]];
+        roomFix(c, R);
+        const tabs = [["fronts", "Fronts"], ["armies", "Armies"], ["logistics", "Logistics"], ["plans", "Plans"], ["production", "Production"], ["intel", "Intelligence"], ["assets", "Assets"], ["politics", "Politics"], Object.keys(R.occ || {}).length ? ["occupation", "Occupation" + (Object.values(R.occ).some((o) => !o.mode) ? " •" : "")] : null, ["peace", "Peace" + (Object.keys(R.offers || {}).filter((k) => foes.some((f) => f.key === k)).length ? " •" : "")], ["part", "Your part"], ["command", "Command"]].filter(Boolean);
+        const pending = boss && (R.council || R.incident || R.crisis);
         const yearDone = R.month >= 12;
+        const PolBar = ({ k, n }) => <div className="flex items-center gap-2 mb-1"><span style={{ minWidth: 118, color: T.soft, fontSize: 12 }}>{n}</span><div style={{ flex: 1 }}><Bar v={R.pol[k]} col={R.pol[k] >= 55 ? T.good : R.pol[k] >= 35 ? T.gold : RED} h={6} /></div><b style={{ width: 34, textAlign: "right", fontSize: 12 }}>{Math.round(R.pol[k])}%</b></div>;
         const mine = (k) => R.armies.filter((a) => a.front === k && a.men > 0);
         const home = MAP_POS[c.village] || [500, 300];
         const selFront = wrFront && foes.some((f) => f.key === wrFront) ? wrFront : (foes[0] || {}).key;
@@ -21817,11 +22372,41 @@ export default function ShinobiLife() {
                 <div style={{ color: T.dim, fontSize: 11.5 }}>{AH(c.year)} · month {R.month} of 12 · {foes.length} front{foes.length === 1 ? "" : "s"} · the war overall at {w.momentum}%</div>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <button onClick={() => warRoomAct("advance", 1)} disabled={yearDone || !!bt} style={{ background: yearDone ? T.panel2 : RED, color: yearDone ? T.dim : "#fff", borderRadius: 8, opacity: yearDone ? .6 : 1 }} className="px-3 py-2 text-xs font-bold">Continue → 1 month</button>
-                <button onClick={() => warRoomAct("advance", 3)} disabled={yearDone || !!bt} style={{ background: T.panel2, color: yearDone ? T.dim : T.text, border: "1px solid " + RED + "88", borderRadius: 8, opacity: yearDone ? .6 : 1 }} className="px-3 py-2 text-xs font-bold">Advance war → 3 months</button>
+                <button onClick={() => warRoomAct("advance", 1)} disabled={yearDone || !!bt || pending} style={{ background: yearDone || pending ? T.panel2 : RED, color: yearDone || pending ? T.dim : "#fff", borderRadius: 8, opacity: yearDone || pending ? .6 : 1 }} className="px-3 py-2 text-xs font-bold">Continue → 1 month</button>
+                <button onClick={() => warRoomAct("advance", 3)} disabled={yearDone || !!bt || pending} style={{ background: T.panel2, color: yearDone || pending ? T.dim : T.text, border: "1px solid " + RED + "88", borderRadius: 8, opacity: yearDone || pending ? .6 : 1 }} className="px-3 py-2 text-xs font-bold">Advance war → 3 months</button>
               </div>
             </div>
             {yearDone && <div style={{ color: T.gold, fontFamily: SERIF, fontSize: 12.5, marginTop: 6 }}>The year is over. Age up to continue the war; you get older with it.</div>}
+            {boss && R.council && (
+              <div style={{ ...glass(T.gold), marginTop: 10 }} className="p-3.5 sl-war-council">
+                <div style={{ color: T.gold, fontSize: 10, letterSpacing: ".3em" }} className="font-bold">WAR COUNCIL · MONTH {R.month}</div>
+                {R.council.sp.map((sp, i) => (
+                  <div key={i} className="mt-2"><div style={{ color: T.text, fontSize: 12.5 }} className="font-bold">{sp.name} <span style={{ color: T.dim, fontWeight: 500, fontSize: 11 }}>{sp.role}</span></div><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13.5 }}>“{sp.line}” <span style={{ color: T.dim, fontSize: 10.5, fontFamily: UI }}>→ {COUNCIL_OPTS[sp.rec]}</span></div></div>
+                ))}
+                <div className="flex gap-1.5 flex-wrap mt-3">
+                  {Object.entries(COUNCIL_OPTS).map(([k2, n2]) => { const n3 = R.council.sp.filter((sp) => sp.rec === k2).length; return <button key={k2} onClick={() => warRoomAct("council", k2)} style={{ background: T.panel2, color: T.text, border: "1px solid " + T.gold + "77", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">{n2.toUpperCase()}{n3 ? " · " + n3 + " for" : ""}</button>; })}
+                </div>
+                <div style={{ color: T.dim, fontSize: 11, marginTop: 6 }}>They will remember who you listened to.</div>
+              </div>
+            )}
+            {boss && R.incident && (
+              <div style={{ ...glass(RED), marginTop: 10 }} className="p-3.5 sl-war-incident">
+                <div style={{ color: RED, fontSize: 10, letterSpacing: ".3em" }} className="font-bold">INCIDENT · {R.incident.site.toUpperCase()}</div>
+                <div style={{ fontFamily: SERIF, fontSize: 15, marginTop: 4 }}>{R.incident.cmd} {INCIDENT_TEXT[R.incident.kind].us} at {R.incident.site}.</div>
+                <div style={{ color: T.dim, fontSize: 11.5, marginTop: 2 }}>{R.incident.rule ? "This breaks your own rules of engagement." : "Your rules of engagement did not forbid it. Everybody else's did."}</div>
+                <div className="flex gap-1.5 flex-wrap mt-3">
+                  {[["allow", "Allow it"], ["punish", "Punish the commander"], ["deny", "Deny responsibility"], ["report", "Report it to Tetsu"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("incident", k2)} style={{ background: T.panel2, color: T.text, border: "1px solid " + RED + "77", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">{n2}</button>)}
+                </div>
+              </div>
+            )}
+            {boss && R.crisis && (
+              <div style={{ ...glass(RED), marginTop: 10 }} className="p-3.5 sl-war-crisis">
+                <div style={{ color: RED, fontSize: 10, letterSpacing: ".3em" }} className="font-bold">NATIONAL CRISIS</div>
+                <div style={{ fontFamily: SERIF, fontSize: 15, marginTop: 4 }}>The country is exhausted. War exhaustion {Math.round(R.exhaust)}%, approval {approvalOf(R)}%.</div>
+                <Row label="Continue the war and risk your government" sub="The council will start counting votes against you." right="Continue" onClick={() => warRoomAct("crisis", "continue")} tone={RED} />
+                <Row label="Negotiate from a weaker position" sub="They will talk. You cannot ask for annexation, abdication, disarmament or reparations." right="Negotiate" onClick={() => warRoomAct("crisis", "negotiate")} />
+              </div>
+            )}
             <div className="grid gap-2 mt-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
               {[["Your dead", R.cas.mine.toLocaleString(), RED], ["Their dead", R.cas.theirs.toLocaleString(), T.soft], ["Armies", R.armies.filter((a) => a.men > 0).length + " · " + Math.round(R.armies.reduce((s2, a) => s2 + a.men, 0) / 1000) + "k", T.soft], ["Intelligence", R.intel + "%", R.intel >= 60 ? T.good : T.gold]].map(([k2, v2, col]) => (
                 <div key={k2} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10, padding: "7px 10px" }}><div style={{ fontFamily: SERIF, fontSize: 17, color: col, lineHeight: 1 }} className="font-bold">{v2}</div><div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".08em", marginTop: 2 }}>{k2.toUpperCase()}</div></div>
@@ -21873,6 +22458,28 @@ export default function ShinobiLife() {
                     {Object.entries(ORDERS).map(([k3, O]) => <button key={k3} title={O.d} onClick={() => warRoomAct("order", f.key, k3)} disabled={!boss} style={{ background: F.order === k3 ? RED : "transparent", color: F.order === k3 ? "#fff" : boss ? T.soft : T.dim, border: "1px solid " + (F.order === k3 ? RED : T.line), borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>{O.n}</button>)}
                   </div>
                   <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5, marginTop: 3 }}>{(ORDERS[F.order] || ORDERS.hold).d}</div>
+                  <div style={{ color: T.soft, fontSize: 11.5, marginTop: 5 }}><b>{F.terrain}</b> <span style={{ color: T.dim }}>{(TERRAIN[F.terrain] || {}).d}</span> · <b>{F.weather}</b>{F.infra && F.infra.bridge === false ? " · the bridge is down" : ""}{F.infra && F.infra.medical ? " · medical station" : ""}{(R.routes[f.key] || {}).cut ? " · SUPPLY CUT" : ""}</div>
+                  {(() => { const sn = eplanSeen(R, R.eplans[f.key]); return sn ? <div style={{ color: sn.lvl >= 2 ? RED : T.dim, fontSize: 11.5, marginTop: 2, fontWeight: sn.lvl >= 2 ? 700 : 500 }}>{sn.t}</div> : null; })()}
+                  <button onClick={() => setBvFront(bvFront === f.key ? null : f.key)} style={{ color: T.gold, fontSize: 11.5, marginTop: 5 }} className="font-semibold">{bvFront === f.key ? "Close the battlefield" : "Battlefield view →"}</button>
+                  {bvFront === f.key && (() => {
+                    const ms = mine(f.key).reduce((s2, a) => s2 + a.men, 0); const tsn = (R.foes[f.key] || []).filter((a) => a.men > 0).reduce((s2, a) => s2 + a.men, 0);
+                    const done2 = F.fought === R.clock;
+                    return (
+                      <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.line, borderRadius: 10, marginTop: 8 }} className="p-3 sl-battlefield">
+                        <div style={{ color: T.gold, fontSize: 10, letterSpacing: ".26em" }} className="font-bold">BATTLE OF {F.site.replace(/^the /, "").toUpperCase()}</div>
+                        <div style={{ color: T.soft, fontSize: 12 }}>Terrain: {F.terrain} · Weather: {F.weather} · Your force: {ms.toLocaleString()} · Enemy: {R.intel >= 60 ? tsn.toLocaleString() : "~" + (Math.round(tsn / 5000) * 5000).toLocaleString()}</div>
+                        <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.25, color: T.soft, margin: "8px 0", textAlign: "center" }}>{"       " + (VSHORT[f.key] || "ENEMY").toUpperCase() + "\n   " + "█".repeat(Math.max(3, Math.min(15, Math.round(tsn / 3000)))) + "\n      ↓ ↓\n" + "─".repeat(15) + "  ← LINE " + F.line + "\n   ▲       ▲\n " + mine(f.key).slice(0, 2).map((a) => a.n.split(" ")[0] + " " + (VSHORT[c.village] || "")).join("  ")}</pre>
+                        {boss ? (
+                          <div className="flex gap-1.5 flex-wrap">
+                            {[["reserves", "Commit reserves"], ["retreat", "Order retreat"], ["flank", "Attack the flank"], ["commander", "Call the commander"], ["delegate", "Delegate"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("field", f.key, k2)} disabled={done2} style={{ background: T.panel2, color: done2 ? T.dim : T.text, border: "1px solid " + T.line, borderRadius: 8 }} className="px-2.5 py-1 text-xs font-bold">{n2}</button>)}
+                            <button onClick={() => { setWarTab("assets"); setWrFront(f.key); }} style={{ background: T.panel2, color: T.text, border: "1px solid " + T.line, borderRadius: 8 }} className="px-2.5 py-1 text-xs font-bold">Deploy an asset</button>
+                          </div>
+                        ) : null}
+                        <button onClick={() => fightFront(f.key)} disabled={done2 || !!bt} style={{ background: done2 ? T.panel2 : RED, color: done2 ? T.dim : "#fff", borderRadius: 8, marginTop: 8 }} className="px-3 py-1.5 text-xs font-bold">Personally enter the battle</button>
+                        {done2 && <div style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>This front's battle has been fought this month.</div>}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -21888,6 +22495,9 @@ export default function ShinobiLife() {
                   {[["Morale", a.morale], ["Organisation", a.org], ["Supply", a.supply]].map(([k2, v2]) => <div key={k2}><div className="flex justify-between" style={{ color: T.dim }}><span>{k2}</span><span>{Math.round(v2)}%</span></div><Bar v={v2} col={v2 >= 60 ? T.good : v2 >= 35 ? T.gold : RED} /></div>)}
                 </div>
                 <div style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>Attached: {a.att.join(", ")}</div>
+                <div style={{ color: T.soft, fontSize: 11.5, marginTop: 4 }}>Formed {a.formed} · Battles {a.battles || 0} · Victories {a.wins || 0} · Defeats {a.losses || 0} · Withdrawals {a.withdrawals || 0}</div>
+                {(a.honors || []).length > 0 && <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em", marginTop: 4 }} className="font-bold">BATTLE HONOURS</div>}
+                {(a.honors || []).slice().reverse().slice(0, 6).map((h2, i2) => <div key={i2} style={{ color: h2.r === "Victory" ? T.good : h2.r === "Defeat" ? RED : T.dim, fontFamily: SERIF, fontSize: 12 }}>{h2.n} {"—"} {h2.r} <span style={{ color: T.dim, fontSize: 10.5 }}>{h2.y}</span></div>)}
                 <div className="flex gap-1 flex-wrap mt-1.5 items-center"><span style={{ color: T.dim, fontSize: 10.5 }}>Front:</span>
                   {foes.map((f) => <button key={f.key} onClick={() => warRoomAct("assign", a.id, f.key)} disabled={!boss} style={{ background: a.front === f.key ? T.gold : "transparent", color: a.front === f.key ? "#0b0d11" : boss ? T.soft : T.dim, border: "1px solid " + T.line, borderRadius: 6, padding: "0 7px", fontSize: 10.5, fontWeight: 700 }}>{VSHORT[f.key] || f.name}</button>)}
                 </div>
@@ -21930,6 +22540,7 @@ export default function ShinobiLife() {
                 <H col={RED}>NATIONAL PRIORITY</H>
                 {[[null, { n: "No special priority", d: "The country goes on as it was." }]].concat(Object.entries(PRIORITIES)).map(([k2, P2]) => <Row key={k2 || "none"} label={P2.n} sub={P2.d} right={R.priority === k2 ? "Current" : "Set"} onClick={() => warRoomAct("priority", k2)} disabled={!boss || R.priority === k2} tone={R.priority === k2 ? T.good : null} />)}
                 <H col={RED}>MILITARY DOCTRINE</H>
+                {R.doctrine && <div style={{ color: T.soft, fontSize: 11.5, marginBottom: 4 }}>{(DOCTRINES_WAR[R.doctrine] || {}).n}: mastery {Math.round(((docOf(R).mastery || 1) - 1) * 200)}%. A doctrine gets stronger the longer you fight by it; changing starts over.</div>}
                 {Object.entries(DOCTRINES_WAR).map(([k2, D2]) => <Row key={k2} label={D2.n} sub={D2.d} right={R.doctrine === k2 ? "Current" : "Adopt"} onClick={() => warRoomAct("doctrine", k2)} disabled={!boss || R.doctrine === k2} tone={R.doctrine === k2 ? T.good : null} />)}
               </>
             )}
@@ -21948,6 +22559,8 @@ export default function ShinobiLife() {
                     ))}
                   </div>
                 ))}
+                <H col={RED}>WHAT THEY ARE PLANNING</H>
+                {foes.map((f) => { const sn = eplanSeen(R, R.eplans[f.key]); return <div key={f.key} style={{ fontFamily: SERIF, fontSize: 12.5, color: sn && sn.lvl >= 2 ? T.text : T.soft }}><b>{f.name}:</b> {sn ? sn.t : "No plan yet that anybody can see."}{R.intel >= 50 && R.foeDoc && R.foeDoc[f.key] ? " They fight by " + (DOCTRINES_WAR[R.foeDoc[f.key]] || {}).n.toLowerCase() + "." : ""}</div>; })}
                 <Row label="Send spies" sub="Agents behind their lines for a month. They come back with numbers, or they do not come back." right="Send" onClick={() => warRoomAct("spies")} disabled={!(boss || role === "anbu") || R.spyMonth === R.month + "/" + c.year} />
               </>
             )}
@@ -21963,6 +22576,66 @@ export default function ShinobiLife() {
               </>
             )}
 
+            {warTab === "logistics" && (
+              <>
+                <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mt-2">An army is supplied from somewhere. Cut the route and the army starves in weeks. {R.road ? R.road.n + (R.road.owner === "us" ? " is yours: every front eats better." : R.road.owner === "them" ? " is theirs: every front feels it." : " runs through the " + ((R.fronts[R.road.front] || {}).site || "front") + " front, and nobody holds it yet. Push that line past 65 to take it.") : ""}</p>
+                {foes.map((f) => {
+                  const F = R.fronts[f.key]; const rt = R.routes[f.key] || {}; const ms = mine(f.key);
+                  const avg = ms.length ? Math.round(ms.reduce((s2, a) => s2 + a.supply, 0) / ms.length) : 0;
+                  return (
+                    <div key={f.key} style={{ background: T.panel2, border: "1px solid " + (rt.cut ? RED : T.line), borderRadius: 10 }} className="p-3 mt-2 sl-route">
+                      <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.3, color: T.soft, margin: 0 }}>{(VSHORT[c.village] || "HOME").toUpperCase() + "\n  │ supply route" + (rt.cut ? "  ✖ CUT (" + rt.cut + " months)" : "") + "\n  ▼\n" + (rt.depot || "the depot").replace(/^the /, "").toUpperCase() + "   secure " + Math.round(rt.secure || 0) + "%\n  │\n  ▼\n" + (ms.map((a) => a.n.toUpperCase()).join(", ") || "NO ARMY") + "   supply " + avg + "%\n  │\n  ▼\n" + F.site.replace(/^the /, "").toUpperCase() + " FRONT"}</pre>
+                      {boss && (
+                        <div className="flex gap-1.5 flex-wrap mt-2">
+                          {[["protect", "Protect the route"], ["reroute", "Establish another route (60k)"], ["airlift", c.summon ? "Carry supplies by summons (20k)" : "Airlift by scroll (50k)"], ["raid", "Capture enemy logistics"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("route", f.key, k2)} style={{ background: "transparent", color: T.soft, border: "1px solid " + T.line, borderRadius: 6 }} className="px-2 py-1 text-xs font-semibold">{n2}</button>)}
+                          <button onClick={() => warRoomAct("order", f.key, "withdraw")} style={{ background: "transparent", color: T.soft, border: "1px solid " + T.line, borderRadius: 6 }} className="px-2 py-1 text-xs font-semibold">Retreat</button>
+                          {F.terrain === "River" && <button onClick={() => warRoomAct("route", f.key, "bridge")} style={{ background: "transparent", color: RED, border: "1px solid " + RED + "66", borderRadius: 6 }} className="px-2 py-1 text-xs font-semibold">{F.infra.bridge === false ? "Rebuild the bridge (50k)" : "Destroy the bridge"}</button>}
+                          {!F.infra.medical && <button onClick={() => warRoomAct("route", f.key, "medical")} style={{ background: "transparent", color: T.soft, border: "1px solid " + T.line, borderRadius: 6 }} className="px-2 py-1 text-xs font-semibold">Build a medical station (80k)</button>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            {warTab === "politics" && (
+              <>
+                <H col={RED}>SUPPORT FOR THE WAR · APPROVAL {approvalOf(R)}%</H>
+                {[["council", "Council"], ["daimyo", "Daimyo"], ["military", "Military"], ["civilian", "Civilians"], ["clan", "The clans"]].map(([k2, n2]) => <PolBar key={k2} k={k2} n={n2} />)}
+                <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>You can win every battle and still lose the war at home.{R.govPeace ? " Your own government has asked for negotiations." : ""}{R.refuse && R.clock <= R.refuse ? " The military is refusing offensives." : ""}{R.weak ? " You are negotiating from weakness." : ""}</div>
+                <H col={RED}>WAR EXHAUSTION {Math.round(R.exhaust)}%</H>
+                {[[20, "The papers criticise the war"], [40, "Families protest conscription"], [60, "The council demands a peace proposal"], [80, "The military refuses another offensive"], [95, "National crisis"]].map(([t2, n2]) => <div key={t2} style={{ color: R.exThr.includes(t2) ? RED : T.dim, fontSize: 12 }}>{R.exThr.includes(t2) ? "●" : "○"} {t2}% {"—"} {n2}</div>)}
+                <H col={RED}>RULES OF ENGAGEMENT</H>
+                {ROE_RULES.map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("roe", k2)} disabled={!boss} className="flex items-center gap-2 mb-1 sl-roe" style={{ color: T.soft, fontSize: 12.5 }}><span style={{ width: 16, height: 16, border: "1px solid " + T.line, borderRadius: 3, display: "inline-flex", alignItems: "center", justifyContent: "center", color: T.good }}>{R.roe[k2] ? "✓" : ""}</span>{n2}</button>)}
+                <div style={{ color: T.dim, fontSize: 11 }}>Your commanders can break these. So can you. Tetsu keeps count.{R.enemyCrimes ? " The enemy has broken them " + R.enemyCrimes + " time" + (R.enemyCrimes === 1 ? "" : "s") + "." : ""}</div>
+                {(R.councilLog || []).length > 0 && <H col={RED}>WHAT THE COUNCIL DECIDED</H>}
+                {(R.councilLog || []).slice().reverse().map((x, i2) => <div key={i2} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{x.y}: {COUNCIL_OPTS[x.choice]}{x.agreed.length ? ", as " + joinList(x.agreed) + " advised" : ", against every adviser"}.</div>)}
+              </>
+            )}
+            {warTab === "occupation" && Object.entries(R.occ || {}).map(([k, O2]) => (
+              <div key={k} style={{ background: T.panel2, border: "1px solid " + (O2.mode ? T.line : T.gold), borderRadius: 10 }} className="p-3 mt-2">
+                <div style={{ fontFamily: SERIF, fontSize: 14.5 }} className="font-bold">OCCUPATION · {O2.land}</div>
+                <div style={{ color: T.dim, fontSize: 11 }}>Since {O2.since}{O2.mode ? " · " + OCC_MODES[O2.mode].n : " · undecided"}</div>
+                {[["Control", O2.control, T.good], ["Resistance", O2.resist, RED]].map(([n2, v2, col]) => <div key={n2} className="flex items-center gap-2 mt-1"><span style={{ minWidth: 80, color: T.dim, fontSize: 11 }}>{n2}</span><div style={{ flex: 1 }}><Bar v={v2} col={col} h={5} /></div><b style={{ fontSize: 11 }}>{Math.round(v2)}</b></div>)}
+                {Object.entries(OCC_MODES).map(([m2, M2]) => <Row key={m2} label={M2.n} sub={M2.d} right={O2.mode === m2 ? "Current" : "Choose"} onClick={() => warRoomAct("occ", k, m2)} disabled={!boss || O2.mode === m2} tone={O2.mode === m2 ? T.good : null} />)}
+              </div>
+            ))}
+            {warTab === "command" && (() => {
+              const C = c.command || {}; const dct = commandDoctrine(C);
+              return (
+                <>
+                  <H col={RED}>YOUR COMMAND</H>
+                  {!C.wars && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12.5 }}>You have not commanded a war. The record starts the first time you do.</div>}
+                  {C.wars > 0 && (
+                    <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
+                      {[["Wars commanded", C.wars], ["Battles", C.battles || 0], ["Victories", C.wins || 0], ["Defeats", C.defeats || 0], ["Peace settlements", C.peaces || 0], ["Generals lost", C.lost || 0], ["Major operations", C.ops || 0], ["Operations won", C.opsWon || 0]].map(([k2, v2]) => <div key={k2} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10, padding: "7px 10px" }}><div style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1 }} className="font-bold">{v2}</div><div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".06em", marginTop: 2 }}>{k2.toUpperCase()}</div></div>)}
+                    </div>
+                  )}
+                  {dct && <div style={{ ...glass(T.gold), marginTop: 10 }} className="p-3"><div style={{ color: T.gold, fontSize: 9.5, letterSpacing: ".22em" }} className="font-bold">YOUR DOCTRINE</div><div style={{ fontFamily: SERIF, fontSize: 19 }} className="font-bold">{dct.n}</div><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>It {dct.d}. Nobody chose the name. It comes from how you actually fight, and it is what historians will call it.</div></div>}
+                  {C.wars > 0 && !dct && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 8 }}>Command long enough and your way of fighting will earn a name.</div>}
+                </>
+              );
+            })()}
             {warTab === "peace" && foes.map((f) => {
               const F = R.fronts[f.key] || { line: 50 };
               const sel = peaceSel[f.key] || [];
@@ -21975,7 +22648,7 @@ export default function ShinobiLife() {
                   {["Territory", "Resources", "Military", "Political", "Humanitarian"].map((g) => (
                     <div key={g} className="mt-1.5">
                       <span style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".16em", marginRight: 6 }} className="font-bold">{g.toUpperCase()}</span>
-                      {PEACE_TERMS.filter((t2) => t2.g === g && (!t2.village || f.kind === "village")).map((t2) => { const ok = !t2.need || t2.need(F); const on = sel.includes(t2.id); return <button key={t2.id} onClick={() => ok && toggle(t2.id)} title={ok ? "" : "Needs " + t2.needTxt} style={{ background: on ? T.gold : "transparent", color: on ? "#0b0d11" : ok ? T.soft : T.dim, border: "1px solid " + (on ? T.gold : T.line), borderRadius: 99, padding: "0 8px", fontSize: 10.5, fontWeight: 700, margin: "2px 3px 0 0", opacity: ok ? 1 : .5 }}>{t2.n}</button>; })}
+                      {PEACE_TERMS.filter((t2) => t2.g === g && (!t2.village || f.kind === "village")).map((t2) => { const ok = (!t2.need || t2.need(F)) && !(R.weak && WEAK_BARRED.includes(t2.id)); const on = sel.includes(t2.id); return <button key={t2.id} onClick={() => ok && toggle(t2.id)} title={ok ? "" : "Needs " + t2.needTxt} style={{ background: on ? T.gold : "transparent", color: on ? "#0b0d11" : ok ? T.soft : T.dim, border: "1px solid " + (on ? T.gold : T.line), borderRadius: 99, padding: "0 8px", fontSize: 10.5, fontWeight: 700, margin: "2px 3px 0 0", opacity: ok ? 1 : .5 }}>{t2.n}</button>; })}
                     </div>
                   ))}
                   <div className="flex items-center gap-2 mt-2"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 110 }}>WILL THEY SIGN</span><div style={{ flex: 1 }}><Bar v={odds} col={odds >= 60 ? T.good : odds >= 35 ? T.gold : RED} h={6} /></div><b style={{ fontSize: 12 }}>{odds}%</b></div>
@@ -22210,6 +22883,14 @@ export default function ShinobiLife() {
                       <button onClick={() => v11Act("movement", m.id, 1)} disabled={c.actions < 1} style={{ color: c.actions < 1 ? T.dim : T.good, fontSize: 12 }} className="font-semibold">Speak for it</button>
                       <button onClick={() => v11Act("movement", m.id, -1)} disabled={c.actions < 1} style={{ color: c.actions < 1 ? T.dim : T.blood, fontSize: 12 }} className="font-semibold">Speak against it</button>
                     </div>
+                  </div>
+                ))}
+                {(c.occupations || []).length > 0 && <H col={T.blood}>OCCUPATIONS</H>}
+                {(c.occupations || []).map((O2) => (
+                  <div key={O2.key} style={{ background: T.panel2, border: "1px solid " + (O2.resist >= 50 ? T.blood + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2 sl-post-occ">
+                    <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{O2.land}</span><span style={{ color: T.dim, fontSize: 11 }}>since {O2.since} · {OCC_MODES[O2.mode].n}</span></div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>Held since {O2.war}. Control {O2.control}, resistance {O2.resist}.{O2.resist >= 50 ? " There is an insurgency." : ""}</div>
+                    <div className="flex gap-2 flex-wrap mt-1.5">{Object.entries(OCC_MODES).filter(([m2]) => m2 !== O2.mode).map(([m2, M2]) => <button key={m2} onClick={() => occUi(O2.key, m2)} disabled={c.rank < 6} style={{ color: c.rank < 6 ? T.dim : m2 === "withdraw" ? T.good : T.soft, fontSize: 11.5 }} className="font-semibold">{M2.n}</button>)}</div>
                   </div>
                 ))}
                 <H col={G}>THE SEATS</H>
