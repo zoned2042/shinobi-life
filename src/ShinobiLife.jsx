@@ -3525,6 +3525,8 @@ function ironRule(c, L, cs, arg, o = {}) {
   const k = (temper ? 0.5 : 1) * (o.panel ? 0.5 : 1);
   const said = [];
   /* the pans */
+  if (!o.panel && lid) { rememberVillage(c, lid, "The Arbiter ruled against us at Tetsu", -4); const lk = c.line && c.line[lid] && c.line[lid].current; if (lk && lk.name) remember(c, lk.name, "You ruled against my village at Tetsu in " + c.year, -5); kageDecide(c, lid, "rejected", "lost a case at Tetsu, and said so"); }
+  if (!o.panel && wid) { rememberVillage(c, wid, "The Arbiter found for us at Tetsu", 3); kageDecide(c, wid, "accepted", "won a case at Tetsu"); }
   if (lid) I.trust[lid] = cl(I.trust[lid] - Math.round(rr(8, 14) * k));
   if (wid) I.trust[wid] = cl(I.trust[wid] + Math.round(rr(3, 7) * k));
   ns.forEach((v) => { if (v !== wid && v !== lid) I.trust[v] = cl(I.trust[v] + (correct ? rr(2, 4) : -rr(1, 3))); });
@@ -4189,6 +4191,7 @@ const ECHOES = {
     if (W && W.wars && roll(30) && !W.wars.some((w) => w.years > 0 && [w.a, w.b].includes(e.vid) && [w.a, w.b].includes(e.killerVid)) && !treatyHolds(c, L, e.vid, e.killerVid)) {
       W.wars.push({ a: e.vid, b: e.killerVid, years: rr(2, 4), great: false, no: 0 });
       chron(c, { cat: "war", cause: id, txt: vName2(e.vid) + " goes to war with " + vName2(e.killerVid) + ", a decade late, over the death of " + e.name + ".", big: true });
+      kageDecide(c, e.vid, "declared", "declared war on " + vName2(e.killerVid) + " over the death of " + e.name);
       newsItem(c, vName2(e.vid) + " has declared on " + vName2(e.killerVid) + ". The declaration names " + e.name + ", killed ten years ago.", "WAR", true);
     }
   },
@@ -4229,6 +4232,8 @@ const ECHOES = {
     if (!t || !villageExists(c, t.a) || !villageExists(c, t.b)) return;
     const who = roll(50) ? t.a : t.b;
     const id = chron(c, { cat: "courts", cause: e.root, big: true, txt: vName2(who) + " challenges " + t.name + ", " + (c.year - t.year === 1 ? "a year" : (c.year - t.year) + " years") + " after it was signed at Tetsu." });
+    kageDecide(c, who, "rejected", "challenged " + t.name);
+    rememberVillage(c, who, "We challenged " + t.name, -1);
     newsItem(c, vName2(who) + " is challenging " + t.name + ", signed " + yrsAgo(c, t.year) + " at Tetsu. Its envoy says the treaty was written for a world that no longer exists.", "THE COURTS", true);
     if (e.author && e.author !== c.name && isAncestor(c, e.author) && !c.dilemma && c.age >= 14) {
       c.dilemma = "treatychallenge"; c.dilemmaCtx = { name: t.name, who, author: e.author, root: id };
@@ -4607,6 +4612,7 @@ function crisisBack(c, L, who) {
   if (!k) return;
   k.backed = who;
   const cand = k.cands.find((x) => x.k === who);
+  k.cands.forEach((x) => remember(c, x.n, x.k === who ? "You backed my claim to the seat of " + vName2(k.vid) : "You opposed my claim to the seat of " + vName2(k.vid), x.k === who ? 5 : -3));
   chron(c, { cat: "villages", cause: k.root, line: c.name, txt: c.name + " declares for " + (cand ? cand.n : "a claimant") + " in the succession crisis in " + vName2(k.vid) + "." });
   P(L, "You said, in front of people who will remember it, that you are for " + (cand ? cand.n : "them") + ". It will be settled within the year.", "n");
 }
@@ -5293,12 +5299,14 @@ function investigate(c, L, id) {
   const ok = roll(cl(35 + c.stats.int * 0.5 + (c.career && ["interrogator", "intel"].includes(c.career.id) ? 15 : 0), 20, 92));
   if (!ok) { P(L, "A season on it and nothing new. Somebody is being careful.", "n"); return; }
   const wrong = cs.options.filter((o) => o !== cs.truth && !cs.ruled.includes(o));
-  cs.clues.push(pick(CLUE_LINES));
+  const ci = R(CLUE_LINES.length);
+  cs.clues.push(CLUE_LINES[ci]);
   const cl2 = cs.clues[cs.clues.length - 1];
+  const src = CLUE_SRC[ci] || "Personal observation";
   /* not every lead is solid: some point somewhere and prove nothing yet */
-  if (wrong.length > 1 && roll(25)) { const hint = pick(cs.options.filter((o) => !cs.ruled.includes(o))); cs.ev.push({ t: cl2 + " It seems to point at " + hint + ".", s: "?", o: hint }); P(L, "A lead: " + cl2 + " It seems to point at " + hint + ", but it proves nothing yet.", "n"); return; }
-  if (wrong.length) { const w = pick(wrong); cs.ruled.push(w); cs.ev.push({ t: cl2 + " It rules out " + w + ".", s: "✗", o: w }); P(L, "A clue: " + cl2 + " It rules out " + w + ".", "g"); }
-  else { cs.ev.push({ t: cl2 + " Only " + cs.truth + " is left standing.", s: "✓", o: cs.truth }); P(L, "A clue: " + cl2 + " There is only one explanation left standing.", "g"); }
+  if (wrong.length > 1 && roll(25)) { const hint = pick(cs.options.filter((o) => !cs.ruled.includes(o))); cs.ev.push({ t: cl2 + " It seems to point at " + hint + ".", s: "?", o: hint, src }); P(L, "A lead: " + cl2 + " It seems to point at " + hint + ", but it proves nothing yet.", "n"); return; }
+  if (wrong.length) { const w = pick(wrong); cs.ruled.push(w); cs.ev.push({ t: cl2 + " It rules out " + w + ".", s: "✗", o: w, src }); P(L, "A clue: " + cl2 + " It rules out " + w + ".", "g"); }
+  else { cs.ev.push({ t: cl2 + " Only " + cs.truth + " is left standing.", s: "✓", o: cs.truth, src }); P(L, "A clue: " + cl2 + " There is only one explanation left standing.", "g"); }
 }
 function closeCase(c, L, id, how, guess) {
   const cs = (c.cases || []).find((x) => x.id === id && !x.done); if (!cs) return;
@@ -5473,6 +5481,7 @@ const CHAIN_STAGES = {
       const ln = c.line && c.line[d.other];
       const who = ln && ln.current ? ln.current.name : "the " + kageWordFor(c, d.other);
       chainStep(c, ch, who + " of " + vName2(d.other) + " cites the death of " + d.victim + " in an address to the council, and asks for the border garrisons to be doubled.", { cat: "villages" });
+      kageDecide(c, d.other, "accepted", "doubled the border garrisons over the death of " + d.victim);
     },
     (c, L, ch, d) => {
       const mine = d.killer === c.name || isAncestor(c, d.killer);
@@ -5563,7 +5572,7 @@ const RUMOUR_STATUS = { confirmed: "CONFIRMED", suspected: "SUSPECTED", rumoured
 function rumour(c, t, s, about) {
   if (!c.rumours) c.rumours = [];
   if (c.rumours.some((r) => r.t === t)) return;
-  c.rumours.unshift({ y: c.year, t, s: s || "rumoured", about: about || null });
+  c.rumours.unshift({ y: c.year, t, s: s || "rumoured", about: about || null, src: s === "classified" ? "An ANBU leak" : s === "confirmed" ? "The Shinobi Times" : s === "suspected" ? pick(["A border guard", "A clerk in the tower", "Somebody who was there"]) : pick(["Teahouse talk", "The bathhouses", "A merchant on the east road", "Children repeating their parents"]) });
   if (c.rumours.length > 50) c.rumours.pop();
 }
 const IDLE_RUMOURS = [
@@ -5698,6 +5707,7 @@ function agendaExpose(c, L, id) {
   const a = (c.agendas || {})[id]; const n = NAMED[id]; if (!a || !n || a.done) return;
   const A = AGENDAS.find((x) => x.k === a.k);
   a.done = c.year; a.ok = false; a.exposedBy = c.name;
+  remember(c, n.name, "You exposed my secret", -6);
   const good = ["sell", "forbidden", "seat"].includes(a.k);
   c.standing = cl(c.standing + (good ? 6 : -4));
   chron(c, { cat: "villages", line: c.name, big: a.k === "sell", txt: c.name + " exposes " + n.name + ": " + A.n.toLowerCase() + ". " + (good ? "The village thanks them." : "Not everybody thinks it was theirs to expose.") });
@@ -5790,7 +5800,10 @@ function secretDig(c, L, id) {
   const odds = cl(28 + c.stats.int * 0.5 + (c.career && ["archivist", "intel", "journalist", "research"].includes(c.career.id) ? 18 : 0) + (c.anbu ? 8 : 0), 12, 90);
   if (!roll(odds)) { P(L, "A season in the archives and nothing. The files that should be there are not.", "n"); return; }
   s.clues += 1;
-  P(L, "A thread: " + pick(["a requisition order with the wrong seal", "a witness who was paid to move away", "two versions of the same report", "a burial record for somebody listed alive", "a letter somebody forgot to burn"]) + ". " + (s.clues >= s.need ? "" : (s.need - s.clues) + " more and you will have it."), "g");
+  const TH = [["a requisition order with the wrong seal", "Archive record"], ["a witness who was paid to move away", "Witness"], ["two versions of the same report", "ANBU report"], ["a burial record for somebody listed alive", "Historical record"], ["a letter somebody forgot to burn", "Personal letter"]];
+  const th = pick(TH.filter((x) => !(s.threads || []).some((y) => y.t === x[0]))) || pick(TH);
+  s.threads = (s.threads || []).concat([{ t: th[0], src: th[1], y: c.year }]);
+  P(L, "A thread: " + th[0] + ". " + (s.clues >= s.need ? "" : (s.need - s.clues) + " more and you will have it."), "g");
   secretCheck(c, L, s);
 }
 function secretPublish(c, L, s, leaked) {
@@ -5904,6 +5917,7 @@ function movementTick(c, L) {
     if (m.str >= 100) {
       m.done = c.year; m.outcome = "won";
       chron(c, { cat: "villages", cause: m.root, big: true, line: m.you > 0 ? c.name : null, txt: m.n + " wins in " + vName2(m.vid) + ": " + K.win.toLowerCase() + "." });
+      kageDecide(c, m.vid, "compromised", "gave " + m.n + " what it wanted: " + K.win.toLowerCase());
       newsItem(c, m.n + " has won. " + K.win + " in " + vName2(m.vid) + ".", "THE VILLAGES", true);
       if (m.kind === "antiwar") (W.wars || []).forEach((w) => { if (w.years > 0 && (w.a === m.vid || w.b === m.vid) && !(c.war && [w.a, w.b].includes(c.village))) w.years = 1; });
       if (m.kind === "open") (W.refugees || []).forEach((r) => { if (r.to === m.vid && !r.settled) r.settled = c.year; });
@@ -5912,6 +5926,7 @@ function movementTick(c, L) {
     } else if (m.str <= 0) {
       m.done = c.year; m.outcome = "lost";
       chron(c, { cat: "villages", cause: m.root, line: m.you < 0 ? c.name : null, txt: m.n + " is finished in " + vName2(m.vid) + ": " + K.lose.toLowerCase() + "." });
+      kageDecide(c, m.vid, "rejected", "refused " + m.n);
     }
   });
   if (W.movements.length > 40) W.movements = W.movements.filter((m) => !m.done || c.year - m.done < 40).slice(-40);
@@ -5920,6 +5935,7 @@ function movementBack(c, L, id, dir) {
   const W = c.world || {}; const m = (W.movements || []).find((x) => x.id === id && !x.done); if (!m) return;
   const loud = c.rank >= 6 ? 30 : c.rank >= 4 ? 18 : 10;
   m.str = Math.max(0, Math.min(100, m.str + dir * loud)); m.you += dir;
+  remember(c, m.leader, dir > 0 ? "You spoke for our cause when it was not safe to" : "You spoke against our cause", dir > 0 ? 4 : -4);
   const home = m.vid === c.village;
   const brave = ["reform", "civil", "antiwar"].includes(m.kind) && home;
   if (dir > 0) { c.standing = cl(c.standing + (brave ? -3 : 2)); c.stats.cha = cl(c.stats.cha + 1); P(L, "You spoke for " + m.n + " in public. " + (brave ? "The tower noted your name." : "People listened."), "g"); }
@@ -5998,6 +6014,7 @@ function ironCrisisTick(c, L) {
   const prev = I.memory.filter((m) => m.k === K.k).slice(-1)[0];
   I.crisis = { k: K.k, vid: v, n: K.n(v) + " of " + c.year, y: c.year, prev: prev ? prev.n : null };
   I.crisis.root = chron(c, { cat: "courts", big: true, txt: "A CONSTITUTIONAL CRISIS AT TETSU. " + K.t(v) + (prev ? " The court remembers " + prev.n + ", and how it ended." : "") });
+  if (K.k === "defy" || K.k === "charter") kageDecide(c, v, "rejected", K.k === "defy" ? "refused to recognise the Iron Scales" : "demanded the Charter of Tetsu be rewritten");
   if (I.seated && !c.dilemma) { c.dilemma = "ironcrisis"; c.dilemmaCtx = {}; }
   else if (!I.seated) ironCrisisResolve(c, L, pick(["firm", "bend", "convene"]), true);
 }
@@ -6086,10 +6103,11 @@ function coldTick(c, L) {
     if (!since || c.year - since < 15 || !roll(4)) return;
     caseBoard(cs);
     cs.reopened = c.year; cs.cold = null; cs.done = null; cs.how = null; cs.guess = null;
-    const line = pick(REOPEN_LINES);
-    cs.ev.push({ t: line, s: "?", o: null });
+    const ri = R(REOPEN_LINES.length);
+    const line = REOPEN_LINES[ri];
+    cs.ev.push({ t: line, s: "?", o: null, src: REOPEN_SRC[ri] });
     const wrong = cs.options.filter((o) => o !== cs.truth && !cs.ruled.includes(o));
-    if (wrong.length) { const w = pick(wrong); cs.ruled.push(w); cs.ev.push({ t: "The new evidence rules out " + w + ".", s: "✗", o: w }); }
+    if (wrong.length) { const w = pick(wrong); cs.ruled.push(w); cs.ev.push({ t: "The new evidence rules out " + w + ".", s: "✗", o: w, src: REOPEN_SRC[ri] }); }
     const who = cs.by && cs.by !== c.name ? "your " + (relOf(c, cs.by) || "family") : null;
     chron(c, { cat: "courts", line: c.name, txt: cs.t + " in " + vName2(cs.where) + ", from " + cs.year + ", is reopened. " + line });
     if (L) P(L, "A case from " + cs.year + " is open again: " + cs.t.toLowerCase() + ". " + line + (who ? " It was " + who + "'s case." : ""), "e");
@@ -6141,6 +6159,9 @@ function dossierV11(c, id, out) {
   out.record = (c.chron || []).filter((x) => { const s = subjOf(c, x); return s.p.includes(n.name); }).sort((x, y) => y.y - x.y).slice(0, 12);
   const dx = (c.chron || []).find((x) => x.views && x.txt.includes(n.name));
   if (dx) out.death = dx.views;
+  out.memory = memoryOf(c, n.name);
+  out.grudge = grudgeOf(c, n.name);
+  out.decisions = decisionsOf(c, n.name);
   const fam = surnameOf(n.name);
   const vd = fam && (c.vendettas || []).find((v) => v.surname === fam && !v.ended);
   if (vd) out.lines.push({ k: "Feud", v: cap(vd.fam) + " is in a blood feud with your family, since " + vd.since + "." });
@@ -6153,16 +6174,510 @@ function watchWorld(c0, years) {
   const before = c.chronNo || 0;
   const L = [];
   c.watching = true; c.dilemma = null;
+  const kidsW = (c.kids || []).filter((k) => !k.dead);
   for (let i = 0; i < years; i++) {
     c.year += 1;
+    /* your children keep living, in this version of it */
+    kidsW.forEach((k) => {
+      if (k.dead) return;
+      k.age += 1;
+      const vn = villageExists(c, c.village) ? vName2(c.village) : "the village";
+      const note = (t) => chron(c, { cat: "villages", txt: t, src: "One way it could go" });
+      if (k.age >= (k.span || 80) && roll(35)) { k.dead = true; note(k.name + " dies at " + k.age + "."); return; }
+      if (k.age === 12) note(k.name + " graduates from the Academy in " + vn + ".");
+      if (!k.wChunin && k.age >= 15 && k.age <= 19 && roll(30)) { k.wChunin = 1; note(k.name + " makes chunin."); }
+      if (k.wChunin && !k.wJonin && k.age >= 20 && k.age <= 32 && roll(14)) { k.wJonin = 1; note(k.name + " is made jonin of " + vn + "."); }
+      if (!k.wWed && k.age >= 24 && roll(7)) { k.wWed = 1; note(k.name + " marries."); }
+      if (k.wJonin && !k.wSeat && k.age >= 34 && roll(3)) { k.wSeat = 1; note(k.name + " is put forward for the seat of " + vn + "."); }
+    });
     const nowEra = eraAtYear(c.year);
     if (nowEra !== c.era) { const to = ERAS.find((e) => e.id === nowEra); c.era = nowEra; if (to) c.roster = (to.roster || []).filter((id) => !(c.dead || []).includes(id)); }
     [advanceLines, (cc, LL) => HISTORIC.filter((h) => h.y === cc.year).forEach((h) => newsItem(cc, h.t, h.c, h.big)), worldTick, greatWarTick].forEach((fn) => safeTick(fn, c, L));
     c.dilemma = null;
   }
   const entries = (c.chron || []).filter((x) => x.id > before).sort((a, b) => a.y - b.y || a.id - b.id);
+  /* the part of it that is about you */
+  const lineN = [c0.name].concat((c0.ancestors || []).map((a) => a.name));
+  const near = (c0.kids || []).map((k) => k.name).concat((c0.formerStudents || []).concat(c0.lineStudents || []).map((s2) => s2.name)).concat(c0.spouse ? [c0.spouse.name] : []).concat(c0.rival ? [c0.rival.name] : []);
+  const roots = (c.chron || []).filter((x) => lineN.includes(x.line)).map((x) => x.id);
+  const reach = {}; const q = roots.slice();
+  while (q.length) { const id = q.shift(); (c.chron || []).forEach((y) => { if (y.cause === id && !reach[y.id]) { reach[y.id] = 1; q.push(y.id); } }); }
+  const myCases = (c0.iron && (c0.iron.precedents || []).filter((p) => lineN.includes(p.by)).map((p) => p.name)) || [];
+  const myTreaties = (c0.iron && (c0.iron.treaties || []).filter((t) => lineN.includes(t.by)).map((t) => t.name)) || [];
+  const personal = entries.filter((x) => lineN.includes(x.line) || reach[x.id] || near.some((n) => n && x.txt.includes(n)) || myCases.concat(myTreaties).some((n) => n && x.txt.includes(n)) || (c0.vendettas || []).some((v) => x.txt.includes(v.fam.replace(/^the /, ""))));
+  const legacy = legacyStats(c0, c0.name, c);
   const seats = VILLAGES.filter((v) => villageExists(c, v.id)).map((v) => { const ln = c.line && c.line[v.id]; return { vid: v.id, name: ln && ln.current ? ln.current.name : null }; });
-  return { entries, seats, year: c.year };
+  return { entries, seats, year: c.year, personal, legacy, years };
+}
+
+/* ============================================================
+   11.1 — THE WORLD, EXPLAINED
+   Nothing here adds a new simulation. It makes the one that exists
+   answerable: who remembers what, why a number moved, where a thing
+   happened and what that place became, what this age will be called,
+   and what one life actually changed.
+   ============================================================ */
+
+/* ---- memory: people remember what you did to them ---- */
+function remember(c, name, t, w) {
+  if (!c || !name || name === c.name || c.watching) return;
+  if (!c.mem) c.mem = {};
+  const m = c.mem[name] || (c.mem[name] = []);
+  if (m.some((x) => x.t === t && x.y === c.year)) return;
+  m.push({ y: c.year, t, w: w || 0, by: c.name });
+  if (m.length > 8) m.shift();
+  const keys = Object.keys(c.mem);
+  if (keys.length > 320) delete c.mem[keys[0]];
+}
+/* what somebody remembers, including the things nobody had to write down */
+function memoryOf(c, name) {
+  const out = ((c.mem || {})[name] || []).map((x) => ({ ...x }));
+  const st = (c.formerStudents || []).concat(c.lineStudents || []).find((s) => s.name === name);
+  if (st) {
+    const t2 = st.teacher && st.teacher !== c.name ? st.teacher : c.name;
+    out.unshift({ y: st.year || c.year, t: (t2 === c.name ? "You" : "Your " + (relOf(c, t2) || "family")) + " taught me" + (st.teach ? " " + st.teach : ""), w: 4, by: t2 });
+    (st.path || []).forEach((p) => { if (/rival/.test(p.t)) out.push({ y: p.y, t: "I stopped needing your approval", w: -3, by: t2 }); });
+  }
+  if (c.spouse && c.spouse.name === name) out.unshift({ y: c.year, t: "You married me", w: 6, by: c.name });
+  if (c.rival && c.rival.name === name) out.push({ y: c.year, t: "We have been measuring ourselves against each other for years", w: -2, by: c.name });
+  return out.sort((a, b) => a.y - b.y);
+}
+function grudgeOf(c, name) {
+  const m = memoryOf(c, name);
+  const neg = m.filter((x) => x.w < 0);
+  if (!neg.length) return null;
+  const sum = m.reduce((a, x) => a + x.w, 0);
+  if (sum >= 0) return null;
+  const worst = neg.slice().sort((a, b) => a.w - b.w)[0];
+  const lvl = Math.max(1, Math.min(10, Math.round(-sum)));
+  const kill = neg.some((x) => /killed|annexed|sentenced|executed/.test(x.t));
+  return { name, lvl, reason: worst.t, y: worst.y, age: c.year - worst.y, forgive: kill ? "Unlikely" : lvl >= 8 ? "Difficult" : "Possible", by: worst.by, settled: m.some((x) => /made peace/.test(x.t)) };
+}
+function grudgesOf(c) {
+  return Object.keys(c.mem || {}).map((n) => grudgeOf(c, n)).filter(Boolean).sort((a, b) => b.lvl - a.lvl);
+}
+/* villages remember too, as villages */
+function rememberVillage(c, vid, t, w) {
+  if (!vid || !c || c.watching) return;
+  if (!c.vmem) c.vmem = {};
+  const m = c.vmem[vid] || (c.vmem[vid] = []);
+  m.push({ y: c.year, t, w: w || 0, by: c.name });
+  if (m.length > 10) m.shift();
+}
+function attitudeOf(c, vid) {
+  const m = ((c.vmem || {})[vid] || []).filter((x) => c.year - x.y <= 60);
+  const ln = c.line && c.line[vid];
+  const kage = ln && ln.current ? ln.current.name : null;
+  const km = kage ? memoryOf(c, kage).filter((x) => c.year - x.y <= 40) : [];
+  const decay = (x) => x.w * Math.max(0.2, 1 - (c.year - x.y) / 60);
+  const score = Math.round(m.reduce((a, x) => a + decay(x), 0) + km.reduce((a, x) => a + decay(x), 0) + (vid === c.village && !c.rogue ? 6 : 0) + (c.rogue && vid === c.village ? -8 : 0));
+  const word = score >= 8 ? "Friendly" : score >= 3 ? "Warm" : score > -3 ? "Neutral" : score > -8 ? "Wary" : "Hostile";
+  const why = m.slice(-4).reverse().map((x) => x.y + ": " + x.t + (x.by !== c.name ? " (your " + (relOf(c, x.by) || "family") + ")" : ""))
+    .concat(km.slice(-3).reverse().map((x) => x.y + ": their Kage, " + kage + ", remembers — “" + x.t + ".”"));
+  if (kage && km.length && ln.current.from && ln.current.from > (km[0] || {}).y) why.push(kage + " inherited the quarrel with the seat.");
+  if (!why.length) why.push(vid === c.village ? "It is your own village." : "Nothing between you that anybody has written down.");
+  return { score, word, why, kage };
+}
+
+/* ---- what the people in charge actually decided ---- */
+function kageDecide(c, vid, k, t) {
+  if (!vid || !c || c.watching) return;
+  const ln = c.line && c.line[vid];
+  const name = ln && ln.current ? ln.current.name : null;
+  if (!name || ln.current.player) return;
+  if (!c.decisions) c.decisions = {};
+  const d = c.decisions[name] || (c.decisions[name] = []);
+  d.push({ y: c.year, k, t, vid });
+  if (d.length > 24) d.shift();
+}
+function decisionsOf(c, name) {
+  const d = (c.decisions || {})[name] || [];
+  return { list: d, accepted: d.filter((x) => x.k === "accepted" || x.k === "signed").length, rejected: d.filter((x) => x.k === "rejected" || x.k === "declared").length, compromised: d.filter((x) => x.k === "compromised").length };
+}
+
+/* ---- places that change ---- */
+const PLACE_STAGES = {
+  settlement: [["Camp", 0], ["Settlement", 5], ["Town", 15], ["City", 40], ["Seat of power", 80]],
+  battlefield: [["Battlefield", 0], ["Memorial", 10], ["Pilgrimage site", 40], ["Political symbol", 80]],
+  ruin: [["Ruin", 0], ["Rebuilt district", 8]],
+  grave: [["Grave", 0]],
+};
+const FIELD_A = ["Valley", "Plain", "Ford", "Pass", "Ridge", "Flats", "Crossing", "Hollow"];
+const FIELD_B = ["Ash", "Crows", "Iron", "Salt", "Red Water", "Nine Graves", "Silence", "Broken Spears", "the Long Night", "White Stones"];
+function placeAdd(c, p) {
+  const W = c.world || (c.world = {});
+  if (!W.places) W.places = [];
+  if (W.places.some((x) => x.n === p.n && x.kind === p.kind)) return W.places.find((x) => x.n === p.n && x.kind === p.kind);
+  const pl = { id: (W.placeNo = (W.placeNo || 0) + 1), stage: 0, hist: [{ y: p.y != null ? p.y : c.year, t: p.first || "It begins" }], ...p };
+  if (pl.y == null) pl.y = c.year;
+  W.places.push(pl);
+  if (W.places.length > 120) W.places.splice(W.places.findIndex((x) => x.kind !== "grave"), 1);
+  return pl;
+}
+const vidOfLand = (land) => (VILLAGES.find((v) => v.land === land || v.name === land) || {}).id || null;
+function battleField(c, a, b, dead, cause) {
+  const n = "The " + pick(FIELD_A) + " of " + pick(FIELD_B);
+  const vid = roll(50) ? a : b;
+  const ev = chron(c, { cat: "war", cause: cause || null, big: dead >= 5000, txt: "Fighting between " + vName2(a) + " and " + vName2(b) + " at " + n.replace(/^The /, "the ") + " in the " + landOf(vid) + ": " + dead.toLocaleString() + " dead." });
+  return placeAdd(c, { n, kind: "battlefield", vid, dead, event: ev, first: dead.toLocaleString() + " died here, " + vName2(a) + " against " + vName2(b) });
+}
+function placesTick(c, L) {
+  const W = c.world || {}; if (!W.lands) return;
+  if (!W.places) W.places = [];
+  (W.settlements || []).forEach((s2) => { if (!W.places.some((p) => p.n === s2.name)) placeAdd(c, { n: s2.name, kind: "settlement", vid: vidOfLand(s2.land) || s2.from, y: s2.founded, from: s2.from, first: "Founded by people who fled the " + landOf(s2.from) }); });
+  /* a war nobody writes a battle for is still a war somebody died in */
+  (W.wars || []).forEach((w) => { if (w.years > 0 && !w.field && villageExists(c, w.a) && villageExists(c, w.b) && roll(45)) { const pl = battleField(c, w.a, w.b, rr(600, 14000)); w.field = pl ? pl.id : true; } });
+  (W.disasters || []).forEach((d) => { if (!d.place && ["quake", "fire", "eruption", "beast"].includes(d.id)) { const pl = placeAdd(c, { n: "The " + pick(["old market", "east quarter", "lower town", "river district", "temple street"]) + " of the " + landOf(d.vid), kind: "ruin", vid: d.vid, y: d.y, event: d.root, first: d.n + " left it in ruins" }); d.place = pl ? pl.id : true; } });
+  (c.ancestors || []).forEach((a) => { const vid = vidOfLand(a.village) || c.village; if (!W.places.some((p) => p.kind === "grave" && p.who === a.name)) placeAdd(c, { n: "The grave of " + a.name, kind: "grave", vid, y: a.died, who: a.name, first: a.name + " was buried here" }); });
+  W.places.forEach((p) => {
+    const st = PLACE_STAGES[p.kind] || [];
+    const age = c.year - p.y;
+    const Ld = W.lands[p.vid];
+    let next = p.stage + 1;
+    if (next >= st.length || age < st[next][1]) return;
+    if (p.kind === "settlement" && next >= 3 && Ld && Ld.prosper < (next === 4 ? 55 : 45)) return;
+    if (p.kind === "ruin" && Ld && Ld.prosper < 40) return;
+    p.stage = next;
+    const nm = st[next][0];
+    const line = p.kind === "battlefield"
+      ? (next === 1 ? "A memorial now stands at " + p.n.replace(/^The /, "the ") + ", where " + (p.dead || 0).toLocaleString() + " died in " + p.y + "." : next === 2 ? "Pilgrims walk to " + p.n.replace(/^The /, "the ") + " every year on the day it happened." : "Every speech about war in the " + landOf(p.vid) + " mentions " + p.n.replace(/^The /, "the ") + " now. Both sides claim it.")
+      : p.kind === "settlement" ? p.n + " in the " + landOf(p.vid) + " is a " + nm.toLowerCase() + " now" + (next >= 3 ? ", and the people who founded it as refugees are its old families." : ".")
+      : p.n + " has been rebuilt.";
+    p.hist.push({ y: c.year, t: line });
+    chron(c, { cat: p.kind === "battlefield" ? "war" : "villages", cause: p.event || null, big: next >= 3, txt: line });
+  });
+}
+function placeVisit(c, L, id) {
+  const W = c.world || {}; const p = (W.places || []).find((x) => x.id === id); if (!p) return;
+  if (p.kind === "grave") { c.stats.con = cl(c.stats.con + 1); P(L, "You stood at " + (relOf(c, p.who) ? "your " + relOf(c, p.who) + "'s" : p.who + "'s") + " grave for a while. You told them about the year. They would have had opinions.", "n"); }
+  else if (p.kind === "battlefield") { c.stats.con = cl(c.stats.con + 1); P(L, "You walked " + p.n.replace(/^The /, "the ") + ". " + (p.dead || 0).toLocaleString() + " people. " + (p.stage >= 1 ? "The memorial lists the ones they could name." : "The ground still gives things back after rain."), "n"); }
+  else if (p.kind === "settlement") { c.standing = cl(c.standing + 1); P(L, "You spent a day in " + p.n + ". The children there play a game about the crossing that their grandparents made. They do not know it is about their grandparents.", "g"); }
+  else P(L, "You walked what is left of " + p.n.replace(/^The /, "the ") + ". Somebody has planted a tree where the fire stopped.", "n");
+  p.visits = (p.visits || 0) + 1;
+}
+
+/* ---- ages the world names for itself ---- */
+function ageLabel(c) {
+  const W = c.world || {};
+  const since = (y) => (c.chron || []).filter((x) => x.y >= c.year - y);
+  const wars = (W.wars || []).filter((w) => w.years > 0);
+  const atWar = wars.length + (c.war ? 1 : 0);
+  const belligerents = {}; wars.forEach((w) => { belligerents[w.a] = 1; belligerents[w.b] = 1; });
+  if (c.war) { belligerents[c.village] = 1; liveFoes(c.war).forEach((f) => { belligerents[f.key] = 1; }); }
+  const nb = Object.keys(belligerents).length;
+  if (c.war && c.war.great) return null;
+  if (nb >= 4) return "The Years of the " + (["", "", "", "", "Four", "Five", "Six", "Seven"][nb] || "Many") + "-Way War";
+  const dz = (W.disasters || []).filter((d) => c.year - d.y <= 12).length;
+  if (dz >= 5) return (W.disasters || []).filter((d) => c.year - d.y <= 12 && ["famine", "crop"].includes(d.id)).length >= 2 ? "The Hungry Years" : "The Ashen Age";
+  const org = (c.orgs || []).filter((o) => !o.gone && o.str >= 80 && o.members >= 500).sort((a, b) => b.str - a.str)[0];
+  if (org) return "The Age of " + org.n.replace(/^The /, "the ");
+  const I = c.iron || {};
+  const tr = (I.treaties || []).filter((t) => c.year - t.year <= 20 && !t.broken).length;
+  if (tr >= 3 && !atWar) return "The Age of the Iron Accord";
+  const crises = since(15).filter((x) => /CRISIS|crisis|succession/.test(x.txt)).length;
+  if (crises >= 5) return "The Age of Fractured Peace";
+  const peace = ((c.warLog || "").match(/0+$/) || [""])[0].length;
+  if (peace >= 20) return "The Long Quiet";
+  const mv = (W.movements || []).filter((m) => m.outcome === "won" && c.year - m.done <= 15).length;
+  if (mv >= 3) return "The Years of the Petitions";
+  return null;
+}
+function ageNameTick(c, L) {
+  const W = c.world || {}; if (!W.lands) return;
+  c.warLog = ((c.warLog || "") + ((W.wars || []).some((w) => w.years > 0) || c.war ? "1" : "0")).slice(-400);
+  const lab = ageLabel(c);
+  if (!c.ages) c.ages = [];
+  const cur = c.ages[c.ages.length - 1];
+  if (!lab) { c.agePend = null; return; }
+  const kindOf = (n) => (/-Way War/.test(n) ? "war" : /Ashen|Hungry/.test(n) ? "hunger" : n);
+  if (cur && !cur.to && kindOf(cur.n) === kindOf(lab)) return;
+  if (!c.agePend || kindOf(c.agePend.n) !== kindOf(lab)) { c.agePend = { n: lab, since: c.year }; return; }
+  if (c.year - c.agePend.since < 2) return;
+  if (cur && !cur.to) cur.to = c.year;
+  c.ages.push({ n: lab, from: c.agePend.since, to: null });
+  c.agePend = null;
+  chron(c, { cat: "legend", big: true, txt: "Historians begin calling these years " + lab + "." });
+  newsItem(c, "The histories have a name for these years now: " + lab + ".", "HISTORY");
+}
+const currentAgeName = (c) => { const a = (c.ages || [])[(c.ages || []).length - 1]; return a && !a.to ? a.n : null; };
+
+/* ---- the story of this save ---- */
+function saveStory(c) {
+  const anc = c.ancestors || [];
+  const start = anc.length ? Math.min.apply(null, anc.map((a) => (a.born != null ? a.born : c.birthYear))) : c.birthYear;
+  const ch = (c.chron || []).filter((x) => x.y >= start && x.kind !== "canon");
+  const wars = ch.filter((x) => x.cat === "war" && /goes to war|go to war|Great Ninja War begins|declared on|declares war/.test(x.txt)).length;
+  const log = c.warLog || "";
+  const runs = (d) => (log.match(new RegExp(d + "+", "g")) || []).reduce((m, s) => Math.max(m, s.length), 0);
+  const arbiters = anc.filter((a) => (a.tags || []).includes("arbiter")).length + (c.iron && c.iron.seated ? 1 : 0);
+  const destroyed = (c.razed || []).length + ((c.world && c.world.annexed) || []).length;
+  /* what shaped it: the roots with the longest shadows */
+  const roots = {};
+  ch.forEach((x) => { let r = x; const seen = {}; while (r && r.cause && !seen[r.cause]) { seen[r.cause] = 1; const p = chronById(c, r.cause); if (!p) break; r = p; } if (r && r.id !== x.id) roots[r.id] = (roots[r.id] || 0) + 1; });
+  const shaped = Object.entries(roots).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => chronById(c, +id)).filter(Boolean);
+  const named = (c.chains || []).filter((x) => x.done && !x.fizzled).map((x) => x.name);
+  const ageN = currentAgeName(c) || ((c.ages || []).slice(-1)[0] || {}).n;
+  const bigOrg = (c.orgs || []).filter((o) => !o.gone).sort((a, b) => b.str - a.str)[0];
+  const title = ageN || (named[0] ? named[0].replace(/^The /, "The Age of the ").replace(/ (Affair|Crisis|Schism)$/, "") : bigOrg ? "The Age of " + bigOrg.n.replace(/^The /, "the ") : "An Age Without a Name");
+  const phrases = shaped.map((x) => shortTxt(x.txt, 70).replace(/\.$/, "")).concat(named.slice(0, 2));
+  const first = anc[0] ? anc[0].name : c.name;
+  return {
+    title, years: Math.max(0, c.year - start), gens: anc.length + 1, wars, arbiters, destroyed,
+    big: ch.filter((x) => x.big).length, peace: runs("0"), war: runs("1"), chains: named.length,
+    ages: (c.ages || []).map((a) => a.n + " (" + a.from + (a.to ? "–" + a.to : "–") + ")"),
+    line: phrases.length ? "This world was shaped by " + joinList(phrases.slice(0, 3).map((p) => "\u201c" + p + "\u201d")) + ", and by the descendants of " + first + ", who began it all." : "This world was shaped by a great many small things, and by the descendants of " + first + ", who began it all.",
+  };
+}
+function shortTxt(t, n) { const s0 = String(t || ""); const i = s0.indexOf(". "); const s = i > 0 ? s0.slice(0, i + 1) : s0; return s.length > (n || 80) ? s.slice(0, (n || 80) - 1).replace(/\s+\S*$/, "") + "…" : s; }
+
+/* ---- why? ---- */
+function whyPrice(c, vid) {
+  const W = c.world || {}; const Ld = (W.lands || {})[vid]; if (!Ld) return [];
+  const out = [];
+  const foes = atWarWith(c, vid).concat(c.war && vid === c.village ? liveFoes(c.war).map((f) => f.key) : []);
+  if (foes.length) out.push("War with " + joinList([...new Set(foes)].map(vName2)) + ": supply routes cut, smiths making arrowheads instead of hinges.");
+  if (Ld.shortage) out.push("There is no " + Ld.shortage + " to be had.");
+  (W.disasters || []).filter((d) => d.vid === vid && c.year - d.y <= 3).forEach((d) => out.push(d.n + " in " + d.y + "."));
+  const hosting = (W.refugees || []).filter((r) => r.to === vid && !r.settled).reduce((a, r) => a + r.n, 0);
+  if (hosting) out.push((hosting * 1000).toLocaleString() + " refugees to feed.");
+  const guild = (c.orgs || []).find((o) => o.id === "guild" && !o.gone && o.stance === "gouge");
+  if (guild && foes.length) out.push(guild.n + " is charging what the war will bear.");
+  if (Ld.rebuild) out.push("Still rebuilding, " + Ld.rebuild + " years to go.");
+  if (!out.length) out.push(Ld.price < 98 ? "Peace, a good harvest and open roads." : "Nothing unusual. This is what things cost.");
+  return out;
+}
+function whyProsper(c, vid) {
+  const W = c.world || {}; const Ld = (W.lands || {})[vid]; if (!Ld) return [];
+  const h = Ld.hist || [];
+  const d = h.length >= 6 ? h[h.length - 1] - h[h.length - 6] : 0;
+  const out = [d > 2 ? "Up " + d + " over five years." : d < -2 ? "Down " + -d + " over five years." : "Flat over five years."];
+  return out.concat(whyPrice(c, vid).filter((x) => !/This is what things cost|Peace, a good harvest/.test(x)));
+}
+function whyMovement(c, m) {
+  const W = c.world || {}; const out = [];
+  if (m.kind === "antiwar") out.push(atWarWith(c, m.vid).length ? "The war is still going. Every funeral is a recruiting drive." : "The war is over, and a movement against it has less to say.");
+  if (m.kind === "open" || m.kind === "closed") out.push((W.refugees || []).some((r) => r.to === m.vid && !r.settled) ? "There are still camps at the border." : "The camps are gone.");
+  if (m.kind === "civil") out.push("Prosperity in the " + landOf(m.vid) + " is " + (((W.lands || {})[m.vid] || {}).prosper || 50) + ".");
+  if (m.kind === "reform") out.push("Somebody published what the council had hidden.");
+  if (m.you) out.push("You spoke " + (m.you > 0 ? "for" : "against") + " it " + Math.abs(m.you) + " time" + (Math.abs(m.you) === 1 ? "" : "s") + ".");
+  if (m.root) { const x = chronById(c, m.root); if (x && x.cause) { const p = chronById(c, x.cause); if (p) out.push("It began because: " + shortTxt(p.txt, 90)); } }
+  return out;
+}
+function whyFeud(c, v) {
+  const out = [cap(v.fam) + " swore it in " + v.since + " over " + v.why + "."];
+  if (v.by !== c.name) out.push("It was your " + (relOf(c, v.by) || "family") + " they swore it against. You inherited it.");
+  if (v.strikes) out.push("They have struck " + v.strikes + " time" + (v.strikes === 1 ? "" : "s") + ".");
+  out.push(v.heat >= 60 ? "It is as hot as the day it started." : v.heat >= 35 ? "It has cooled, but not enough to stop." : "It is going out on its own.");
+  if (v.divided) out.push("A marriage split them in " + v.divided + ". Half of them have let it go.");
+  return out;
+}
+function whyCandidate(c, st) {
+  const out = [];
+  if (st.rank) out.push("Rank: " + st.rank + ".");
+  if (st.pw) out.push("Power " + st.pw + ".");
+  const t2 = st.teacher || c.name;
+  out.push("A former student of " + (t2 === c.name ? "you" : t2 + (relOf(c, t2) ? ", your " + relOf(c, t2) : "")) + (lifeRecord(c).impact !== "Minor" && t2 === c.name ? ", whose name carries weight." : "."));
+  if (st.surpassed) out.push("Surpassed their teacher, and everybody knows it.");
+  const clan = surnameOf(st.name); if (clan && CLANS.some((k) => k.n === clan)) out.push("The " + clan + " clan is behind them.");
+  if ((st.path || []).length >= 3) out.push((st.path || []).length + " things worth writing down in their career.");
+  return out;
+}
+
+/* ---- how do we know? ---- */
+const CLUE_SRC = ["Witness", "Physical evidence", "Physical evidence", "Sensor reading", "Physical evidence", "Witness"];
+const REOPEN_SRC = ["Deathbed letter", "Physical evidence", "Witness", "Archive record", "ANBU report"];
+function srcOf(c, x) {
+  if (!x) return "Unknown";
+  if (x.src) return x.src;
+  if (x.kind === "canon") return "The Histories";
+  if (x.line === c.name) return "Personal observation";
+  if (x.line && isAncestor(c, x.line)) return "Family papers";
+  return { courts: "Court record, Tetsu", deaths: "Obituary, the Shinobi Times", outlaws: "The Bingo Book", war: "War dispatch", legend: "Popular tradition", beasts: "Sensor-nin report", villages: "The Shinobi Times" }[x.cat] || "The Shinobi Times";
+}
+
+/* ---- because of you ---- */
+function legacyStats(c, name, cc) {
+  const src = cc || c;
+  const all = src.chron || [];
+  const byId = {}; all.forEach((x) => { byId[x.id] = x; });
+  const kids = {}; all.forEach((x) => { if (x.cause) (kids[x.cause] || (kids[x.cause] = [])).push(x); });
+  const down = (ids) => { const out = {}; const q = ids.slice(); while (q.length) { const id = q.shift(); (kids[id] || []).forEach((k) => { if (!out[k.id]) { out[k.id] = k; q.push(k.id); } }); } return out; };
+  const directL = all.filter((x) => x.line === name);
+  const d1 = down(directL.map((x) => x.id));
+  const indirect = Object.values(d1).filter((x) => x.line !== name);
+  const anc = (c.ancestors || []).map((a) => a.name).filter((n) => n !== name);
+  const famL = all.filter((x) => anc.includes(x.line));
+  const famD = down(famL.map((x) => x.id));
+  const studs = (c.formerStudents || []).concat(c.lineStudents || []).map((s) => s.name);
+  const studL = all.filter((x) => { const s = x.subj || {}; return (s.p || []).some((p) => studs.includes(p)); });
+  let best = null;
+  directL.forEach((r) => { const d = down([r.id]); Object.values(d).forEach((x) => { const span = x.y - r.y; if (span > 0 && (!best || span > best.span)) best = { span, root: r, end: x }; }); });
+  return {
+    direct: directL.length, indirect: indirect.length, family: famL.length + Object.keys(famD).length, students: studL.length,
+    longest: best ? best.span : 0,
+    line: best ? "“" + shortTxt(best.root.txt, 90).replace(/\.$/, "") + "” eventually led to “" + shortTxt(best.end.txt, 90).replace(/\.$/, "") + "”, " + best.span + " year" + (best.span === 1 ? "" : "s") + " later." : null,
+  };
+}
+
+/* ---- the command centre ---- */
+function situationOf(c) {
+  const W = c.world || {}; const out = [];
+  const add = (o) => out.push(o);
+  if (c.war) {
+    const w = c.war; const R = w.room;
+    add({ k: "war", sev: "red", title: "WAR — " + w.name.toUpperCase(), lines: [liveFoes(w).length + " front" + (liveFoes(w).length === 1 ? "" : "s") + " open against " + foeSummary(w, 2) + ".", "The war overall is at " + w.momentum + "%."], status: R ? "Month " + (R.month || 0) + " of 12" + (R.exhaust >= 60 ? " · exhaustion " + R.exhaust + "%" : "") : "Fighting at " + w.front, go: { modal: "war" } });
+  }
+  (c.crises || []).filter((k) => !k.done).forEach((k) => add({ k: "cr" + k.vid, sev: k.vid === c.village ? "red" : "orange", title: "SUCCESSION CRISIS — " + vName2(k.vid).toUpperCase(), lines: [k.cands.length + " claimants for the seat.", k.student ? k.student + ", your line's student, is one of the names." : k.backed ? "You have declared." : "You have not declared."], status: "Settles within the year", go: { hub: "politics" } }));
+  (W.wars || []).filter((w) => w.years > 0 && !(c.war && [w.a, w.b].includes(c.village))).slice(0, 3).forEach((w) => add({ k: "w" + w.a + w.b, sev: "orange", title: vName2(w.a).replace(/gakure$/, "").toUpperCase() + "–" + vName2(w.b).replace(/gakure$/, "").toUpperCase() + " WAR", lines: ["Somebody else's war. Prices are moving because of it anyway."], status: w.years + " year" + (w.years === 1 ? "" : "s") + " left, by the look of it", go: { modal: "map" } }));
+  (c.chains || []).filter((ch) => !ch.done).forEach((ch) => { const last = chronById(c, ch.last); const mine = ch.data && (ch.data.killer === c.name || isAncestor(c, ch.data.killer)); add({ k: "ch" + ch.id, sev: mine ? "red" : "purple", title: ch.name.toUpperCase(), lines: [last ? shortTxt(last.txt, 110) : "It has only just begun.", mine ? "It runs back to your family." : ""].filter(Boolean), status: "Stage " + (ch.stage + 1) + " of " + (CHAIN_STAGES[ch.kind] || []).length, go: { event: ch.last } }); });
+  (c.vendettas || []).filter((v) => !v.ended).forEach((v) => add({ k: "vd" + v.fam, sev: v.heat >= 50 ? "orange" : "yellow", title: "FAMILY FEUD — " + v.fam.replace(/^the /, "").toUpperCase(), lines: [v.by === c.name ? "You started it." : "Your " + (relOf(c, v.by) || "family") + " started it. You are involved anyway."], status: "Blood price unpaid · heat " + v.heat, go: { hub: "life" }, why: whyFeud(c, v) }));
+  const I = c.iron;
+  if (I && I.crisis) add({ k: "ironcr", sev: "red", title: "IRON SCALES — " + I.crisis.n.toUpperCase(), lines: ["The court itself is being tested."], status: I.seated ? "Your decision" : "Tetsu decides", go: { hub: "law" } });
+  if (I && I.seated) {
+    const dk = (I.docket || []).filter((x) => !x.done).length; const pet = (I.petitions || []).filter((p) => !p.done).length;
+    if (dk || pet) add({ k: "docket", sev: "yellow", title: "IRON SCALES — THE DOCKET", lines: [dk + " case" + (dk === 1 ? "" : "s") + " waiting." + (pet ? " " + pet + " petition" + (pet === 1 ? "" : "s") + " to answer." : "")], status: "Hearing available", go: { iron: true } });
+  }
+  if (c.akatsuki) add({ k: "aka", sev: "purple", title: "AKATSUKI — INSIDE THE ORGANISATION", lines: ["Four factions, and each wants you."], status: "Ring " + c.akatsuki.ring, go: { modal: "akatsuki" } });
+  (c.cases || []).filter((x) => !x.done && !x.cold).forEach((cs) => add({ k: "case" + cs.id, sev: "blue", title: (cs.reopened ? "COLD CASE REOPENED" : "INVESTIGATION") + " — #" + cs.id, lines: [cs.t + ", " + vName2(cs.where) + "."], status: cs.reopened && c.year - cs.reopened <= 1 ? "New evidence has surfaced" : cs.options.filter((o) => !cs.ruled.includes(o)).length + " explanations left", go: { life: "cases" } }));
+  (W.disasters || []).filter((d) => d.vid === c.village && c.year - d.y <= 2).forEach((d) => add({ k: "dz" + d.y + d.id, sev: "red", title: d.n.toUpperCase() + " — AT HOME", lines: ["The " + landOf(d.vid) + ", " + d.y + "."], status: d.relief ? "Relief sent " + d.relief + "×" : "Nobody has come yet", go: { hub: "world" } }));
+  (W.movements || []).filter((m) => !m.done && m.str >= 70).slice(0, 2).forEach((m) => add({ k: "mv" + m.id, sev: "yellow", title: m.n.toUpperCase(), lines: [m.goal + ", in " + vName2(m.vid) + "."], status: "Support " + m.str + " — close", go: { hub: "politics" }, why: whyMovement(c, m) }));
+  (c.secrets || []).filter((s) => s.found && !s.fate).forEach((s) => add({ k: "sc" + s.id, sev: "purple", title: "A SECRET YOU HOLD", lines: ["The official story: " + s.cover + "."], status: "Publish, keep or burn", go: { hub: "records" } }));
+  grudgesOf(c).filter((g) => g.lvl >= 7 && !g.settled).slice(0, 2).forEach((g) => add({ k: "gr" + g.name, sev: "orange", title: "GRUDGE — " + g.name.toUpperCase(), lines: ["“" + g.reason + ".”"], status: g.lvl + "/10 · " + g.age + " years · forgiveness " + g.forgive.toLowerCase(), go: { hub: "people" } }));
+  const order = { red: 0, orange: 1, purple: 2, yellow: 3, blue: 4 };
+  return out.sort((a, b) => order[a.sev] - order[b.sev]);
+}
+const SEV_COL = (T2) => ({ red: T2.blood, orange: "#e08a3c", yellow: T2.gold, purple: "#a77fe0", blue: "#4a8fd6" });
+
+/* ---- the world, in one line ---- */
+function worldStateOf(c) {
+  const W = c.world || {};
+  const tags = [];
+  const wars = (W.wars || []).filter((w) => w.years > 0).length + (c.war ? 1 : 0);
+  tags.push(c.war && c.war.great ? "GREAT WAR" : wars ? (wars === 1 ? "WAR" : wars + " WARS") : "PEACE");
+  const Ld = (W.lands || {})[c.village];
+  const h = (Ld && Ld.hist) || [];
+  const d = h.length >= 4 ? h[h.length - 1] - h[h.length - 4] : 0;
+  tags.push(d >= 3 ? "PROSPERITY RISING" : d <= -3 ? "PROSPERITY FALLING" : "PROSPERITY STEADY");
+  const ref = (W.refugees || []).filter((r) => !r.settled).reduce((a, r) => a + r.n, 0);
+  if (ref >= 15) tags.push("REFUGEE CRISIS");
+  if (Ld && Ld.shortage) tags.push(Ld.shortage.toUpperCase() + " SHORTAGE");
+  const crises = (c.chains || []).filter((x) => !x.done).length + (c.crises || []).filter((x) => !x.done).length + (c.iron && c.iron.crisis ? 1 : 0);
+  if (crises) tags.push(crises + " ACTIVE CRIS" + (crises === 1 ? "IS" : "ES"));
+  const I = c.iron || {};
+  const tv = Object.values(I.trust || {}); const trust = tv.length ? Math.round(tv.reduce((a, b) => a + b, 0) / tv.length) : null;
+  const aka = ["naruto", "third", "sannin"].includes(c.era) ? ((W.akTaken || []).length ? (W.akTaken || []).length + " beasts taken" : "active") : null;
+  return { tags, age: currentAgeName(c), ind: [
+    ["trust", "World trust", trust != null ? trust : "—", "law"], ["war", "War", wars ? wars : "none", "world"],
+    ["econ", "Economy", Ld ? Ld.price + (Ld.price > 110 ? "↑" : Ld.price < 98 ? "↓" : "") : "—", "world"],
+    ["court", "Court", I.legit != null ? I.legit : "—", "law"], aka ? ["aka", "Akatsuki", aka, "power"] : null,
+  ].filter(Boolean) };
+}
+
+/* ---- grudges come looking ---- */
+function grudgeTick(c, L) {
+  if (c.dilemma || c.age < 18) return;
+  const g = grudgesOf(c).find((x) => x.lvl >= 6 && x.age >= 8 && !x.settled && !(NAMED_ID_OF(x.name) && isDead(c, NAMED_ID_OF(x.name))));
+  if (!g || !roll(6)) return;
+  c.dilemma = "grudgemeet"; c.dilemmaCtx = { name: g.name };
+}
+const NAMED_ID_OF = (name) => Object.keys(NAMED).find((id) => NAMED[id].name === name) || null;
+
+/* ---- organisations remember why they exist ---- */
+const ORG_ORIGINS = {
+  samurai: "Founded when the Land of Iron refused to take a side in the first war between the villages, and has refused every one since",
+  guild: "Founded by harbour masters who were tired of paying three villages for the same protection",
+  stations: "Founded after the first Bingo Book, by people who saw a price list and saw a business",
+  medics: "Founded by a medic-nin who was court-martialled for treating the enemy, and would not apologise",
+  monks: "Older than the villages. Its founding is a story the monks tell differently every time",
+  mercs: "Founded by the survivors of a village militia that was disbanded after a war it had won",
+  syndicate: "Founded in a gambling house in Tanzaku, over a debt nobody could collect by force",
+  seals: "Founded by what was left of the Uzumaki craft after Uzushio fell",
+  network: "Founded by a teahouse owner who noticed that everybody talks to the woman who pours the tea",
+  root: "Founded by Danzo Shimura, who believed the village needed a root nobody could see",
+};
+function orgOriginTick(c) {
+  (c.orgs || []).forEach((o) => {
+    if (o.origin) return;
+    if (ORG_ORIGINS[o.id]) o.origin = ORG_ORIGINS[o.id];
+    else if (o.splitFrom) o.origin = "Split from " + o.splitFrom + " in " + o.founded + ", under " + (o.founder || o.leader) + ", who would not keep its old doctrine";
+    else if (o.custom) {
+      const e = (c.booked || []).find((x) => x.name === o.leader || x.name === o.founder);
+      o.origin = e ? "Founded by " + e.name + ", a fugitive the Bingo Book would not let go of" + (e.by && /Arbiter|Tetsu|Iron/.test(e.why || "") ? ", after the Iron Scales put their name in it" : "") : "Founded by " + (o.founder || o.leader) + ", with nobody else to go to";
+      if (e && !o.doctrineSet && roll(50)) { o.doctrine = "We answer to no court, least of all Tetsu"; o.doctrineSet = true; }
+    }
+  });
+}
+
+function v111Tick(c, L) {
+  [placesTick, ageNameTick, grudgeTick, orgOriginTick].forEach((fn) => safeTick(fn, c, L));
+}
+
+/* one beaten country, one term. used by the settlement after a won war and by the peace table in the War Room */
+function settleFoe(c, L, f, kind) {
+  if (!c.world) c.world = worldInit(c);
+  if (!c.pacts) c.pacts = {};
+  if (!c.vdamage) c.vdamage = {};
+  const stab = c.world.stability;
+  if (kind === "reparations") {
+    const take = rr(180000, 520000);
+    c.ryo += take;
+    c.tribute = c.tribute || {};
+    c.tribute[f.key] = { name: f.name, until: c.year + rr(8, 16), yearly: rr(30000, 90000) };
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(8, 14));
+  } else if (kind === "disarm") {
+    c.vdamage[f.key] = cl((c.vdamage[f.key] || 0) + rr(25, 45));
+    c.pacts[f.key] = c.year + rr(12, 25);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(12, 20));
+  } else if (kind === "puppet") {
+    const ln7 = c.line && c.line[f.key];
+    const puppet = freshName(c, null);
+    if (ln7 && ln7.current && !ln7.current.player) {
+      ln7.past.push({ ...ln7.current, to: c.year });
+      ln7.current = { id: null, name: puppet, from: c.year, term: rr(10, 20), player: false, installed: true };
+      c.kages[f.key] = { named: null, name: puppet, title: kageOrdinal(ln7) + " " + kageWordFor(c, f.key) };
+    }
+    c.rule.allies = c.rule.allies.concat([f.key]).filter((x, i, a) => a.indexOf(x) === i);
+    c.pacts[f.key] = c.year + rr(15, 30);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(18, 28));
+  } else if (kind === "terms") {
+    c.pacts[f.key] = c.year + rr(15, 30);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) + rr(3, 8));
+  } else if (kind === "land") {
+    /* annexation is not a line in a treaty. the country stops being a country. */
+    const av = VILLAGES.find((v) => v.id === f.key);
+    c.territory = (c.territory || []).concat([{ from: f.key, name: f.name, land: av ? av.land : f.name, since: c.year }]);
+    c.annexed = (c.annexed || []).concat([f.key]).filter((x, i2, a2) => a2.indexOf(x) === i2);
+    /* their line ends here, and the record says why */
+    const aln = c.line && c.line[f.key];
+    if (aln) {
+      if (aln.current) aln.past.push({ ...aln.current, to: c.year, annexed: true });
+      aln.current = { id: null, name: "— under " + (c.founded ? c.founded.name : vName2(c.village)) + " —", from: c.year, term: 9999, player: false, annexed: true };
+      aln.annexedYear = c.year;
+      aln.annexedBy = c.founded ? c.founded.name : vName2(c.village);
+    }
+    c.kages[f.key] = { named: null, name: null, title: "No seat", annexed: true, annexedYear: c.year };
+    /* their shinobi, their income and their missions are yours now */
+    c.annexIncome = (c.annexIncome || 0) + rr(60000, 140000);
+    if (c.vil) { c.vil.shinobi = (c.vil.shinobi || 0) + rr(120, 340); c.vil.treasury = (c.vil.treasury || 0) + rr(200000, 500000); }
+    c.ryo += rr(200000, 480000);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(25, 40));
+    if (c.world) c.world.annexed = (c.world.annexed || []).concat([f.key]);
+  } else if (kind === "hostage") {
+    c.hostages = (c.hostages || []).concat([{ from: f.key, name: freshName(c, null), until: c.year + rr(10, 20) }]);
+    c.pacts[f.key] = c.year + rr(10, 20);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(6, 12));
+  } else if (kind === "scrolls") {
+    c.ryo += rr(20000, 60000);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(8, 14));
+  } else if (kind === "conscript") {
+    c.rule.allies = c.rule.allies.concat([f.key]).filter((x, i2, a2) => a2.indexOf(x) === i2);
+    c.pacts[f.key] = c.year + rr(10, 18);
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(10, 16));
+  } else if (kind === "beast") {
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(16, 26));
+  } else if (kind === "trial") {
+    if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(10, 18));
+  }
 }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
@@ -6661,6 +7176,9 @@ const JUTSU_ORIGIN = {
 const NEWS_CATS = ["WAR", "OBITUARIES", "THE BEASTS", "THE VILLAGES", "BINGO BOOK", "THE COURTS", "THE MARKETS", "THE ROAD", "NOTICES", "HISTORY"];
 const CAT_COL = { WAR: "#c0392b", OBITUARIES: "#8d95a4", "THE BEASTS": "#b47fe0", "THE VILLAGES": "#63b972", "BINGO BOOK": "#dCA84a", "THE COURTS": "#4a8fd6", "THE MARKETS": "#4fa892", "THE ROAD": "#b8794a", NOTICES: "#c07d92", HISTORY: "#c9a45c" };
 /* the Times, in sections: every desk files under one of these */
+const MAP_POS = { iwa: [250, 150], kusa: [395, 165], oto: [485, 235], taki: [625, 215], kumo: [800, 150], suna: [195, 395], ame: [360, 305], konoha: [530, 380], yu: [705, 315], kiri: [860, 455], uzu: [690, 485], iron: [330, 58], wave: [610, 540] };
+const MAP_MODES = [["political", "Political", "Villages, and the ones that are gone."], ["population", "Population", "How many people live in each land."], ["prosperity", "Prosperity", "Green is doing well; red is not."], ["war", "War", "Every war being fought, and every battlefield."], ["refugees", "Refugees", "Who is fleeing where."], ["orgs", "Organisations", "Where each organisation is based, sized by strength."], ["history", "Historical", "Towns that were camps, battlefields that became memorials, ruins and graves."], ["kage", "Kage", "Who sits in each seat."], ["fugitives", "Fugitives", "Where the Bingo Book last saw each name."]];
+const ORG_HOME = { samurai: "iron", guild: "wave", stations: "kusa", medics: "taki", monks: "konoha", mercs: "ame", syndicate: "yu", seals: "uzu", network: "oto", root: "konoha" };
 const V11_HUBS = [["life", "Your Life", "profile"], ["world", "The World", "path"], ["people", "People", "people"], ["records", "Records", "records"], ["power", "Power", "powers"], ["politics", "Politics", "war"], ["law", "Law", "rule"]];
 const TIMES_SECTIONS = [["front", "FRONT PAGE"], ["politics", "POLITICS"], ["crime", "CRIME"], ["economy", "ECONOMY"], ["people", "PEOPLE"], ["history", "HISTORY"], ["rumours", "RUMOURS"]];
 const SECTION_OF = { WAR: "politics", "THE VILLAGES": "politics", "THE BEASTS": "politics", "THE COURTS": "crime", "BINGO BOOK": "crime", "THE MARKETS": "economy", "THE ROAD": "economy", OBITUARIES: "people", NOTICES: "people", HISTORY: "history" };
@@ -6823,6 +7341,7 @@ function buildWar(c, L, opts) {
       : "They have called up every fighter they have. So has your side."),
   };
   w.foes.forEach((f) => { if (f.will == null) f.will = rr(58, 84); });
+  w.foes.forEach((f) => { if (f.kind === "village") { rememberVillage(c, f.key, cap(side) + " went to war with us", -4); if (c.rank >= 6 && f.leaderName) remember(c, f.leaderName, "You made war on my village in " + c.year, -5); } });
   /* no two fronts on the same ground */
   const used = [];
   w.foes.forEach((f) => {
@@ -7540,6 +8059,7 @@ function worldTick(c, L) {
   world2Tick(c, L);
   wholeLifeTick(c, L);
   safeTick(v11Tick, c, L);
+  safeTick(v111Tick, c, L);
   /* hunter-nin sent after names in the book */
   (c.bookHunts || []).forEach((h) => {
     if (h.done) return;
@@ -7944,6 +8464,26 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "11.1", n: "The World, Explained", items: [
+    "ONGOING is a command centre now. Everything still happening is ranked worst first, with what it is, what state it is in and where to go: wars, succession crises, named chains, family feuds, crises and cases at Tetsu, Akatsuki, investigations and reopened cold cases, disasters at home, movements close to winning, secrets you are holding and grudges. Press ONGOING for the full board",
+    "A world-state line under the year, for example 984 AH · WAR · PROSPERITY FALLING · REFUGEE CRISIS, with World Trust, War, Economy, Court and Akatsuki beside it. Press any of them to go to that hub",
+    "Every hub opens on a panel of its own: YOUR LIFE, WORLD AT A GLANCE, PEOPLE AROUND YOU, HISTORY IS MOVING, WHO HOLDS POWER, THE POLITICS OF IT and THE LAW",
+    "THE RECORD, a full page for any event: what happened, the whole causal chain drawn as a chain with every step clickable, what people believed, the official account, what was true, what history remembered, and everything related. Open it from the Chronicle, the timeline, the ONGOING board, a country's history or a place",
+    "WHY? beside the numbers that move: a country's prices and prosperity, how a village sees you, family feuds, movements, and an organisation's doctrine",
+    "How do we know? Evidence on the investigation board, threads of a secret, rumours and each account of an event now say where they came from: a witness, physical evidence, an ANBU report, an archive record, a deathbed letter, rumour, the record, personal observation",
+    "People remember. Rulings at Tetsu, backing or opposing a claimant, exposing a secret, speaking for or against a movement, going to war: the people involved keep it. Files have a Memory tab, and villages keep their own memory, which is what HOW THEY SEE YOU is made of",
+    "Grudges have a level out of ten, a reason, an age and a chance of forgiveness, and they are listed in People. Years later an old enemy may ask for a meeting: apologise, listen, or refuse",
+    "Kage have records. What each one accepted, rejected and compromised on, from rulings at Tetsu and treaty challenges to movements and declarations of war, shown on the seats in Politics and in their files",
+    "Organisations remember why they exist: every one has an origin, and splinter groups and fugitive bands remember theirs",
+    "Places that change. Refugee camps become settlements, towns, cities and seats of power. Battlefields become memorials, pilgrimage sites and political symbols. Ruins are rebuilt. Your ancestors have graves. Each country profile lists its places, and you can visit them",
+    "THE WORLD MAP: political, population, prosperity, war, refugees, organisations, historical places, Kage and fugitive sightings. Press a country for its profile, a marker for its place",
+    "The world names its own ages from what is actually happening: The Years of the Five-Way War, The Age of the Iron Accord, The Hungry Years, The Long Quiet, The Age of Fractured Peace and more. The current age is shown under the year and at the head of the Chronicle",
+    "THE STORY OF THIS SAVE: its title, years simulated, generations, wars, Arbiters in the line, villages destroyed or annexed, major events, longest peace and longest war, and the few things that shaped it most",
+    "The Times front page carries the same story from three desks: the official line, the rumour, and what is classified, including what you know that the paper does not",
+    "BECAUSE OF YOU at death: events you directly changed, events your actions indirectly caused, events your family and your students influenced, and your longest-running consequence, in one sentence",
+    "Watch the world 10, 25 or 50 years on. The part that touches your name plays like credits, year by year, until THE WORLD HAS MOVED ON. Your children keep living in it, and BECAUSE OF YOU is recounted for the years you watched",
+    "Fixed: a few labels printed a code instead of a quotation mark or a dot",
+  ] },
   { v: "11.0", n: "The Great Shinobi Life Update", items: [
     "THE WORLD REMEMBERS. Every Chronicle entry now knows which villages, people, clans, organisations and wars it is about, and what caused it. Open any entry to see the whole chain it belongs to, every step back and everything it led to, and press any name in it to see that name's whole history",
     "Consequences in stages. Kill somebody famous and it can run for years: a relative joins a mercenary company, the company attacks your land, a neighbouring village is blamed, its Kage cites the death in council, the relative finds your family, and the whole thing ends as a named crisis in the histories. Famine can send refugees across a border, close it, start a movement and end in a new town or in shots fired. An organisation that splits fights itself until one side is gone",
@@ -9959,6 +10499,13 @@ const DILEMMAS = [
       { t: "Let it go. It was theirs, not yours", e: (c, L) => treatyDefend(c, L, 30, 0) },
     ] },
   /* ---- V11: the world arriving at your door ---- */
+  { id: "grudgemeet", w: () => false, t: (c) => "An old enemy asks for a meeting",
+    d: (c) => { const g = grudgeOf(c, (c.dilemmaCtx || {}).name); return g ? (c.dilemmaCtx || {}).name + " has sent word, through three people, that they want to meet. The grudge is " + g.age + " years old: \u201c" + g.reason + ".\u201d " + (g.forgive === "Unlikely" ? "Nobody thinks this will end in forgiveness." : "It might end. Things do.") : "It passed."; },
+    a: [
+      { t: "Go, and apologise", e: (c, L) => { const n = (c.dilemmaCtx || {}).name; const g = grudgeOf(c, n); const ok = g && roll(g.forgive === "Unlikely" ? 25 : g.forgive === "Difficult" ? 50 : 75); if (ok) { remember(c, n, "We made peace in " + c.year, (g ? g.lvl : 5) + 2); chron(c, { cat: "villages", line: c.name, txt: c.name + " and " + n + " make peace, " + (g ? g.age : "many") + " years after it started." }); P(L, "You apologised and meant it. " + n + " said nothing for a long time, then poured two cups. It is over.", "e"); } else { remember(c, n, "You apologised, and it was not enough", 1); P(L, "You apologised. " + n + " listened, and left, and it is not over. It is smaller.", "n"); } } },
+      { t: "Go, and promise nothing", e: (c, L) => { const n = (c.dilemmaCtx || {}).name; remember(c, n, "You came when I asked", 2); P(L, "You went. You listened. You did not apologise and they did not ask you to. Something moved anyway.", "n"); } },
+      { t: "Refuse", e: (c, L) => { const n = (c.dilemmaCtx || {}).name; remember(c, n, "You would not even meet me", -2); rumour(c, n + " asked " + c.name + " for a meeting and was refused.", "rumoured", n); P(L, "You refused. They will tell people you were afraid to come.", "b"); } },
+    ] },
   { id: "vendettameet", w: () => false, t: (c) => "A name you owe",
     d: (c) => { const ch = (c.chains || []).find((x) => x.id === (c.dilemmaCtx || {}).chain); const d = ch ? ch.data : {}; return (d.rel || "A stranger") + ", " + (d.relWord || "kin") + " of " + (d.victim || "somebody your family killed") + ", is standing in your doorway. They are not armed, or not visibly. They want to know what your family thinks it owes them."; },
     a: [
@@ -11731,6 +12278,14 @@ export default function ShinobiLife() {
   const [fileTab, setFileTab] = useState("file");
   const [watchOut, setWatchOut] = useState(null);
   const [timesSec, setTimesSec] = useState("front");
+  /* 11.1 */
+  const [eventId, setEventId] = useState(null);
+  const [whyOpen, setWhyOpen] = useState(null);
+  const [mapMode, setMapMode] = useState("political");
+  const [placeId, setPlaceId] = useState(null);
+  const [watchSkip, setWatchSkip] = useState(false);
+  const [seatOpen, setSeatOpen] = useState(null);
+  const [watchAll, setWatchAll] = useState(false);
   const [indict, setIndict] = useState({ scope: null, vid: null, sel: null, tier: "A", charge: 0, warrant: "capture" });
   const [ruleSec, setRuleSec] = useState(null);
   const ironKeys = useRef("");
@@ -12564,69 +13119,7 @@ export default function ShinobiLife() {
       if (!c.world) c.world = worldInit(c);
       if (!c.pacts) c.pacts = {};
       const names = joinList(st.foes.map((f) => f.name));
-      st.foes.forEach((f) => {
-        const stab = c.world.stability;
-        if (kind === "reparations") {
-          const take = rr(180000, 520000);
-          c.ryo += take;
-          c.tribute = c.tribute || {};
-          c.tribute[f.key] = { name: f.name, until: c.year + rr(8, 16), yearly: rr(30000, 90000) };
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(8, 14));
-        } else if (kind === "disarm") {
-          c.vdamage[f.key] = cl((c.vdamage[f.key] || 0) + rr(25, 45));
-          c.pacts[f.key] = c.year + rr(12, 25);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(12, 20));
-        } else if (kind === "puppet") {
-          const ln7 = c.line && c.line[f.key];
-          const puppet = freshName(c, null);
-          if (ln7 && ln7.current && !ln7.current.player) {
-            ln7.past.push({ ...ln7.current, to: c.year });
-            ln7.current = { id: null, name: puppet, from: c.year, term: rr(10, 20), player: false, installed: true };
-            c.kages[f.key] = { named: null, name: puppet, title: kageOrdinal(ln7) + " " + kageWordFor(c, f.key) };
-          }
-          c.rule.allies = c.rule.allies.concat([f.key]).filter((x, i, a) => a.indexOf(x) === i);
-          c.pacts[f.key] = c.year + rr(15, 30);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(18, 28));
-        } else if (kind === "terms") {
-          c.pacts[f.key] = c.year + rr(15, 30);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) + rr(3, 8));
-        } else if (kind === "land") {
-          /* annexation is not a line in a treaty. the country stops being a country. */
-          const av = VILLAGES.find((v) => v.id === f.key);
-          c.territory = (c.territory || []).concat([{ from: f.key, name: f.name, land: av ? av.land : f.name, since: c.year }]);
-          c.annexed = (c.annexed || []).concat([f.key]).filter((x, i2, a2) => a2.indexOf(x) === i2);
-          /* their line ends here, and the record says why */
-          const aln = c.line && c.line[f.key];
-          if (aln) {
-            if (aln.current) aln.past.push({ ...aln.current, to: c.year, annexed: true });
-            aln.current = { id: null, name: "— under " + (c.founded ? c.founded.name : vName2(c.village)) + " —", from: c.year, term: 9999, player: false, annexed: true };
-            aln.annexedYear = c.year;
-            aln.annexedBy = c.founded ? c.founded.name : vName2(c.village);
-          }
-          c.kages[f.key] = { named: null, name: null, title: "No seat", annexed: true, annexedYear: c.year };
-          /* their shinobi, their income and their missions are yours now */
-          c.annexIncome = (c.annexIncome || 0) + rr(60000, 140000);
-          if (c.vil) { c.vil.shinobi = (c.vil.shinobi || 0) + rr(120, 340); c.vil.treasury = (c.vil.treasury || 0) + rr(200000, 500000); }
-          c.ryo += rr(200000, 480000);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(25, 40));
-          if (c.world) c.world.annexed = (c.world.annexed || []).concat([f.key]);
-        } else if (kind === "hostage") {
-          c.hostages = (c.hostages || []).concat([{ from: f.key, name: freshName(c, null), until: c.year + rr(10, 20) }]);
-          c.pacts[f.key] = c.year + rr(10, 20);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(6, 12));
-        } else if (kind === "scrolls") {
-          c.ryo += rr(20000, 60000);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(8, 14));
-        } else if (kind === "conscript") {
-          c.rule.allies = c.rule.allies.concat([f.key]).filter((x, i2, a2) => a2.indexOf(x) === i2);
-          c.pacts[f.key] = c.year + rr(10, 18);
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(10, 16));
-        } else if (kind === "beast") {
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(16, 26));
-        } else if (kind === "trial") {
-          if (stab) stab[f.key] = cl((stab[f.key] || 50) - rr(10, 18));
-        }
-      });
+      st.foes.forEach((f) => settleFoe(c, L, f, kind));
       if (kind === "reparations") {
         c.standing = cl(c.standing + 8); c.infamy = cl(c.infamy + 6);
         P(L, names + " will pay, this year and every year for a decade. Your treasury has never been this full and their genin are taking D-ranks for food money.", "g");
@@ -13235,6 +13728,7 @@ export default function ShinobiLife() {
       nc.lives = clone(old.lives || {});
       /* V11: the family's feuds, the world's secrets, what people are whispering,
          every chain still unwinding, and every case nobody closed */
+      nc.mem = clone(old.mem || {}); nc.vmem = clone(old.vmem || {}); nc.decisions = clone(old.decisions || {}); nc.ages = clone(old.ages || []); nc.warLog = old.warLog || ""; nc.collided = clone(old.collided || {});
       nc.vendettas = clone(old.vendettas || []); nc.agendas = clone(old.agendas || {}); nc.secrets = clone(old.secrets || []); nc.secretNo = old.secretNo || 0;
       nc.rumours = clone(old.rumours || []); nc.chains = clone(old.chains || []); nc.chainNo = old.chainNo || 0;
       nc.cases = clone((old.cases || []).map((x) => (x.done || x.cold ? x : { ...x, cold: old.year }))); nc.caseNo = old.caseNo || 0;
@@ -13814,13 +14308,38 @@ export default function ShinobiLife() {
       else if (kind === "movement") { spend(c2); movementBack(c2, L, a, b2); }
       else if (kind === "relief") { spend(c2); disasterRelief(c2, L, a, "help"); }
       else if (kind === "peace") { spend(c2); vendettaEnd(c2, L, a, "price", b2); }
+      else if (kind === "visit") { spend(c2); placeVisit(c2, L, a); }
       else if (kind === "reopen") { const cs = (c2.cases || []).find((x) => x.id === a && x.cold); if (!cs) return; spend(c2); cs.cold = null; cs.reopened = c2.year; caseBoard(cs); P(L, "You took the file on " + cs.t.toLowerCase() + " back out of the basement.", "n"); investigate(c2, L, a); }
     });
+  }
+  /* one place for every "take me there" in the game */
+  function goTo(g) {
+    if (!g) return;
+    if (g.event != null) { setEventId(g.event); setModal("event"); }
+    else if (g.iron) openIron();
+    else if (g.hub) { setHub(g.hub); setModal("hub"); }
+    else if (g.life) { setLifeTab(g.life); setModal("life"); }
+    else if (g.land) { setLandsTab("lands"); setLandPick(g.land); setModal("lands"); }
+    else if (g.modal) setModal(g.modal);
+  }
+  /* WHY? — every number that moved can say what moved it */
+  function whyEl(key, lines) {
+    const open = whyOpen === key;
+    return (
+      <div className="sl-why" style={{ marginTop: 4 }}>
+        <button onClick={(e) => { e.stopPropagation(); setWhyOpen(open ? null : key); }} style={{ color: T.gold, fontSize: 9.5, letterSpacing: ".16em", fontWeight: 800, border: "1px solid " + T.gold + "55", borderRadius: 4, padding: "0 6px", background: open ? T.gold + "18" : "transparent" }}>{open ? "WHY \u25B4" : "WHY?"}</button>
+        {open && (
+          <div style={{ borderLeft: "2px solid " + T.gold + "66", paddingLeft: 9, marginTop: 5 }}>
+            {(lines || []).map((l, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, lineHeight: 1.4 }}>{i > 0 && lines.length > 2 ? "\u2192 " : ""}{l}</div>)}
+          </div>
+        )}
+      </div>
+    );
   }
   /* one file, four ways in: what is on record, how they have lived, what the
      Chronicle says about them, and what they might be hiding */
   function fileBody(f) {
-    const tabs = [["file", "File"], ["life", "Life" + (f.life && f.life.length ? " " + f.life.length : "")], ["record", "Record" + (f.record && f.record.length ? " " + f.record.length : "")], ["agenda", "Agenda"]];
+    const tabs = [["file", "File"], ["life", "Life" + (f.life && f.life.length ? " " + f.life.length : "")], ["memory", "Memory" + (f.memory && f.memory.length ? " " + f.memory.length : "")], ["record", "Record" + (f.record && f.record.length ? " " + f.record.length : "")], ["agenda", "Agenda"]];
     const RS = { confirmed: T.good, suspected: T.gold, classified: T.dim };
     const Ln = ({ k, v, i2 }) => (
       <div className="flex gap-2 py-1" style={{ borderTop: i2 ? "1px solid rgba(255,255,255,.04)" : "none" }}>
@@ -13835,6 +14354,19 @@ export default function ShinobiLife() {
         </div>
         {fileTab === "file" && f.lines.map((l, i2) => <Ln key={i2} k={l.k} v={l.v} i2={i2} />)}
         {fileTab === "life" && (!(f.life || []).length ? <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>Nothing about their private life has reached anybody who writes things down.</div> : f.life.map((l, i2) => <Ln key={i2} k={l.k} v={l.v} i2={i2} />))}
+        {fileTab === "memory" && (
+          <>
+            {!(f.memory || []).length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>They have no particular memory of you or your family. That can change in an afternoon.</div>}
+            {(f.memory || []).map((m2, i2) => <div key={i2} className="flex gap-2 py-0.5"><span style={{ color: m2.w > 0 ? T.good : m2.w < 0 ? T.blood : T.dim, width: 12, flexShrink: 0 }}>{m2.w > 0 ? "+" : m2.w < 0 ? "−" : "·"}</span><span style={{ color: T.text, fontFamily: SERIF, fontSize: 12.5 }}>“{m2.t}.” <span style={{ color: T.dim, fontSize: 10.5 }}>{m2.y}{m2.by && m2.by !== c.name ? " · your " + (relOf(c, m2.by) || "family") : ""}</span></span></div>)}
+            {f.grudge && !f.grudge.settled && <div style={{ color: T.blood, fontSize: 11.5, marginTop: 6 }} className="font-bold">GRUDGE {f.grudge.lvl}/10 · {f.grudge.age} years · forgiveness {f.grudge.forgive.toLowerCase()}</div>}
+            {f.decisions && f.decisions.list.length > 0 && (
+              <>
+                <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em", marginTop: 8 }} className="font-bold">DECISIONS · accepted {f.decisions.accepted} · rejected {f.decisions.rejected} · compromised {f.decisions.compromised}</div>
+                {f.decisions.list.slice().reverse().slice(0, 8).map((d2, i2) => <div key={i2} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{d2.y}: {d2.t}.</div>)}
+              </>
+            )}
+          </>
+        )}
         {fileTab === "record" && (
           <>
             {f.death && (
@@ -17442,6 +17974,7 @@ export default function ShinobiLife() {
         {dropSheet}
         {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }}><EraArt era={c.era} height="100%" dim /></div>}
         {!engineOn && <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "linear-gradient(180deg, rgba(4,5,10,.75), #04050a 70%)" }} />}
+        <style>{"@keyframes slCredit { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } } .sl-credit { opacity: 0; animation: slCredit .7s ease-out forwards; } @media (prefers-reduced-motion: reduce) { .sl-credit { opacity: 1; animation: none; } }"}</style>
         <div className="sl-grain" style={{ position: "fixed", inset: 0, zIndex: 0, opacity: .5 }} />
         <div className="max-w-2xl mx-auto sl-rise" style={{ position: "relative", zIndex: 1 }}>
           <div className="flex items-center gap-4 mb-6">
@@ -17500,6 +18033,22 @@ export default function ShinobiLife() {
                   </div>
                   <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, marginTop: 8 }}><b>Known for:</b> {a.knownFor}. <b>Cause of death:</b> {a.cause}.</div>
                   {a.tags.length > 0 && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>Whoever carries the name next inherits it as {a.tags.map((t) => (FAMILY_TAGS[t] || { n: t }).n.toLowerCase()).join(", ")}.</div>}
+                </div>
+              );
+            })()}
+            {(() => {
+              const ls = legacyStats(c, c.name, watchOut && watchOut.clone ? watchOut.clone : null);
+              const lsW = watchOut ? watchOut.legacy : null;
+              const L2 = lsW || ls;
+              return (
+                <div style={{ ...glass(T.gold), marginTop: 16 }} className="p-3.5 sl-because">
+                  <div style={{ color: T.gold, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold">BECAUSE OF YOU{lsW ? " \u00b7 " + watchOut.years + " YEARS ON" : ""}</div>
+                  <div className="grid gap-x-4 gap-y-0.5 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", fontSize: 12.5 }}>
+                    {[["You directly changed", L2.direct + " events"], ["Your actions indirectly caused", L2.indirect + " events"], ["Your family influenced", L2.family + " events"], ["Your students influenced", L2.students + " events"], ["Your longest-running consequence", L2.longest ? L2.longest + " years" : "none yet"]].map(([k2, v2]) => (
+                      <div key={k2} className="flex justify-between gap-2" style={{ borderBottom: "1px dotted " + T.line, padding: "2px 0" }}><span style={{ color: T.dim }}>{k2}</span><span style={{ textAlign: "right", color: T.text }}>{v2}</span></div>
+                    ))}
+                  </div>
+                  {L2.line && <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 13, marginTop: 8, fontStyle: "italic" }}>{L2.line}</div>}
                 </div>
               );
             })()}
@@ -17586,20 +18135,41 @@ export default function ShinobiLife() {
             <p style={{ fontFamily: SERIF, color: T.soft }} className="text-sm mb-3">It does not stop because you did. Wars you started are still running, feuds you began are still burning, and somebody is already sitting in a chair you wanted.</p>
             {!watchOut && (
               <div className="flex gap-2 flex-wrap">
-                <button onClick={() => watchTheWorld(10)} style={{ background: T.panel2, border: "1px solid " + T.gold + "88", color: T.gold, borderRadius: 8 }} className="px-3 py-2 text-sm font-bold">Watch the world: ten years</button>
-                <button onClick={() => watchTheWorld(25)} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-2 text-sm font-bold">Twenty-five years</button>
+                <button onClick={() => { setWatchSkip(motion === "reduced"); watchTheWorld(10); }} style={{ background: T.panel2, border: "1px solid " + T.gold + "88", color: T.gold, borderRadius: 8 }} className="px-3 py-2 text-sm font-bold">Watch 10 years</button>
+                <button onClick={() => { setWatchSkip(motion === "reduced"); watchTheWorld(25); }} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-2 text-sm font-bold">Watch 25 years</button>
+                <button onClick={() => { setWatchSkip(motion === "reduced"); watchTheWorld(50); }} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.soft, borderRadius: 8 }} className="px-3 py-2 text-sm font-bold">Watch 50 years</button>
               </div>
             )}
+            {!watchOut && <div style={{ color: T.dim, fontSize: 11, marginTop: 6 }}>Ten years shows what happens next. Twenty-five, your family and students grown. Fifty, your life becoming history.</div>}
             {watchOut && (
               <>
-                <div style={{ color: T.dim, fontSize: 11, marginBottom: 6 }}>{AH(c.year)} to {AH(watchOut.year)}, without you. {watchOut.entries.length} things happened that anybody wrote down. This is one way it could go; your heir lives the real one.</div>
-                <div style={{ maxHeight: 320, overflowY: "auto" }} className="pr-1">
-                  {watchOut.entries.filter((x) => x.big || x.cause).slice(0, 60).map((x) => <div key={x.id} style={{ color: x.big ? T.text : T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><span style={{ color: T.dim, fontSize: 10.5 }}>{x.y} AH</span> {x.txt}</div>)}
-                  {!watchOut.entries.some((x) => x.big || x.cause) && watchOut.entries.slice(-20).map((x) => <div key={x.id} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><span style={{ color: T.dim, fontSize: 10.5 }}>{x.y} AH</span> {x.txt}</div>)}
+                <div style={{ color: T.dim, fontSize: 11, marginBottom: 8 }}>{AH(c.year)} to {AH(watchOut.year)}, without you. One way it could go; your heir lives the real one.</div>
+                <div className="sl-credits" style={{ textAlign: "center", maxHeight: 420, overflowY: "auto", padding: "4px 0 10px" }}>
+                  {!watchOut.personal.length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 13 }}>Nothing that touched your name. The world went on as if you had never been in it, which is the other way a life ends.</div>}
+                  {watchOut.personal.slice(0, 40).map((x, i) => (
+                    <div key={x.id} className={watchSkip ? "" : "sl-credit"} style={watchSkip ? {} : { animationDelay: (i * 0.55) + "s" }}>
+                      {i > 0 && <div style={{ color: T.gold, opacity: .55, fontSize: 12, lineHeight: "18px" }}>{"\u2193"}</div>}
+                      <div style={{ color: T.gold, fontSize: 10, letterSpacing: ".3em", fontWeight: 800 }}>YEAR +{x.y - c.year} · {x.y} AH</div>
+                      <div style={{ color: T.text, fontFamily: SERIF, fontSize: 14, lineHeight: 1.4, maxWidth: 520, margin: "2px auto 0" }}>{x.txt}</div>
+                    </div>
+                  ))}
+                  <div className={watchSkip ? "" : "sl-credit"} style={watchSkip ? { marginTop: 18 } : { marginTop: 18, animationDelay: (Math.min(40, watchOut.personal.length) * 0.55 + 0.4) + "s" }}>
+                    <div style={{ width: 120, height: 1, background: "linear-gradient(90deg, transparent, " + T.gold + ", transparent)", margin: "0 auto 10px" }} />
+                    <div style={{ fontFamily: SERIF, fontSize: 22, letterSpacing: ".08em", color: T.gold }} className="font-bold">THE WORLD HAS MOVED ON.</div>
+                  </div>
                 </div>
-                <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em", marginTop: 8 }} className="font-bold">THE SEATS, {AH(watchOut.year)}</div>
-                <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{watchOut.seats.map((sx) => vName2(sx.vid) + ": " + (sx.name || "empty")).join(" · ")}</div>
-                <button onClick={() => setWatchOut(null)} style={{ color: T.dim, fontSize: 12 }} className="mt-2">close</button>
+                <div className="flex gap-3 flex-wrap mt-2">
+                  {!watchSkip && <button onClick={() => setWatchSkip(true)} style={{ color: T.soft, fontSize: 12 }} className="font-semibold">Skip to the end</button>}
+                  <button onClick={() => setWatchAll((v) => !v)} style={{ color: T.dim, fontSize: 12 }}>{watchAll ? "Hide" : "Everything else that happened"} ({watchOut.entries.length})</button>
+                  <button onClick={() => setWatchOut(null)} style={{ color: T.dim, fontSize: 12 }}>close</button>
+                </div>
+                {watchAll && (
+                  <div style={{ maxHeight: 300, overflowY: "auto", marginTop: 8 }} className="pr-1">
+                    {watchOut.entries.map((x) => <div key={x.id} style={{ color: x.big ? T.text : T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><span style={{ color: T.dim, fontSize: 10.5 }}>{x.y} AH</span> {x.txt}</div>)}
+                    <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em", marginTop: 8 }} className="font-bold">THE SEATS, {AH(watchOut.year)}</div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{watchOut.seats.map((sx) => vName2(sx.vid) + ": " + (sx.name || "empty")).join(" · ")}</div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -17663,6 +18233,7 @@ export default function ShinobiLife() {
       .yr-band { animation: yrBand 1.25s cubic-bezier(.2,.8,.3,1) both; transform-origin: center; }
       .yr-race { animation: yrRace 1.1s cubic-bezier(.4,0,.3,1) .1s both; }
       @keyframes slFill { from { width: 0; } }
+
       @keyframes slGlowPulse { 0%,100% { box-shadow: 0 0 0 0 ${accent}00; } 50% { box-shadow: 0 0 22px 2px ${accent}55; } }
       .sl-atmos { animation: slDrift 26s ease-in-out infinite; will-change: transform; }
       .sl-year { animation: slYear 1.25s cubic-bezier(.2,.7,.3,1) both; }
@@ -18682,6 +19253,23 @@ export default function ShinobiLife() {
               </button>
             </div>
           </div>
+          {/* the world, in one line, before you decide anything */}
+          {(() => {
+            const ws = worldStateOf(c);
+            const icon = { trust: "\u25CE", war: "\u2694", econ: "\u2197", court: "\u2696", aka: "\u2601" };
+            return (
+              <div className="sl-worldstate flex items-center gap-2 mt-1.5 overflow-x-auto sl-quick" style={{ scrollbarWidth: "none", fontSize: 10, letterSpacing: ".14em", whiteSpace: "nowrap" }}>
+                <button onClick={() => setModal("story")} style={{ color: T.soft, fontWeight: 800 }}>{c.year} AH{ws.age ? " · " + ws.age.toUpperCase() : ""}</button>
+                {ws.tags.map((t2) => <span key={t2} style={{ color: /WAR|CRISIS|SHORTAGE|FALLING|CRISES/.test(t2) && t2 !== "PEACE" ? T.blood : T.dim, fontWeight: 700 }}>· {t2}</span>)}
+                <span style={{ flex: 1, minWidth: 8 }} />
+                {ws.ind.map(([k2, n2, v2, hb]) => (
+                  <button key={k2} title={n2} onClick={() => { setHub(hb); setModal("hub"); }} style={{ color: T.soft, border: "1px solid " + T.line, borderRadius: 99, padding: "1px 8px", letterSpacing: ".04em", fontWeight: 700, flexShrink: 0 }}>
+                    <span style={{ color: accent }}>{icon[k2]}</span> {n2} <b style={{ color: T.text }}>{v2}</b>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {/* the seven doors: every screen in the game, arranged by what it is about */}
           <div className="sl-quick sl-hubs flex items-center gap-1.5 mt-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
             {V11_HUBS.map(([k2, n2, ic]) => (
@@ -18753,29 +19341,17 @@ export default function ShinobiLife() {
         </button>
       )}
       {(() => {
-        /* the things that are still happening, kept in view until they stop */
-        const W = c.world || {};
-        const al = [];
-        const oc = (c.cases || []).filter((x) => !x.done && !x.cold).length;
-        if (oc) al.push({ k: "cases", t: oc + " open case" + (oc === 1 ? "" : "s"), col: T.gold, on: () => { setLifeTab("cases"); setModal("life"); } });
-        (c.vendettas || []).filter((v) => !v.ended && v.heat >= 40).slice(0, 2).forEach((v) => al.push({ k: "vd" + v.fam, t: "Feud: " + v.fam, col: T.blood, on: () => { setHub("life"); setModal("hub"); } }));
-        const dzh = (W.disasters || []).filter((d) => d.vid === c.village && c.year - d.y <= 1).slice(-1)[0];
-        if (dzh) al.push({ k: "dz", t: dzh.n + " at home", col: T.blood, on: () => { setHub("world"); setModal("hub"); } });
-        const kh = (c.crises || []).find((x) => !x.done && x.vid === c.village);
-        if (kh) al.push({ k: "crisis", t: "Succession crisis", col: T.blood, on: () => { setHub("politics"); setModal("hub"); } });
-        (W.movements || []).filter((m) => !m.done && m.vid === c.village && m.str >= 70).slice(0, 1).forEach((m) => al.push({ k: "mv", t: m.n + " is close", col: T.gold, on: () => { setHub("politics"); setModal("hub"); } }));
-        if ((c.secrets || []).some((x) => x.found && !x.fate)) al.push({ k: "secret", t: "You have a secret to decide", col: T.gold, on: () => { setHub("records"); setModal("hub"); } });
-        if (c.iron && c.iron.crisis) al.push({ k: "iron", t: c.iron.crisis.n, col: IRON, on: () => { setHub("law"); setModal("hub"); } });
-        const mine = (c.chains || []).find((ch) => !ch.done && ch.data && (ch.data.killer === c.name || isAncestor(c, ch.data.killer)));
-        if (mine) al.push({ k: "chain", t: mine.name, col: T.blood, on: () => { setHub("world"); setModal("hub"); } });
-        if (!al.length) return null;
+        /* the command centre: everything still happening, worst first, one press from where it lives */
+        const items = situationOf(c);
+        if (!items.length) return null;
+        const SC = SEV_COL(T);
         return (
           <div style={{ background: "rgba(0,0,0,.22)", borderBottom: "1px solid rgba(255,255,255,.05)" }} className="px-4 py-1.5 sl-alerts">
             <div className="sl-wrap max-w-7xl mx-auto flex items-center gap-1.5 overflow-x-auto sl-quick" style={{ scrollbarWidth: "none" }}>
-              <span style={{ color: T.dim, fontSize: 8.5, letterSpacing: ".2em", fontWeight: 800, flexShrink: 0 }}>ONGOING</span>
-              {al.map((a) => (
-                <button key={a.k} onClick={a.on} style={{ flexShrink: 0, border: "1px solid " + a.col + "66", color: a.col, background: a.col + "12", borderRadius: 99, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                  <span className="sl-live" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: a.col, marginRight: 6, verticalAlign: "middle" }} />{a.t}
+              <button onClick={() => setModal("board")} style={{ color: T.text, fontSize: 9, letterSpacing: ".2em", fontWeight: 800, flexShrink: 0, border: "1px solid " + T.line, borderRadius: 4, padding: "2px 7px", background: "rgba(255,255,255,.04)" }}>ONGOING {"\u2014"} {items.length}</button>
+              {items.slice(0, 6).map((a) => (
+                <button key={a.k} onClick={() => goTo(a.go)} title={a.lines.join(" ") + " " + a.status} style={{ flexShrink: 0, border: "1px solid " + SC[a.sev] + "66", color: SC[a.sev], background: SC[a.sev] + "12", borderRadius: 99, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                  <span className="sl-live" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: SC[a.sev], marginRight: 6, verticalAlign: "middle" }} />{a.title.split(" \u2014 ")[1] ? cap(a.title.split(" \u2014 ")[1].toLowerCase()) : cap(a.title.toLowerCase())}<span style={{ color: T.dim, fontWeight: 600 }}> · {a.status}</span>
                 </button>
               ))}
             </div>
@@ -20526,6 +21102,191 @@ export default function ShinobiLife() {
         </Modal>
       )}
 
+      {modal === "event" && eventId != null && (() => {
+        const x = chronById(c, eventId);
+        const G = T.gold;
+        if (!x) return <Modal title="THE RECORD" accent={G} onClose={() => setModal(null)}><div style={{ color: T.dim, fontFamily: SERIF }}>That entry has been lost. The Chronicle forgets small things first.</div></Modal>;
+        const ch = chronChain(c, x.id);
+        const sj = subjOf(c, x);
+        const H = ({ children, col }) => <div style={{ color: col || T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-1.5">{children}</div>;
+        const Src = ({ s }) => <span style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".08em", border: "1px solid " + T.line, borderRadius: 3, padding: "0 4px", marginLeft: 6, whiteSpace: "nowrap" }}>{s}</span>;
+        const know = x.truth && (x.revealed || x.line === c.name || isAncestor(c, x.line));
+        /* the downstream tree, by depth, so branches read as branches */
+        const depth = {}; depth[x.id] = 0;
+        ch.down.forEach((d) => { depth[d.id] = (depth[d.cause] != null ? depth[d.cause] : 0) + 1; });
+        const related = (c.chron || []).filter((y) => y.id !== x.id && !ch.up.some((u) => u.id === y.id) && !ch.down.some((d) => d.id === y.id) && (() => { const s2 = subjOf(c, y); return s2.p.some((p) => sj.p.includes(p)) || (sj.v.length === 1 && s2.v.includes(sj.v[0]) && Math.abs(y.y - x.y) <= 3); })()).sort((a, b) => Math.abs(a.y - x.y) - Math.abs(b.y - x.y)).slice(0, 8);
+        const annivs = (c.news || []).filter((n) => n.cat === "HISTORY" && n.txt.includes(shortTxt(x.txt, 60).replace(/…$/, "").slice(0, 40)));
+        const Node = ({ e, cur, ind }) => (
+          <button onClick={() => setEventId(e.id)} className="w-full text-left" style={{ marginLeft: (ind || 0) * 18, width: "calc(100% - " + (ind || 0) * 18 + "px)", background: cur ? G + "1c" : T.panel2, border: "1px solid " + (cur ? G : T.line), borderRadius: 10, padding: "7px 11px", boxShadow: cur ? "0 0 22px " + G + "33" : "none" }}>
+            <div style={{ color: cur ? G : T.dim, fontSize: 10, fontWeight: 800, letterSpacing: ".12em" }}>{e.y} AH{e.big ? " · MAJOR" : ""}</div>
+            <div style={{ color: cur ? T.text : T.soft, fontFamily: SERIF, fontSize: cur ? 14 : 12.5, fontWeight: cur ? 700 : 400 }}>{cur ? e.txt : shortTxt(e.txt, 110)}</div>
+          </button>
+        );
+        const Arrow = ({ ind }) => <div style={{ marginLeft: (ind || 0) * 18 + 18, color: G, opacity: .7, fontSize: 13, lineHeight: "16px" }}>{"↓"}</div>;
+        return (
+          <Modal wide title="THE RECORD" accent={G} onClose={() => setModal(null)}>
+            <div style={{ color: G, fontSize: 10, letterSpacing: ".3em" }} className="font-bold">{x.y} AH · {(CHRON_CATS.find((k) => k[0] === x.cat) || [0, "Record"])[1].toUpperCase()}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 22, lineHeight: 1.18 }} className="font-bold mt-1">{shortTxt(x.txt, 140)}</div>
+
+            <H col={G}>WHAT HAPPENED <Src s={srcOf(c, x)} /></H>
+            <div style={{ color: T.text, fontFamily: SERIF, fontSize: 13.5, lineHeight: 1.5 }}>{x.truth && !x.revealed && !know ? x.txt : x.txt}</div>
+
+            <H col={G}>{ch.up.length || ch.down.length ? "THE CHAIN" : "WHY IT HAPPENED"}</H>
+            {!ch.up.length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1.5">Nothing the Chronicle wrote down caused it. Some things just happen, or the cause was never recorded.</div>}
+            <div className="sl-chain">
+              {ch.up.map((u) => <div key={u.id}><Node e={u} /><Arrow /></div>)}
+              <Node e={x} cur />
+              {ch.down.slice(0, 24).map((d) => <div key={d.id}><Arrow ind={Math.max(0, (depth[d.id] || 1) - 1)} /><Node e={d} ind={Math.max(0, (depth[d.id] || 1) - 1)} /></div>)}
+              {ch.down.length > 24 && <div style={{ color: T.dim, fontSize: 11, marginTop: 6 }}>and {ch.down.length - 24} more after that.</div>}
+            </div>
+            {!ch.down.length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12.5, marginTop: 6 }}>Nothing has followed from it yet that anybody wrote down. Give it time.</div>}
+
+            {(x.views || x.truth) && (
+              <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+                <div><H>WHAT PEOPLE BELIEVED <Src s={x.views ? "Rumour" : "The Shinobi Times"} /></H><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{x.views ? x.views.pub : cap(x.reported || "What the paper printed") + "."}</div></div>
+                {x.views && <div><H>THE OFFICIAL ACCOUNT <Src s="Village statement" /></H><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{x.views.off}</div></div>}
+                <div><H col={know || (x.views && !x.truth) ? T.good : T.blood}>WHAT WAS TRUE <Src s={x.revealed && x.truth ? "Revealed " + x.revealed : know ? "Personal knowledge" : x.views ? "The record" : "Classified"} /></H><div style={{ color: T.text, fontFamily: SERIF, fontSize: 12.5 }}>{x.truth ? (know ? cap(x.truth) + "." : "Sealed. Somebody knows. It is not you.") : x.views ? x.views.act : ""}</div></div>
+                {x.views && <div><H col={x.views.later ? G : T.dim}>WHAT HISTORY REMEMBERED <Src s="Historical record" /></H><div style={{ color: x.views.later ? T.text : T.dim, fontFamily: SERIF, fontSize: 12.5 }}>{x.views.later || "Too soon for historians. Ask again in a generation."}</div></div>}
+              </div>
+            )}
+            {x.legend && (
+              <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+                <div><H>THE HISTORICAL RECORD <Src s="Historical record" /></H><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{x.record}</div></div>
+                <div><H col={G}>THE POPULAR LEGEND <Src s="Popular tradition" /></H><div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, fontStyle: "italic" }}>{x.legend}</div></div>
+              </div>
+            )}
+
+            {(sj.p.length + sj.v.length + sj.cl.length + sj.o.length > 0 || sj.w || related.length || annivs.length) && <H col={G}>RELATED</H>}
+            <div className="flex flex-wrap gap-1 mb-2">
+              {sj.w ? <button onClick={() => { setChronBrowse({ k: "w", id: sj.w }); setChronTab("chron"); setModal("chronicle"); }} style={{ color: T.blood, border: "1px solid " + T.blood + "55", borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{"The " + (ORDINALS[sj.w - 1] || "") + " Great War"}</button> : null}
+              {sj.v.map((v2) => <button key={v2} onClick={() => goTo({ land: v2 })} style={{ color: G, border: "1px solid " + G + "55", borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{vName2(v2)}</button>)}
+              {sj.p.map((p2) => <button key={p2} onClick={() => { setChronBrowse({ k: "p", id: p2 }); setChronTab("chron"); setModal("chronicle"); }} style={{ color: T.text, border: "1px solid " + T.line, borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{p2}{relOf(c, p2) ? " · your " + relOf(c, p2) : ""}</button>)}
+              {sj.cl.map((k3) => <button key={k3} onClick={() => { setChronBrowse({ k: "cl", id: k3 }); setChronTab("chron"); setModal("chronicle"); }} style={{ color: T.soft, border: "1px dashed " + T.line, borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{"The " + k3}</button>)}
+              {sj.o.map((o2) => <button key={o2} onClick={() => { setLandsTab("orgs"); setModal("lands"); }} style={{ color: T.soft, border: "1px dotted " + G + "88", borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{((c.orgs || []).find((o) => o.id === o2) || { n: o2 }).n}</button>)}
+            </div>
+            {related.map((r) => <button key={r.id} onClick={() => setEventId(r.id)} style={{ display: "block", textAlign: "left", color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-0.5"><span style={{ color: T.dim, fontSize: 10.5 }}>{r.y} AH</span> {shortTxt(r.txt, 110)}</button>)}
+            {annivs.map((n, i) => <div key={i} style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>Remembered in {n.year}: {n.txt}</div>)}
+          </Modal>
+        );
+      })()}
+
+      {modal === "board" && (() => {
+        const items = situationOf(c);
+        const SC = SEV_COL(T);
+        return (
+          <Modal wide title={"ONGOING — " + items.length} accent={T.blood} onClose={() => setModal(null)}>
+            <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">Everything that is still happening, worst first. Press one to go to it.</p>
+            {!items.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nothing. A quiet year. Enjoy it; they do not last.</div>}
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+              {items.map((it) => (
+                <div key={it.k} style={{ background: T.panel2, border: "1px solid " + SC[it.sev] + "55", borderLeft: "4px solid " + SC[it.sev], borderRadius: 10 }} className="p-3 sl-board-card">
+                  <button onClick={() => goTo(it.go)} className="w-full text-left">
+                    <div className="flex items-center gap-2"><span className="sl-live" style={{ width: 8, height: 8, borderRadius: 99, background: SC[it.sev], flexShrink: 0 }} /><span style={{ color: SC[it.sev], fontSize: 11, letterSpacing: ".14em", fontWeight: 800 }}>{it.title}</span></div>
+                    {it.lines.map((l, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 3 }}>{l}</div>)}
+                    <div style={{ color: T.text, fontSize: 11.5, fontWeight: 700, marginTop: 5 }}>{it.status} {"→"}</div>
+                  </button>
+                  {it.why && whyEl("board" + it.k, it.why)}
+                </div>
+              ))}
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {modal === "map" && (() => {
+        const W = c.world || {};
+        const lands = W.lands || {};
+        const G = T.gold;
+        const maxPop = Math.max.apply(null, Object.values(lands).map((l) => l.pop || 1).concat([1]));
+        const vs = VILLAGES.filter((v) => MAP_POS[v.id]);
+        const pos = (vid) => MAP_POS[vid] || [500, 300];
+        const rad = (vid) => 30 + Math.sqrt(((lands[vid] || {}).pop) || 60) * 2.1;
+        const warPairs = (W.wars || []).filter((w) => w.years > 0).map((w) => [w.a, w.b]).concat(c.war ? liveFoes(c.war).filter((f) => f.kind === "village").map((f) => [c.village, f.key]) : []);
+        const refs = (W.refugees || []).filter((r) => !r.settled && r.to);
+        const places = W.places || [];
+        const off = (id, i) => { const a = (id * 2.399) % (Math.PI * 2); const d = 26 + (i % 3) * 12; return [Math.cos(a) * d, Math.sin(a) * d]; };
+        const prosCol = (p) => (p >= 60 ? T.good : p >= 35 ? G : T.blood);
+        const fug = bookedOf(c).filter((e) => e.loc && !e.captured);
+        const PK = { settlement: "▲", battlefield: "✖", ruin: "■", grave: "✝" };
+        const pl = placeId != null ? places.find((p) => p.id === placeId) : null;
+        return (
+          <Modal wide title="THE WORLD MAP" accent={G} onClose={() => { setPlaceId(null); setModal(null); }}>
+            <div className="flex gap-1 mb-2 overflow-x-auto sl-quick">
+              {MAP_MODES.map(([k2, n2]) => <button key={k2} onClick={() => setMapMode(k2)} style={{ flexShrink: 0, background: mapMode === k2 ? G : "transparent", color: mapMode === k2 ? "#0b0d11" : T.soft, border: "1px solid " + (mapMode === k2 ? G : T.line), borderRadius: 6, padding: "0 9px", height: 26, fontSize: 10.5, fontWeight: 700 }}>{n2}</button>)}
+            </div>
+            <div style={{ background: "radial-gradient(ellipse at 50% 55%, rgba(30,44,60,.55), rgba(6,8,12,.9))", border: "1px solid " + T.line, borderRadius: 12, overflow: "hidden" }}>
+              <svg viewBox="0 0 1000 600" style={{ width: "100%", height: "auto", display: "block" }} className="sl-map">
+                <defs>
+                  <marker id="slArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill={G} /></marker>
+                </defs>
+                {/* the sea, roughly */}
+                <path d="M720,560 C800,520 880,560 1000,520 L1000,600 L620,600 Z" fill="rgba(60,110,160,.12)" />
+                {mapMode === "war" && warPairs.map(([a, b], i) => { const [x1, y1] = pos(a), [x2, y2] = pos(b); return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={T.blood} strokeWidth="5" strokeDasharray="10 7" opacity=".8" />; })}
+                {mapMode === "refugees" && refs.map((r, i) => { const [x1, y1] = pos(r.from), [x2, y2] = pos(r.to); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 60; return <path key={i} d={"M" + x1 + "," + y1 + " Q" + mx + "," + my + " " + x2 + "," + y2} stroke={G} strokeWidth={Math.min(9, 1.5 + r.n / 3)} fill="none" opacity=".7" markerEnd="url(#slArrow)" />; })}
+                {vs.map((v) => {
+                  const [x, y] = pos(v.id); const Ld = lands[v.id] || {}; const r = rad(v.id);
+                  const exists = villageExists(c, v.id); const annexed = ((W.annexed || []).concat(c.annexed || [])).includes(v.id);
+                  const fill = mapMode === "prosperity" ? prosCol(Ld.prosper || 50) : mapMode === "population" ? G : v.id === c.village ? accent : exists ? "#8fa3b8" : "#555";
+                  const op = mapMode === "population" ? 0.15 + ((Ld.pop || 0) / maxPop) * 0.7 : mapMode === "prosperity" ? 0.55 : v.id === c.village ? 0.5 : 0.28;
+                  const ln = c.line && c.line[v.id];
+                  const atWar = warPairs.some((p) => p.includes(v.id));
+                  return (
+                    <g key={v.id} onClick={() => goTo({ land: v.id })} style={{ cursor: "pointer" }} className="sl-map-land">
+                      <circle cx={x} cy={y} r={r} fill={fill} opacity={op} stroke={mapMode === "war" && atWar ? T.blood : v.id === c.village ? accent : "rgba(255,255,255,.25)"} strokeWidth={v.id === c.village || (mapMode === "war" && atWar) ? 3 : 1} strokeDasharray={annexed ? "4 4" : "none"} />
+                      <text x={x} y={y - 4} textAnchor="middle" fill="#e8e4d8" fontSize="15" fontWeight="700" style={{ pointerEvents: "none" }}>{v.land.replace(/^Land of /, "")}</text>
+                      <text x={x} y={y + 13} textAnchor="middle" fill="#b9b3a3" fontSize="11" style={{ pointerEvents: "none" }}>
+                        {mapMode === "population" ? ((Ld.pop || 0) * 1000).toLocaleString() : mapMode === "prosperity" ? "prosperity " + (Ld.prosper || "?") : mapMode === "kage" ? (ln && ln.current ? ln.current.name : "no Kage") : annexed ? "annexed" : exists ? v.name : "no village"}
+                      </text>
+                    </g>
+                  );
+                })}
+                {mapMode === "orgs" && (c.orgs || []).filter((o) => !o.gone).map((o, i) => { const home = ORG_HOME[o.id] || VILLAGES[(o.n.length * 7) % VILLAGES.length].id; const [x, y] = MAP_POS[home] || pos(home); const [dx, dy] = off(i + 3, i); return <g key={o.id}><circle cx={x + dx} cy={y + dy} r={4 + o.str / 12} fill={G} opacity=".75" /><text x={x + dx + 8} y={y + dy + 4} fill="#e8e4d8" fontSize="10">{o.n.replace(/^The /, "")}</text></g>; })}
+                {mapMode === "fugitives" && fug.map((e, i) => { const vid = vidOfLand(e.loc); if (!vid) return null; const [x, y] = pos(vid); const [dx, dy] = off(i + 11, i); return <g key={e.name}><circle cx={x + dx} cy={y + dy} r="5" fill={T.blood} /><text x={x + dx + 7} y={y + dy + 4} fill="#f0b0a0" fontSize="10">{e.name}{e.seen ? " (" + e.seen + ")" : ""}</text></g>; })}
+                {(mapMode === "history" || mapMode === "war") && places.filter((p) => mapMode === "history" || p.kind === "battlefield").map((p, i) => { const [x, y] = pos(p.vid); const [dx, dy] = off(p.id, i); return <g key={p.id} onClick={() => setPlaceId(p.id)} style={{ cursor: "pointer" }}><text x={x + dx} y={y + dy} textAnchor="middle" fill={p.kind === "battlefield" ? T.blood : p.kind === "grave" ? "#c9c1ad" : G} fontSize="14">{PK[p.kind] || "●"}</text>{mapMode === "history" && <text x={x + dx + 9} y={y + dy} fill="#cfc8b6" fontSize="9">{p.n.replace(/^The /, "")}</text>}</g>; })}
+              </svg>
+            </div>
+            <div style={{ color: T.dim, fontSize: 11, marginTop: 6 }}>{(MAP_MODES.find((m) => m[0] === mapMode) || [0, 0, ""])[2]} Press a country for its profile{mapMode === "history" || mapMode === "war" ? ", a marker for its place" : ""}.</div>
+            {pl && (
+              <div style={{ ...glass(G), marginTop: 10 }} className="p-3.5">
+                <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 16 }} className="font-bold">{pl.n}</span><span style={{ color: G, fontSize: 10, letterSpacing: ".16em" }} className="font-bold">{((PLACE_STAGES[pl.kind] || [])[pl.stage] || ["Place"])[0].toUpperCase()}</span></div>
+                <div style={{ color: T.dim, fontSize: 11 }}>The {landOf(pl.vid)} · since {pl.y}{pl.dead ? " · " + pl.dead.toLocaleString() + " dead" : ""}</div>
+                {(pl.hist || []).map((h, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{h.y}: {h.t}.</div>)}
+                <div className="flex gap-3 mt-2">
+                  <button onClick={() => v11Act("visit", pl.id)} disabled={c.actions < 1} style={{ color: c.actions < 1 ? T.dim : G, fontSize: 12 }} className="font-semibold">Visit it</button>
+                  {pl.event && <button onClick={() => { setEventId(pl.event); setModal("event"); }} style={{ color: T.soft, fontSize: 12 }} className="font-semibold">The full record {"→"}</button>}
+                </div>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {modal === "story" && (() => {
+        const st = saveStory(c);
+        const G = T.gold;
+        return (
+          <Modal wide title="THE STORY OF THIS SAVE" accent={G} onClose={() => setModal(null)}>
+            <div style={{ textAlign: "center" }} className="py-3">
+              <div style={{ width: 140, height: 1, background: "linear-gradient(90deg, transparent, " + G + ", transparent)", margin: "0 auto 12px" }} />
+              <div style={{ fontFamily: SERIF, fontSize: "clamp(24px,4.6vw,36px)", lineHeight: 1.1, color: G }} className="font-bold">{st.title.toUpperCase()}</div>
+              <div style={{ width: 140, height: 1, background: "linear-gradient(90deg, transparent, " + G + ", transparent)", margin: "12px auto 0" }} />
+            </div>
+            <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+              {[["Years simulated", st.years], ["Generations", st.gens], ["Wars begun", st.wars], ["Arbiters in the line", st.arbiters], ["Villages destroyed or annexed", st.destroyed], ["Major events", st.big], ["Longest peace", st.peace ? st.peace + " yrs" : "—"], ["Longest war", st.war ? st.war + " yrs" : "—"], ["Named crises", st.chains]].map(([k2, v2]) => (
+                <div key={k2} style={{ background: T.panel2, border: "1px solid " + T.line, borderRadius: 10, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: SERIF, fontSize: 20, color: v2 && v2 !== "—" ? G : T.dim, lineHeight: 1 }} className="font-bold">{v2}</div>
+                  <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".08em", marginTop: 3 }}>{k2.toUpperCase()}</div>
+                </div>
+              ))}
+            </div>
+            <p style={{ color: T.text, fontFamily: SERIF, fontSize: 15, lineHeight: 1.55 }} className="mt-4">{st.line}</p>
+            {st.ages.length > 0 && <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".2em" }} className="font-bold mt-4 mb-1">THE AGES OF THIS WORLD</div>}
+            {st.ages.map((a, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 13 }}>{a}</div>)}
+            <div style={{ color: T.dim, fontSize: 11, marginTop: 10 }}>Peace and war are counted from when the world began keeping track of them, in 11.1.</div>
+          </Modal>
+        );
+      })()}
+
       {modal === "hub" && (() => {
         const G = accent;
         const W = c.world || {};
@@ -20552,6 +21313,21 @@ export default function ShinobiLife() {
         const I = c.iron;
         const fh = familyHistory(c);
         const recentBig = (c.chron || []).filter((x) => x.big).sort((a, b) => b.y - a.y || b.id - a.id).slice(0, 10);
+        /* every hub opens on the state of the thing it is about */
+        const Hero = ({ k, n, stats, line }) => (
+          <div style={{ ...glass(G), marginBottom: 12 }} className="p-3.5 sl-hero-panel">
+            <div style={{ color: G, letterSpacing: ".24em", fontSize: 9.5 }} className="font-bold">{k}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 19, lineHeight: 1.15 }} className="font-bold mt-0.5">{n}</div>
+            {line && <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5, marginTop: 3 }}>{line}</div>}
+            <div className="grid gap-1.5 mt-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))" }}>
+              {stats.map(([a2, b2]) => <div key={a2} style={{ background: "rgba(0,0,0,.25)", borderRadius: 8, padding: "5px 8px" }}><div style={{ fontFamily: SERIF, fontSize: 17, lineHeight: 1, color: b2 ? T.text : T.dim }} className="font-bold">{b2}</div><div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".06em", marginTop: 2 }}>{a2}</div></div>)}
+            </div>
+          </div>
+        );
+        const refN = (W.refugees || []).filter((r) => !r.settled).reduce((a, r) => a + r.n, 0);
+        const warsN = (W.wars || []).filter((w) => w.years > 0).length + (c.war ? 1 : 0);
+        const grs = grudgesOf(c).filter((g) => !g.settled);
+        const ws = worldStateOf(c);
         return (
           <Modal wide title="THE WORLD, ARRANGED" accent={G} onClose={() => setModal(null)}>
             <div className="flex gap-1.5 mb-3 overflow-x-auto sl-quick">
@@ -20564,6 +21340,8 @@ export default function ShinobiLife() {
 
             {hub === "life" && (
               <>
+                <Hero k="YOUR LIFE" n={"Age " + c.age + " \u00b7 " + (c.rankName || "").toUpperCase()} line={(c.age >= 45 ? "Your body is ageing. " : c.age >= 25 ? "You are in your prime, for now. " : "You are young, and the world has not decided about you yet. ") + (c.spouse ? "Married to " + c.spouse.name + "." : "")}
+                  stats={[["Relationships", [c.spouse, c.crush, c.rival].filter(Boolean).length + (c.team || []).filter((t2) => t2.alive).length], ["Students", (c.formerStudents || []).length + ((c.students || []).filter((x) => x.alive).length)], ["Children", (c.kids || []).filter((k2) => !k2.dead).length], ["Open cases", openCases.length], ["Feuds", vds.length], ["Injuries", (c.injuries || []).length]]} />
                 <Door n="Your life" sub={"Age " + c.age + " · " + ageStage(c) + ((c.injuries || []).length ? " · " + c.injuries.length + " lasting injur" + (c.injuries.length === 1 ? "y" : "ies") : "") + (c.career ? " · " + ((CAREERS.find((x) => x.id === c.career.id) || {}).n || "working") : "")} on={() => setModal("life")} tone={G} badge={openCases.length ? openCases.length + " open case" + (openCases.length === 1 ? "" : "s") : null} />
                 <Door n="Your line" sub={fh.gens > 1 ? "The family has been in the record for " + fh.years + " years, across " + fh.gens + " lives." : "You are the first of your line anybody has written down."} on={() => { setChronTab("line"); setModal("chronicle"); }} />
                 {c.students && <Door n={c.studentSquad || "Your cell"} sub="The students in your charge." on={() => setModal("students")} />}
@@ -20575,6 +21353,7 @@ export default function ShinobiLife() {
                     <div key={v.fam} style={{ background: T.panel2, border: "1px solid " + T.blood + "44", borderRadius: 10 }} className="p-3 mb-2">
                       <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{cap(v.fam)}</span><span style={{ color: T.dim, fontSize: 11 }}>since {v.since}{v.by !== c.name ? " · started by your " + (relOf(c, v.by) || "family") : ""}{v.divided ? " · divided" : ""}</span></div>
                       <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>Over {v.why}. {v.strikes ? "They have struck " + v.strikes + " time" + (v.strikes === 1 ? "" : "s") + "." : "They have not struck yet."}</div>
+                      {whyEl("vd" + v.fam, whyFeud(c, v))}
                       <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 54 }}>HEAT</span><div style={{ flex: 1 }}><Bar v={v.heat} col={T.blood} /></div><span style={{ color: T.blood, fontSize: 11 }}>{v.heat}</span></div>
                       <Row label="Offer a blood price" sub={money(cost) + ". They might take it. They might take it and keep the feud."} right="Offer" onClick={() => v11Act("peace", v.fam, cost)} disabled={c.actions < 1 || c.ryo < cost} />
                     </div>
@@ -20585,6 +21364,9 @@ export default function ShinobiLife() {
 
             {hub === "world" && (
               <>
+                <Hero k="WORLD AT A GLANCE" n={ws.tags.slice(0, 2).join(" \u00b7 ")} line={ws.age ? "Historians call these years " + ws.age + "." : null}
+                  stats={[["Wars", warsN], ["Disasters, 3 yrs", dz.length], ["Refugees", refN ? (refN * 1000).toLocaleString() : 0], ["Prices rising", Object.values(W.lands || {}).filter((l) => l.price > 110).length + " lands"], ["Movements", mvs.length], ["Crises", chains.length + (c.crises || []).filter((k2) => !k2.done).length]]} />
+                <Door n="The World Map" sub="Political, population, prosperity, war, refugees, organisations, history, Kage and fugitives, on one map." on={() => setModal("map")} tone={G} />
                 <Door n="The Lands" sub="Every country: its people, its prices, its government, what happened to it." on={() => { setLandsTab("lands"); setModal("lands"); }} tone={T.gold} />
                 <Door n="The Shinobi Times" sub={(c.news || []).length + " stories · " + (c.rumours || []).length + " rumours going round"} on={() => setModal("news")} />
                 {c.war && <Door n="The War" sub={c.war.name} on={() => setModal("war")} tone={T.blood} />}
@@ -20598,7 +21380,7 @@ export default function ShinobiLife() {
                 {chains.map((ch) => {
                   const last = chronById(c, ch.last);
                   return (
-                    <button key={ch.id} onClick={() => { if (ch.last) { setChronBrowse({ k: "cat", id: null }); setChronFilter("all"); setChronLimit(1000); setChronOpen(ch.last); setChronTab("chron"); setModal("chronicle"); } }} className="w-full text-left mb-2"
+                    <button key={ch.id} onClick={() => { if (ch.last) { setEventId(ch.last); setModal("event"); } }} className="w-full text-left mb-2"
                       style={{ background: T.panel2, border: "1px solid " + T.line, borderLeft: "3px solid " + G, borderRadius: 8, padding: "8px 10px" }}>
                       <div style={{ fontFamily: SERIF, fontSize: 13.5 }} className="font-bold">{ch.name}</div>
                       <div style={{ color: T.dim, fontSize: 11 }}>Stage {ch.stage + 1} of {(CHAIN_STAGES[ch.kind] || []).length} · since {ch.y}</div>
@@ -20611,9 +21393,20 @@ export default function ShinobiLife() {
 
             {hub === "people" && (
               <>
+                <Hero k="PEOPLE AROUND YOU" n={(c.formerStudents || []).length + (c.kids || []).filter((k2) => !k2.dead).length + (c.spouse ? 1 : 0) + " people who are yours"}
+                  stats={[["Students", (c.formerStudents || []).length], ["Family", (c.kids || []).filter((k2) => !k2.dead).length + (c.spouse ? 1 : 0)], ["Rivals", (c.rival ? 1 : 0) + (c.formerStudents || []).filter((x) => x.rivalOf).length], ["Kage", VILLAGES.filter((v) => villageExists(c, v.id)).length], ["Wanted", bookedOf(c).length], ["Grudges", grs.length]]} />
                 <Door n="People" sub="Everyone you know, and how they feel about it." on={() => setModal("people")} tone={G} />
                 <Door n="The Village Roll" sub="Who serves, at what rank, and how old they are." on={() => setModal("villageroll")} />
                 <Door n="The Bingo Book" sub="The named, the wanted, and their files." on={() => setModal("bingo")} disabled={c.rank < 2} />
+                <H col={T.blood}>GRUDGES AGAINST YOU</H>
+                {!grs.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody that anybody knows of. People forgive more than you would think, or they hide it better.</div>}
+                {grs.slice(0, 8).map((g) => (
+                  <div key={g.name} style={{ background: T.panel2, border: "1px solid " + T.blood + "33", borderRadius: 10 }} className="p-3 mb-2">
+                    <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{g.name}</span><span style={{ color: T.blood, fontSize: 11, fontWeight: 800 }}>GRUDGE {g.lvl}/10</span></div>
+                    <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>Reason: “{g.reason}.”{g.by !== c.name ? " (It was your " + (relOf(c, g.by) || "family") + ".)" : ""}</div>
+                    <div style={{ color: T.dim, fontSize: 11 }}>Age: {g.age} year{g.age === 1 ? "" : "s"} · Forgiveness: {g.forgive}</div>
+                  </div>
+                ))}
                 <H col={T.gold}>PERSONS OF INTEREST</H>
                 <p style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">People with something they are not saying. You only see the ones somebody has noticed.</p>
                 {!pois.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody you have noticed. That does not mean there is nobody.</div>}
@@ -20633,6 +21426,9 @@ export default function ShinobiLife() {
 
             {hub === "records" && (
               <>
+                <Hero k="HISTORY IS MOVING" n={(currentAgeName(c) || "An age without a name yet")}
+                  stats={[["Events this year", (c.chron || []).filter((x) => x.y === c.year).length], ["Major this year", (c.chron || []).filter((x) => x.y === c.year && x.big).length], ["Anniversaries", (c.news || []).filter((n2) => n2.cat === "HISTORY" && n2.year === c.year).length], ["Secrets found", (c.secrets || []).filter((x) => x.found).length], ["In the record", (c.chron || []).length], ["Places", (W.places || []).length]]} />
+                <Door n="The Story of this Save" sub={saveStory(c).title + ". Years, generations, wars, and what shaped it."} on={() => setModal("story")} tone={G} />
                 <Door n="The Shinobi Chronicle" sub={(c.chron || []).length + " entries, browsable by year, era, war, village, person, clan, organisation and court case."} on={() => { setChronTab("chron"); setModal("chronicle"); }} tone={T.gold} />
                 <Door n="The Histories" sub="The ages, the wars, the seats, the houses." on={() => setModal("histories")} />
                 <Door n="The Records" sub="Kage lines and the shape of the world." on={() => setModal("records")} />
@@ -20640,7 +21436,7 @@ export default function ShinobiLife() {
                 <H col={T.gold}>TIMELINE</H>
                 <div className="flex gap-1.5 overflow-x-auto sl-quick pb-1">
                   {recentBig.map((x) => (
-                    <button key={x.id} onClick={() => { setChronBrowse({ k: "cat", id: null }); setChronFilter("all"); setChronLimit(1000); setChronOpen(x.id); setChronTab("chron"); setModal("chronicle"); }}
+                    <button key={x.id} onClick={() => { setEventId(x.id); setModal("event"); }}
                       style={{ flexShrink: 0, maxWidth: 220, background: T.s0, border: "1px solid " + T.line, borderRadius: 10, padding: "6px 10px", textAlign: "left" }}>
                       <div style={{ color: T.gold, fontSize: 10, fontWeight: 800 }}>{x.y} AH</div>
                       <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.txt}</div>
@@ -20653,6 +21449,7 @@ export default function ShinobiLife() {
                   <div key={sx.id} style={{ background: T.panel2, border: "1px solid " + (sx.found ? T.gold + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2">
                     <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".16em" }} className="font-bold">THE OFFICIAL STORY · {sx.y} AH</div>
                     <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{cap(sx.cover)}.</div>
+                    {(sx.threads || []).map((th, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{"\u2014"} {cap(th.t)}. <span style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".08em", border: "1px solid " + T.line, borderRadius: 3, padding: "0 4px" }}>{th.src}</span></div>)}
                     {sx.clues > 0 && <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 60 }}>THREADS</span><div style={{ flex: 1 }}><Bar v={Math.round((sx.clues / sx.need) * 100)} col={T.gold} /></div><span style={{ color: T.gold, fontSize: 11 }}>{sx.clues}/{sx.need}</span></div>}
                     {sx.found ? (
                       <>
@@ -20668,6 +21465,10 @@ export default function ShinobiLife() {
 
             {hub === "power" && (
               <>
+                {(() => { const live = (c.orgs || []).filter((o) => !o.gone); const top = live.slice().sort((a, b) => b.str - a.str)[0]; return (
+                  <Hero k="WHO HOLDS POWER" n={top ? top.n + " is the strongest" : "Nobody outside the villages"} line={c.org ? "You belong to " + (live.find((o) => o.id === c.org.id) || { n: "an organisation" }).n + "." : "You belong to no organisation."}
+                    stats={[["Organisations", live.length], ["Fallen", (c.orgs || []).filter((o) => o.gone).length], ["Your org rank", c.org ? ORG_RANKS[c.org.rank] || "Member" : "—"], ["Akatsuki", c.akatsuki ? "Ring " + c.akatsuki.ring : "outside"], ["Wanted names", bookedOf(c).length], ["Your infamy", c.infamy || 0]]} />
+                ); })()}
                 <Door n="Organisations" sub={(c.orgs || []).filter((o) => !o.gone).length + " standing, with doctrines, rivals, splits and founders."} on={() => { setLandsTab("orgs"); setModal("lands"); }} tone={G} />
                 <Door n="The Bingo Book" sub="Who is dangerous, and how dangerous." on={() => setModal("bingo")} />
                 {c.akatsuki && <Door n="Akatsuki" sub={"Ring " + c.akatsuki.ring} on={() => setModal("akatsuki")} tone={T.blood} />}
@@ -20678,12 +21479,15 @@ export default function ShinobiLife() {
 
             {hub === "politics" && (
               <>
+                <Hero k="THE POLITICS OF IT" n={(c.crises || []).filter((k2) => !k2.done).length ? "Seats are contested" : "The seats are held"}
+                  stats={[["Seats", VILLAGES.filter((v) => villageExists(c, v.id)).length], ["Crises", (c.crises || []).filter((k2) => !k2.done).length], ["Movements", mvs.length], ["Won, 20 yrs", (W.movements || []).filter((m) => m.outcome === "won" && c.year - m.done <= 20).length], ["Your standing", c.rogue ? "rogue" : c.standing], ["Home", attitudeOf(c, c.village).word]]} />
                 <H col={G}>MOVEMENTS</H>
                 {!mvs.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody is marching for anything. Give it a war, or a famine.</div>}
                 {mvs.map((m) => (
                   <div key={m.id} style={{ background: T.panel2, border: "1px solid " + (m.vid === c.village ? G + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2">
                     <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{m.n}</span><span style={{ color: T.dim, fontSize: 11 }}>{vName2(m.vid)} · since {m.founded}</span></div>
                     <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{m.goal}. Led by {m.leader}.{m.you ? " You have spoken " + (m.you > 0 ? "for" : "against") + " it." : ""}</div>
+                    {whyEl("mv" + m.id, whyMovement(c, m))}
                     <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 62 }}>SUPPORT</span><div style={{ flex: 1 }}><Bar v={m.str} col={G} /></div><span style={{ color: T.soft, fontSize: 11 }}>{m.str}</span></div>
                     <div className="flex gap-2 mt-1.5">
                       <button onClick={() => v11Act("movement", m.id, 1)} disabled={c.actions < 1} style={{ color: c.actions < 1 ? T.dim : T.good, fontSize: 12 }} className="font-semibold">Speak for it</button>
@@ -20695,13 +21499,33 @@ export default function ShinobiLife() {
                 {VILLAGES.filter((v) => villageExists(c, v.id)).map((v) => {
                   const ln = c.line && c.line[v.id];
                   const k = (c.crises || []).find((x) => x.vid === v.id && !x.done);
-                  return <div key={v.id} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><b>{v.name}</b>: {ln && ln.current ? ln.current.name + (ln.current.caretaker ? " (acting)" : "") : "empty"}{c.daimyo && c.daimyo[v.id] ? " · Daimyo " + c.daimyo[v.id].name : ""}{k ? " · SUCCESSION CRISIS" : ""}</div>;
+                  const kn = ln && ln.current ? ln.current.name : null;
+                  const dr = kn ? decisionsOf(c, kn) : null;
+                  const att = attitudeOf(c, v.id);
+                  const op = seatOpen === v.id;
+                  return (
+                    <div key={v.id} className="mb-1.5" style={{ borderBottom: "1px dotted " + T.line, paddingBottom: 4 }}>
+                      <button onClick={() => setSeatOpen(op ? null : v.id)} className="w-full text-left" style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}><b>{v.name}</b>: {kn ? kn + (ln.current.caretaker ? " (acting)" : "") : "empty"}{c.daimyo && c.daimyo[v.id] ? " · Daimyo " + c.daimyo[v.id].name : ""}{k ? " · SUCCESSION CRISIS" : ""} <span style={{ color: att.score >= 3 ? T.good : att.score <= -3 ? T.blood : T.dim, fontSize: 11 }}>· {att.word}</span> <span style={{ color: G, fontSize: 11 }}>{op ? "\u25B4" : "\u25BE"}</span></button>
+                      {op && (
+                        <div style={{ paddingLeft: 10, marginTop: 4 }}>
+                          <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em" }} className="font-bold">HOW THEY SEE YOU: {att.word.toUpperCase()}</div>
+                          {whyEl("att" + v.id, att.why)}
+                          {kn && <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".18em" }} className="font-bold mt-2">KAGE RECORD — {kn.toUpperCase()}</div>}
+                          {kn && <div style={{ color: T.soft, fontSize: 11.5 }}>Accepted {dr.accepted} · Rejected {dr.rejected} · Compromised {dr.compromised}</div>}
+                          {kn && dr.list.slice().reverse().slice(0, 8).map((d2, i2) => <div key={i2} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{d2.y}: {d2.t}.</div>)}
+                          {kn && !dr.list.length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>Nothing on record yet. They have not had to decide anything the world noticed.</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
                 })}
               </>
             )}
 
             {hub === "law" && (
               <>
+                <Hero k="THE LAW" n={I && I.seated ? "You sit in the sixth chair" : I && I.arbiterName ? "Tetsu has an Arbiter" : "The sixth chair"}
+                  stats={[["Authority", I && I.authority != null ? I.authority : "—"], ["Legitimacy", I && I.legit != null ? I.legit : "—"], ["Docket", I && I.seated ? (I.docket || []).filter((x) => !x.done).length : "—"], ["Precedents", I ? (I.precedents || []).length : 0], ["Treaties", I ? (I.treaties || []).filter((t2) => !t2.broken).length : 0], ["Crises remembered", I ? (I.memory || []).length : 0]]} />
                 <Door n="The Iron Scales" sub={I && I.seated ? "Your court at Tetsu." : "The court at Tetsu, and whoever sits in its sixth chair."} on={() => openIron()} tone={IRON} />
                 <Door n="The Iron Vault" sub="Where the five nations keep the people they cannot keep anywhere else." on={() => openVault()} />
                 <Door n="The Standing Orders" sub="The rules the Scales run on." on={() => { setRuleSec(null); setModal("rulebook"); }} />
@@ -20760,7 +21584,7 @@ export default function ShinobiLife() {
                   <div key={i} className="mb-2.5" style={{ borderLeft: "2px solid " + (RS[r.s] || T.line), paddingLeft: 9 }}>
                     <span style={{ color: RS[r.s] || T.dim, fontSize: 8.5, letterSpacing: ".2em", border: "1px solid " + (RS[r.s] || T.line), borderRadius: 3, padding: "1px 5px" }} className="font-bold">{RUMOUR_STATUS[r.s] || "RUMOURED"}</span>
                     <div style={{ fontFamily: SERIF, fontSize: 12.5, lineHeight: 1.35, marginTop: 3 }}>{r.s === "classified" ? r.t.replace(/[A-Z][a-z]+ [A-Z][a-z]+/g, "\u2588\u2588\u2588\u2588\u2588") : r.t}</div>
-                    <div style={{ color: T.dim, fontSize: 9.5 }}>{AH(r.y)}</div>
+                    <div style={{ color: T.dim, fontSize: 9.5 }}>{AH(r.y)}{r.src ? " · source: " + r.src : ""}</div>
                   </div>
                 ))}
               </>
@@ -20774,6 +21598,18 @@ export default function ShinobiLife() {
                 {lead.kage && <div style={{ color: T.gold, fontSize: 9, letterSpacing: ".28em" }} className="font-bold mb-1.5">◆ THE SEAT CHANGES HANDS ◆</div>}
                 <div style={{ color: lead.kage ? T.gold : CAT_COL[lead.cat] || accent, fontSize: 9, letterSpacing: ".2em" }} className="font-bold mb-1">{lead.cat}</div>
                 <div style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.16, letterSpacing: "-.01em" }} className="font-bold mb-1.5">{lead.txt}</div>
+                {(() => {
+                  /* the same story from three desks, and what you know that they do not */
+                  const x = (c.chron || []).find((y) => y.txt === lead.txt) || (c.chron || []).slice().reverse().find((y) => y.y === lead.year && y.views && lead.txt.includes(y.txt.split(",")[0]));
+                  const who = (subjOf(c, x || { txt: lead.txt, y: lead.year }).p || [])[0];
+                  const rm = (c.rumours || []).find((r) => who && (r.about === who || r.t.includes(who)));
+                  const rows = [];
+                  if (x && x.views) { rows.push(["OFFICIAL", x.views.off, T.soft]); rows.push(["RUMOUR", x.views.pub, T.gold]); }
+                  else if (rm) rows.push([RUMOUR_STATUS[rm.s] || "RUMOUR", rm.t, T.gold]);
+                  if (x && x.truth && !x.revealed) rows.push(["CLASSIFIED", x.line === c.name || isAncestor(c, x.line) ? "You know what the paper does not: " + x.truth + "." : "Records exist that say something else. They are sealed.", T.blood]);
+                  if (!rows.length) return null;
+                  return <div className="mb-2 space-y-0.5">{rows.map(([k2, t2, col2]) => <div key={k2} style={{ fontFamily: SERIF, fontSize: 12.5, color: T.soft }}><b style={{ color: col2, fontSize: 9, letterSpacing: ".2em", marginRight: 6 }}>{k2}</b>{t2}</div>)}</div>;
+                })()}
                 <div style={{ color: T.dim, fontSize: 10, fontStyle: "italic" }}>
                   {lead.year != null ? AH(lead.year) : "year " + lead.age}{lead.age != null ? " · you were " + lead.age : ""}
                 </div>
@@ -20908,7 +21744,7 @@ export default function ShinobiLife() {
                         <div>
                           <div style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".16em" }} className="font-bold mb-1">EVIDENCE</div>
                           {!bd.ev.length && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>Nothing on the board yet.</div>}
-                          {bd.ev.map((e2, i) => <div key={i} className="flex gap-1.5" style={{ fontSize: 12, fontFamily: SERIF }}><b style={{ color: EVC[e2.s] || T.dim, width: 12, flexShrink: 0 }}>{e2.s}</b><span style={{ color: T.soft }}>{e2.t}</span></div>)}
+                          {bd.ev.map((e2, i) => <div key={i} className="flex gap-1.5" style={{ fontSize: 12, fontFamily: SERIF }}><b style={{ color: EVC[e2.s] || T.dim, width: 12, flexShrink: 0 }}>{e2.s}</b><span style={{ color: T.soft }}>{e2.t} <span title="How do I know this?" style={{ color: T.dim, fontSize: 9.5, letterSpacing: ".06em", border: "1px solid " + T.line, borderRadius: 3, padding: "0 4px", fontFamily: UI }}>{e2.src || "Personal observation"}</span></span></div>)}
                         </div>
                       </div>
                       <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".16em" }} className="font-bold mt-2 mb-1">STILL POSSIBLE</div>
@@ -20976,7 +21812,11 @@ export default function ShinobiLife() {
                       {kv("Hidden village", villageExists(c, v.id) ? v.name : "none")}
                       {kv("Kage", ln && ln.current ? ln.current.name + (ln.current.caretaker ? " (acting)" : "") + (ln.current.from ? ", since " + ln.current.from : "") : "none")}
                       {kv("Prosperity", Ld.prosper + " / 100")}
+                      {whyEl("pro" + v.id, whyProsper(c, v.id))}
                       {kv("Prices", Ld.price + (Ld.price > 110 ? " — dear" : Ld.price < 98 ? " — cheap" : " — normal"))}
+                      {whyEl("pri" + v.id, whyPrice(c, v.id))}
+                      {v.id !== c.village || c.rogue ? kv("How they see you", attitudeOf(c, v.id).word) : null}
+                      {(v.id !== c.village || c.rogue) && whyEl("att2" + v.id, attitudeOf(c, v.id).why)}
                       {kv("Shortages", Ld.shortage || "none")}
                       {kv("At war with", foes.length ? joinList(foes.map(vName2)) : "nobody")}
                       {kv("Refugees", (out.length ? (out.reduce((a, r) => a + r.n, 0) * 1000).toLocaleString() + " have fled" : "none fleeing") + " · " + (inn.length ? (inn.reduce((a, r) => a + r.n, 0) * 1000).toLocaleString() + " sheltering here" : "none sheltering"))}
@@ -20990,13 +21830,23 @@ export default function ShinobiLife() {
                       </div>
                     )}
                   </div>
+                  {(W.places || []).filter((p2) => p2.vid === v.id).length > 0 && <H col={G}>PLACES</H>}
+                  {(W.places || []).filter((p2) => p2.vid === v.id).map((p2) => (
+                    <div key={p2.id} className="flex justify-between gap-2 items-baseline mb-1" style={{ fontFamily: SERIF, fontSize: 12.5 }}>
+                      <span style={{ color: T.soft }}><b>{p2.n}</b> <span style={{ color: T.dim, fontSize: 11 }}>{((PLACE_STAGES[p2.kind] || [])[p2.stage] || ["Place"])[0]} · since {p2.y}{p2.dead ? " · " + p2.dead.toLocaleString() + " dead" : ""}</span></span>
+                      <span className="flex gap-2 shrink-0">
+                        {p2.event && <button onClick={() => { setEventId(p2.event); setModal("event"); }} style={{ color: T.dim, fontSize: 11 }}>record</button>}
+                        <button onClick={() => v11Act("visit", p2.id)} disabled={c.actions < 1} style={{ color: c.actions < 1 ? T.dim : G, fontSize: 11 }} className="font-semibold">visit</button>
+                      </span>
+                    </div>
+                  ))}
                   {dzs.length > 0 && <H col={T.blood}>DISASTERS</H>}
                   {dzs.map((d, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{d.y}: {d.n}{d.relief ? ", relief sent " + d.relief + " time" + (d.relief === 1 ? "" : "s") : ""}.</div>)}
                   {mv.length > 0 && <H col={G}>MOVEMENTS</H>}
                   {mv.map((m) => <div key={m.id} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{m.n} ({m.founded}) {"\u2014"} {m.goal.toLowerCase()}: {m.done ? (m.outcome === "won" ? "won, " + m.done : "finished, " + m.done) : "support " + m.str}.</div>)}
                   <H col={G}>ITS HISTORY</H>
                   {!hist.length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nothing written down yet.</div>}
-                  {hist.map((x) => <div key={x.id} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><span style={{ color: T.dim, fontSize: 10.5 }}>{x.y} AH</span> {x.txt}</div>)}
+                  {hist.map((x) => <button key={x.id} onClick={() => { setEventId(x.id); setModal("event"); }} style={{ display: "block", textAlign: "left", color: T.soft, fontFamily: SERIF, fontSize: 12.5 }} className="mb-1"><span style={{ color: T.dim, fontSize: 10.5 }}>{x.y} AH</span> {x.txt}</button>)}
                   {hist.length > 0 && <button onClick={() => { setChronBrowse({ k: "v", id: v.id }); setChronTab("chron"); setChronLimit(120); setModal("chronicle"); }} style={{ color: G, fontSize: 12 }} className="mt-2 font-semibold">The whole of it in the Chronicle {"\u2192"}</button>}
                 </>
               );
@@ -21075,6 +21925,7 @@ export default function ShinobiLife() {
                       <div className="flex items-center gap-2 mt-1.5"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 70 }}>STRENGTH</span><div style={{ flex: 1 }}><Bar v={o.str} col={G} /></div><span style={{ color: T.soft, fontSize: 11 }}>{o.str}</span></div>
                       <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>{d.d}{st ? " Right now: " + st[1].toLowerCase() + "." : ""}</div>
                       {(o.doctrine || o.founder) && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5, marginTop: 2 }}>{o.doctrine ? "Doctrine: \u201c" + o.doctrine + ".\u201d " : ""}{o.founder ? "Founded by " + o.founder + "." : ""}{o.splitFrom ? " Split from " + o.splitFrom + "." : ""}</div>}
+                      {o.origin && whyEl("org" + o.id, [o.origin + ".", o.doctrine ? "Its doctrine, \u201c" + o.doctrine + "\u201d, is what that origin taught it." : null, (o.hist || []).length ? "Since then: " + (o.hist || []).slice(-1)[0].t : null].filter(Boolean))}
                       {(o.hist || []).slice(-2).map((h, i) => <div key={i} style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5 }}>{h.y}: {h.t}</div>)}
                       {!c.org && !o.custom && <button onClick={() => orgUi("join", o.id)} disabled={c.actions < 1 || !d.req(c)} style={{ color: d.req(c) ? G : T.dim, fontSize: 11.5, marginTop: 4 }}>{d.req(c) ? "Join them" : "They want: " + d.reqTxt}</button>}
                     </div>
@@ -21132,6 +21983,7 @@ export default function ShinobiLife() {
             <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">
               The history this world has actually had: what happened, what caused it, what it led to, and what people were told. It outlives you. {AH(c.year)}.
             </p>
+            {currentAgeName(c) && <div style={{ color: GOLD, fontSize: 10, letterSpacing: ".24em" }} className="font-bold mb-3">CURRENT AGE: {currentAgeName(c).toUpperCase()}</div>}
             <div className="flex gap-1.5 mb-3 flex-wrap">
               {[["chron", "The Chronicle"], ["line", "Your Line"], ["deeds", "Deeds of the Age"]].map(([k2, n2]) => (
                 <button key={k2} onClick={() => setChronTab(k2)} style={{ background: chronTab === k2 ? GOLD : T.panel2, color: chronTab === k2 ? "#0b0d11" : T.soft, border: "1px solid " + (chronTab === k2 ? GOLD : T.line), borderRadius: 99 }} className="px-3 py-1.5 text-xs font-semibold">{n2}</button>
@@ -21191,6 +22043,7 @@ export default function ShinobiLife() {
                       </button>
                       {open && (
                         <div style={{ marginLeft: 16, borderLeft: "1px dashed " + T.line, paddingLeft: 12 }} className="mb-3">
+                          <button onClick={() => { setEventId(x.id); setModal("event"); }} style={{ background: GOLD, color: "#0b0d11", borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 800 }} className="mb-2">The full record {"\u2192"}</button>
                           {sj && (sj.v.length + sj.p.length + sj.cl.length + sj.o.length > 0 || sj.w) && (
                             <div className="flex flex-wrap gap-1 mb-2">
                               {sj.w ? <button onClick={() => goSubj("w", sj.w)} style={{ color: T.blood, border: "1px solid " + T.blood + "55", borderRadius: 99, padding: "0 8px", fontSize: 10.5 }}>{"The " + (ORDINALS[sj.w - 1] || "") + " Great War"}</button> : null}
@@ -23833,7 +24686,7 @@ export default function ShinobiLife() {
               <div key={row.rank} className="mb-3">
                 <div className="flex items-baseline justify-between mb-1.5">
                   <div style={{ color: T.soft, fontSize: 9.5, letterSpacing: ".22em" }} className="font-bold">{row.rank.toUpperCase()}</div>
-                  <div style={{ color: T.dim, fontSize: 10 }}>{row.count} on the roll <span style={{ opacity: .6 }}>\u00b7 age \u00b7 power</span></div>
+                  <div style={{ color: T.dim, fontSize: 10 }}>{row.count} on the roll <span style={{ opacity: .6 }}>· age · power</span></div>
                 </div>
                 {row.people.length ? row.people.map((p2, i) => (
                   <div key={i} className="flex justify-between items-center py-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,.05)", fontSize: 12 }}>
