@@ -6703,6 +6703,24 @@ function settleFoe(c, L, f, kind) {
    Once you have opened it, your side of the war runs month by month.
    ============================================================ */
 const VSHORT = { konoha: "Leaf", suna: "Sand", kiri: "Mist", kumo: "Cloud", iwa: "Stone", ame: "Rain", taki: "Waterfall", kusa: "Grass", oto: "Sound", uzu: "Whirlpool", yu: "Hot Water" };
+/* before the villages there are only clans: the War Room speaks of clans, war bands and clan lands */
+const preVillage = (c) => !!c && !c.founded && (!!eraOf(c).hideVillages || !villageExists(c, c.village));
+const myClanWord = (c) => (c.clan && c.clan !== "Civilian-born" ? c.clan : "Ronin");
+const roomShort = (c, key) => (key === c.village && preVillage(c) ? myClanWord(c) : VSHORT[key] || (VILLAGES.some((v) => v.id === key) ? vName2(key) : key));
+function roomPos(c, key) {
+  if (MAP_POS[key] && !(preVillage(c) && key !== c.village)) return MAP_POS[key];
+  const cv = (CLANS.find((x) => x.n === key) || {}).v;
+  const home = MAP_POS[c.village] || [500, 300];
+  /* a clan from the same land as yours is drawn across the field from you, spread out if there are several */
+  if (cv === c.village || !MAP_POS[cv]) {
+    const same = ((c.war && liveFoes(c.war)) || []).map((f) => f.key);
+    const i = Math.max(0, same.indexOf(key)); const a = (-25 + i * 50) * Math.PI / 180;
+    return [Math.max(80, Math.min(920, home[0] + Math.cos(a) * 260)), Math.max(60, Math.min(540, home[1] + Math.sin(a) * 170))];
+  }
+  const base = MAP_POS[cv]; const a = (h12(String(key)) % 360) * Math.PI / 180;
+  return [Math.max(80, Math.min(920, base[0] + Math.cos(a) * 60)), Math.max(60, Math.min(540, base[1] + Math.sin(a) * 45))];
+}
+const CLAN_RAIDS = ["THE NIGHT RAID", "THE RIVER CROSSING", "THE HILL CHARGE", "THE BURNING FIELDS", "THE WOLF PINCER", "THE BLOOD DAWN", "THE LONG AMBUSH", "THE FEINT AT THE FORD"];
 const GEN_TRAITS = {
   Brilliant: { d: "Better at everything, a little", atk: 1.1, def: 1.1 },
   Defensive: { d: "Holds a line like it owes them money", def: 1.25 },
@@ -6739,23 +6757,24 @@ const OP_PHASES = [["break", "Break the front", "Push the line past 60."], ["enc
 
 function warRole(c) {
   if ((c.rank >= 6 || !!c.founded) && !c.retired && (c.vil || c.founded)) return "kage";
+  if (preVillage(c) && !c.retired && (c.clanRole === "Clan Head" || (c.myClan && c.myClan.headIsYou))) return "kage";
   if (c.anbu) return "anbu";
   if (c.iron && c.iron.seated) return "arbiter";
   if (c.rank >= 4) return "jonin";
   if (c.rank === 3) return "chunin";
   return "genin";
 }
-function commanderPool(c, vid, n) {
-  const ids = Object.keys(NAMED).filter((id) => namedVillage(id) === vid && !isDead(c, id) && !isPlayerNamed(c, id) && (NAMED_ERA[id] === undefined || NAMED_ERA[id] <= eraIndex(c)) && (() => { const a = livingAge(c, id); return a != null ? a >= 20 && a <= 80 : (c.roster || []).includes(id); })());
+function commanderPool(c, vid, n, clan) {
+  const ids = Object.keys(NAMED).filter((id) => (clan ? namedClan(id) === clan : namedVillage(id) === vid) && !isDead(c, id) && !isPlayerNamed(c, id) && (NAMED_ERA[id] === undefined || NAMED_ERA[id] <= eraIndex(c)) && (() => { const a = livingAge(c, id); return a != null ? a >= 20 && a <= 80 : (c.roster || []).includes(id); })());
   ids.sort((a, b) => (CANON_GENERALS[b] ? 20 : 0) + NAMED[b].lvl - ((CANON_GENERALS[a] ? 20 : 0) + NAMED[a].lvl));
   const out = ids.slice(0, n).map((id) => ({ name: NAMED[id].name, id, traits: (CANON_GENERALS[id] || [pick(Object.keys(GEN_TRAITS))]).slice(0, 3) }));
-  while (out.length < n) { const t = Object.keys(GEN_TRAITS); out.push({ name: freshName(c, null), id: null, traits: [pick(t), pick(t)].filter((x, i, a) => a.indexOf(x) === i) }); }
+  while (out.length < n) { const t = Object.keys(GEN_TRAITS); out.push({ name: freshName(c, clan && clan !== "Civilian-born" ? clan : null), id: null, traits: [pick(t), pick(t)].filter((x, i, a) => a.indexOf(x) === i) }); }
   return out;
 }
 const ORDINAL_N = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 function makeArmy(c, i, vid, men, cmd, front, foe) {
   return {
-    id: (foe ? "e" : "m") + vid + i, n: ORDINAL_N[i] + " " + (VSHORT[vid] || (villageExists(c, vid) ? vName2(vid) : "Clan")) + " Army", vid,
+    id: (foe ? "e" : "m") + vid + i, n: !foe && preVillage(c) ? ORDINAL_N[i] + " " + myClanWord(c) + " war band" : ORDINAL_N[i] + " " + (VSHORT[vid] || (villageExists(c, vid) ? vName2(vid) : "Clan")) + " Army", vid,
     men, morale: rr(62, 82), org: rr(70, 90), supply: rr(62, 85), xp: rr(0, 2), cmd, front,
     att: foe ? [] : ARMY_ATTACH.slice().sort(() => Math.random() - 0.5).slice(0, rr(2, 4)), wounded: 0, plan: null,
   };
@@ -6766,7 +6785,7 @@ function roomAddFoe(c, R, f) {
   const w = c.war;
   const vid = f.kind === "village" ? f.key : null;
   const n = 1 + (f.strength >= 55 ? 1 : 0) + (w && w.great ? 1 : 0);
-  const ecmd = vid ? commanderPool(c, vid, n) : [{ name: f.leaderName, id: f.leaderId || null, traits: ["Aggressive"] }];
+  const ecmd = vid ? commanderPool(c, vid, n) : [{ name: f.leaderName, id: f.leaderId || null, traits: ["Aggressive"] }].concat(commanderPool(c, null, n, f.key).filter((x) => x.name !== f.leaderName));
   R.foes[f.key] = [];
   for (let i = 0; i < n; i++) R.foes[f.key].push(makeArmy(c, i, vid || f.key, Math.round(f.strength * rr(300, 480)), ecmd[i] || ecmd[0], f.key, true));
   if (!vid) R.foes[f.key].forEach((a, i2) => { a.n = ORDINAL_N[i2] + " " + f.key + " war band"; });
@@ -6779,7 +6798,7 @@ function warRoomInit(c) {
   const home = c.village;
   const base = c.vil ? Math.max(45000, (c.vil.shinobi || 600) * 90) : rr(45000, 75000);
   const nA = Math.min(6, 2 + foes.length + (w.great ? 1 : 0));
-  const cmds = commanderPool(c, home, nA);
+  const cmds = preVillage(c) ? commanderPool(c, home, nA, c.clan && c.clan !== "Civilian-born" ? c.clan : "__none") : commanderPool(c, home, nA);
   const R = {
     month: 0, armies: [], foes: {}, fronts: {}, alloc: { weapons: 20, medicine: 15, fort: 15, research: 10, intel: 10, food: 20, relief: 10 },
     priority: null, doctrine: null, intel: 25, research: 0, exhaust: 8, cas: { mine: 0, theirs: 0 }, assets: [], ops: [], offers: {}, part: -1, resign: 0, began: c.year, log: [],
@@ -6817,8 +6836,13 @@ function warAftermath(c, L, months, cas, theirs) {
   if (R.exhaust >= 60 && roll(20 * months / 3 + 5) && c.year !== R.resignY) {
     R.resignY = c.year; R.resign += 1;
     if (warRole(c) === "kage") { c.standing = cl(c.standing - 4); if (c.vil && c.vil.council) c.vil.council.forEach((m) => { m.loyalty = cl(m.loyalty - 4); }); P(L, "The opposition in council has demanded your resignation over the war. They have the casualty lists and they read them out.", "b"); }
+    if (preVillage(c)) {
+      chron(c, { cat: "villages", txt: "Among the " + myClanWord(c) + ", the elders demand that the head of the clan end " + lowerName(w.name) + "." });
+      newsItem(c, "War-weariness among the " + myClanWord(c) + ": the elders count " + R.cas.mine.toLocaleString() + " dead and want the war ended.", "THE VILLAGES");
+    } else {
     chron(c, { cat: "villages", txt: "In " + (villageExists(c, c.village) ? vName2(c.village) : "the village") + ", the opposition demands the " + (c.rank >= 6 ? "Kage's" : "tower's") + " resignation over " + lowerName(w.name) + "." });
     newsItem(c, "War-weariness in " + (villageExists(c, c.village) ? vName2(c.village) : "the village") + ": the opposition demands resignation after " + R.cas.mine.toLocaleString() + " dead.", "THE VILLAGES");
+    }
   }
 }
 
@@ -6871,7 +6895,7 @@ const ASSETS = [
   { id: "forbidden", n: () => "Use a forbidden technique", ok: (c) => (c.jutsu || []).some((j) => MOVES[j] && MOVES[j].tier >= 6 && j !== "Edo Tensei"), push: [12, 20], kill: [3000, 8000], fear: 10, blame: 6, t: "a forbidden technique", self: (c) => { c.health = cl(c.health - rr(5, 15)); } },
   { id: "summon", n: (c) => "Call your summons to the front", ok: (c) => !!c.summon, push: [8, 13], kill: [800, 2500], fear: 5, blame: 0, t: "a legendary summoning" },
   { id: "baryon", n: () => "Baryon Mode", ok: (c) => (c.jutsu || []).includes("Baryon Mode"), push: [20, 28], kill: [5000, 12000], fear: 12, blame: 2, t: "Baryon Mode", self: (c, L) => { c.health = cl(c.health - 35); P(L, "Every second of it cost you years. You felt them go.", "b"); } },
-  { id: "strike", n: () => "Send a Kage-level strike team", ok: (c) => warRole(c) === "kage", push: [8, 12], kill: [1000, 3000], fear: 6, blame: 0, t: "a Kage-level strike" },
+  { id: "strike", n: (c) => (preVillage(c) ? "Send the clan's strongest as a strike team" : "Send a Kage-level strike team"), ok: (c) => warRole(c) === "kage", push: [8, 12], kill: [1000, 3000], fear: 6, blame: 0, t: "a Kage-level strike" },
 ];
 function useAsset(c, L, id, key) {
   const w = c.war; const R = w && w.room; const A = ASSETS.find((x) => x.id === id); if (!R || !A || !A.ok(c) || R.assets.includes(id)) return;
@@ -7122,9 +7146,10 @@ function commandDoctrine(C) {
 /* ---- the enemy has plans too ---- */
 function eplanMake(c, R, f) {
   const ts = (R.foes[f.key] || []).filter((a) => a.men > 0); if (!ts.length) return null;
+  const clanWar = f.kind === "clan" || preVillage(c);
   const mine = R.armies.filter((a) => a.front === f.key && a.men > 0);
   const tgt = mine.length && roll(55) ? mine.slice().sort((a, b) => b.men - a.men)[0] : null;
-  const P2 = { n: "OPERATION " + pick(EOP_NAMES), key: f.key, target: tgt ? tgt.id : null, obj: tgt ? "Destroy your " + tgt.n : "Seize " + (R.fronts[f.key] || {}).site, forces: Math.round(ts.reduce((s2, a) => s2 + a.men, 0) * (0.6 + Math.random() * 0.3)), start: R.clock + rr(2, 4), run: 0, done: null, line0: null };
+  const P2 = { n: clanWar ? pick(CLAN_RAIDS) : "OPERATION " + pick(EOP_NAMES), key: f.key, target: tgt ? tgt.id : null, obj: tgt ? "Destroy your " + tgt.n : "Seize " + (R.fronts[f.key] || {}).site, forces: Math.round(ts.reduce((s2, a) => s2 + a.men, 0) * (0.6 + Math.random() * 0.3)), start: R.clock + rr(2, 4), run: 0, done: null, line0: null };
   R.eplans[f.key] = P2;
   return P2;
 }
@@ -7183,16 +7208,18 @@ function warMonth(c, L, quiet) {
     /* their plan, when it comes */
     let foeOff = 1;
     let P2 = R.eplans[f.key];
-    if (!P2 || P2.done) { if (!P2 || R.clock - (P2.doneAt || 0) >= rr(3, 6)) P2 = eplanMake(c, R, f); }
+    /* named offensives are something you watch coming month by month. the months that pass while you
+       are living your life are fought, not narrated: no new operation starts in them */
+    if (!P2 || P2.done) { if (!quiet && (!P2 || R.clock - (P2.doneAt || 0) >= rr(3, 6))) P2 = eplanMake(c, R, f); else if (quiet) P2 = null; }
     if (P2 && !P2.done && R.clock >= P2.start) {
-      if (!P2.run) { P2.line0 = F.line; const seen = R.intel >= 55; ev.push([(seen ? "As your intelligence warned, " : "") + cap(f.name) + " has launched " + P2.n + ". Objective: " + P2.obj.charAt(0).toLowerCase() + P2.obj.slice(1) + ".", seen ? "n" : "b"]); if (!seen) momentOf(c, P2.n, cap(f.name) + " attacks at " + F.site + ".", "blood"); }
+      if (!P2.run) { P2.line0 = F.line; const seen = R.intel >= 55; ev.push([(seen ? "As your intelligence warned, " : "") + cap(f.name) + " has launched " + P2.n + ". Objective: " + P2.obj.charAt(0).toLowerCase() + P2.obj.slice(1) + ".", seen ? "n" : "b"]); if (!seen && !quiet) momentOf(c, P2.n, cap(f.name) + " attacks at " + F.site + ".", "blood"); }
       P2.run += 1;
       const ready = R.intel >= 55 && ["hold", "defend"].includes(order);
       foeOff = ready ? 1.1 : 1.6;
       if (P2.target) { const t = R.armies.find((a) => a.id === P2.target && a.men > 0); if (t) { const l = Math.round(t.men * (ready ? 0.05 : 0.15)); t.men -= l; casM += l; } }
       if (P2.run >= 2) {
         P2.done = F.line < (P2.line0 || 50) - 4 ? "success" : "failed"; P2.doneAt = R.clock;
-        chron(c, { cat: "war", big: P2.done === "success", txt: P2.n + ", " + f.name + "'s offensive at " + F.site + ", " + (P2.done === "success" ? "succeeds: the line gives " + ((P2.line0 || 50) - F.line) + "." : "fails against " + w.side + ".") });
+        if (!quiet || P2.done === "success") chron(c, { cat: "war", big: P2.done === "success", txt: P2.n + ", " + f.name + "'s offensive at " + F.site + ", " + (P2.done === "success" ? "succeeds: the line gives " + ((P2.line0 || 50) - F.line) + "." : "fails against " + w.side + ".") });
         ev.push([P2.n + (P2.done === "success" ? " has pushed your line back at " + F.site + "." : " has broken on your defences at " + F.site + "."), P2.done === "success" ? "b" : "e"]);
       }
     } else if (roll(10)) {
@@ -7267,7 +7294,7 @@ function warMonth(c, L, quiet) {
     }
     if (F.occupied && f.kind === "village") { const L2 = landAt(c, f.key); if (L2) { L2.prosper = cl(L2.prosper - 1); if (roll(R.roe.civilians ? 7 : 14)) { const W = c.world || {}; (W.refugees || (W.refugees = [])).push({ from: f.key, to: pick(VILLAGES.filter((v) => villageExists(c, v.id) && v.id !== f.key && v.id !== c.village).map((v) => v.id)) || null, n: rr(1, 4), year: c.year }); } } }
     if (F.line >= 92) { f.will = cl(foeWill(f) - 8); if (!F.siege) { F.siege = c.year; chron(c, { cat: "war", big: true, txt: "The siege of " + (f.kind === "village" ? vName2(f.key) : f.name) + " begins. " + cap(w.side) + " is at their gates." }); mine.forEach((a) => a.honors.push({ n: "Siege of " + (f.kind === "village" ? vName2(f.key) : f.name), y: c.year, r: "Victory" })); } }
-    if (F.line <= 8 && Ld) { Ld.prosper = cl(Ld.prosper - 2); if (!F.atWalls) { F.atWalls = c.year; chron(c, { cat: "war", big: true, txt: cap(f.army) + " reaches the walls of " + (villageExists(c, c.village) ? vName2(c.village) : "your home") + "." }); momentOf(c, "THEY ARE AT THE WALLS", cap(f.army) + " has broken through at " + F.site + ".", "blood"); } }
+    if (F.line <= 8 && Ld) { Ld.prosper = cl(Ld.prosper - 2); if (!F.atWalls) { F.atWalls = c.year; chron(c, { cat: "war", big: true, txt: cap(f.army) + " reaches the walls of " + (villageExists(c, c.village) ? vName2(c.village) : preVillage(c) ? "the " + myClanWord(c) + " compound" : "your home") + "." }); momentOf(c, "THEY ARE AT THE WALLS", cap(f.army) + " has broken through at " + F.site + ".", "blood"); } }
     if (O.scorched) {
       if (Ld) Ld.prosper = cl(Ld.prosper - 6);
       theirs.forEach((a) => { a.supply = cl(a.supply - 25); a.morale = cl(a.morale - 5); });
@@ -7432,15 +7459,15 @@ function councilMake(c, R) {
   const medic = ["sakura", "tsunade", "shizune"].find(alive);
   const strat = ["shikamaru", "shikaku"].find(alive);
   const dm = c.daimyo && c.daimyo[c.village];
-  const elder = c.vil && c.vil.council && c.vil.council[0] ? c.vil.council[0].name : freshName(c, null);
+  const elder = c.vil && c.vil.council && c.vil.council[0] ? c.vil.council[0].name : freshName(c, preVillage(c) && c.clan !== "Civilian-born" ? c.clan : null);
   const sp = [];
   if (gen) sp.push(Fs.length > 1 && weak && weak.line < 45 ? { name: gen.cmd.name, role: "Commander, " + gen.n, line: "We can hold " + strong.site + ", but not both fronts.", rec: "hold" } : { name: gen.cmd.name, role: "Commander, " + gen.n, line: (strong ? strong.site : "The front") + " is ready. Give me the order.", rec: "attack" });
   const mName = medic ? NAMED[medic].name : "Chief medic " + (R.medicName || (R.medicName = freshName(c, null)));
   sp.push(R.alloc.medicine < 15 || R.cas.mine > 12000 ? { name: mName, role: "Medical corps", line: "Medical supplies won't last another offensive.", rec: R.exhaust > 45 ? "negotiate" : "hold" } : { name: mName, role: "Medical corps", line: "The hospitals can take one more push. One.", rec: "attack" });
   const sName = strat ? NAMED[strat].name : gen && (gen.cmd.traits || []).some((t) => ["Strategic", "Intelligent"].includes(t)) ? gen.cmd.name : "Strategist " + (R.stratName || (R.stratName = freshName(c, null)));
   sp.push(R.intel >= 45 && softest ? { name: sName, role: "Strategy", line: "Their army facing " + (R.fronts[softest.key] || {}).site + " is weaker than they're letting us see.", rec: "attack" } : { name: sName, role: "Strategy", line: "We are blind out there. Hold until we can see.", rec: "hold" });
-  sp.push({ name: dm ? "Daimyo " + dm.name : "The daimyo's envoy", role: "The court", line: R.exhaust >= 40 || R.pol.daimyo < 50 ? "The war is becoming too expensive." : "The court will pay for a victory. It will not pay for a stalemate.", rec: R.exhaust >= 40 || R.pol.daimyo < 50 ? "negotiate" : "attack" });
-  sp.push(foes.length > 1 && !committedAllies(w).length ? { name: elder, role: "Village council", line: "We cannot do this alone. Ask somebody for help.", rec: "aid" } : R.pol.civilian < 45 ? { name: elder, role: "Village council", line: "The people are tired. Give them a reason, or give them peace.", rec: R.pol.civilian < 30 ? "negotiate" : "mobilize" } : { name: elder, role: "Village council", line: "The people will carry more if you ask them properly.", rec: "mobilize" });
+  sp.push({ name: dm ? "Daimyo " + dm.name : "The daimyo's envoy", role: preVillage(c) ? "The daimyo who pays you" : "The court", line: R.exhaust >= 40 || R.pol.daimyo < 50 ? "The war is becoming too expensive." : "The court will pay for a victory. It will not pay for a stalemate.", rec: R.exhaust >= 40 || R.pol.daimyo < 50 ? "negotiate" : "attack" });
+  sp.push(foes.length > 1 && !committedAllies(w).length ? { name: elder, role: preVillage(c) ? "The clan elders" : "Village council", line: "We cannot do this alone. Ask somebody for help.", rec: "aid" } : R.pol.civilian < 45 ? { name: elder, role: preVillage(c) ? "The clan elders" : "Village council", line: "The people are tired. Give them a reason, or give them peace.", rec: R.pol.civilian < 30 ? "negotiate" : "mobilize" } : { name: elder, role: preVillage(c) ? "The clan elders" : "Village council", line: "The people will carry more if you ask them properly.", rec: "mobilize" });
   v12CouncilVoice(c, sp);
   return { clock: R.clock, sp, weak: weak ? weak.key : null, soft: softest ? softest.key : null };
 }
@@ -7875,6 +7902,8 @@ function planTick(c, L) {
     if (p.status === "active" && p.prog >= 100) planAchieve(c, L, p);
   });
 }
+/* where somebody's plan belongs: their village, or before the villages, their clan */
+const planWhere = (c, p) => (villageExists(c, p.vid) ? vName2(p.vid) : p.ids && namedClan(p.ids[0]) ? "the " + namedClan(p.ids[0]) : "the " + landOf(p.vid).replace(/^the /, ""));
 function planTraj(p) {
   const t = p.traj || []; if (t.length < 3) return "steady";
   const d = t[t.length - 1] - t[0];
@@ -8504,7 +8533,7 @@ function repNpc(c, p) {
   A.rep[p.name] = { name: p.name, npc: true, y: c.year,
     actual: cap(p.t) + " — " + (p.status === "achieved" ? "and they managed it" : "and they did not live to finish it") + "." + (p.secret ? " " + p.secret + "." : ""),
     pub: p.legacy ? "Remembered for " + p.legacy.charAt(0).toLowerCase() + p.legacy.slice(1) + "." : "Remembered, mostly, for how they died.",
-    off: "A servant of " + vName2(p.vid) + " to the end.", fam: "",
+    off: "A servant of " + planWhere(c, p) + " to the end.", fam: "",
     archive: p.secret ? { due: c.year + rr(30, 70), found: null, t: null } : null };
   if (p.secret) echo(c, "archive12", A.rep[p.name].archive.due - c.year, { name: p.name, secret: p.secret });
 }
@@ -10881,6 +10910,14 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.0.1", n: "The Age of the Clans", items: [
+    "Simming years with the War Room open no longer announces a new named OPERATION every year. The months that pass while you are living your life are fought, not narrated: new enemy offensives are only planned in months you advance yourself, and one already under way finishes without a full-screen banner",
+    "Before the villages exist, the War Room speaks of clans. Your armies are war bands of your own clan (1st Uchiha war band), led by named commanders of your own clan; enemy clans are led by theirs. The theatre map draws the clans and the lands, not villages that have not been founded, and nothing names Konohagakure or the Leaf",
+    "In the Warring States the head of the clan commands the clan's war, and the War Room says so: the clan elders and the daimyo who pays you sit on the war council, the clan (not the country) grows exhausted, war-weariness is the elders' and not a village council's, and the Tetsu and Kage options that do not exist yet are gone",
+    "Enemy clans plan raids with clan names (The Night Raid, The Wolf Pincer, The Feint at the Ford), not OPERATIONS",
+    "Hand seals: every seal now shows its zodiac kanji and its whole name. Rat (\u5B50) and Ram (\u672A) used to both show as RA",
+    "Society and Politics explain that there are no villages yet, and a life plan before the villages belongs to its clan (Hashirama's is the Senju's, not Konohagakure's)",
+  ] },
   { v: "12.0", n: "The World Has Agency", items: [
     "LIFE PLANS. The people who matter are trying to do something with their lives: Kakashi wants to keep his students alive, Tsunade wants a medic on every squad, Danzo wants Root above the Hokage, Orochimaru wants every jutsu in the world, Jiraiya wants the child of the prophecy, and twenty-odd more, plus whoever sits in each Kage's seat, your students and your rival. Each has a goal, a long-term goal, a fear, people they trust, a rival, a secret, values, a temperament and a legacy, and each plan is rising, steady, falling, achieved, abandoned or failed",
     "Plans succeed and fail on their own. A plan can be set back by a lost council vote, a scandal, an injury, a rival or a war that changed somebody's mind. It can be abandoned, and in a sandbox the person can defect. A teacher's death changes their students' plans. History keeps every turn, and when a plan succeeds it changes the world: a reformed Academy, a new hospital creed, new medical or sealing knowledge, a memorial, a book that becomes a legend. You can help a plan along or quietly work against it, and they may find out who did",
@@ -11998,9 +12035,9 @@ function loss(c, L, who) {
 const RANGE_LABEL = { close: "Close range", mid: "Mid range", far: "Long range" };
 /* the twelve seals, same order the histories use */
 const HAND_SEALS = [
-  { id: "rat", n: "Rat" }, { id: "ox", n: "Ox" }, { id: "tiger", n: "Tiger" }, { id: "hare", n: "Hare" },
-  { id: "dragon", n: "Dragon" }, { id: "snake", n: "Snake" }, { id: "horse", n: "Horse" }, { id: "ram", n: "Ram" },
-  { id: "monkey", n: "Monkey" }, { id: "bird", n: "Bird" }, { id: "dog", n: "Dog" }, { id: "boar", n: "Boar" },
+  { id: "rat", n: "Rat", k: "\u5B50" }, { id: "ox", n: "Ox", k: "\u4E11" }, { id: "tiger", n: "Tiger", k: "\u5BC5" }, { id: "hare", n: "Hare", k: "\u536F" },
+  { id: "dragon", n: "Dragon", k: "\u8FB0" }, { id: "snake", n: "Snake", k: "\u5DF3" }, { id: "horse", n: "Horse", k: "\u5348" }, { id: "ram", n: "Ram", k: "\u672A" },
+  { id: "monkey", n: "Monkey", k: "\u7533" }, { id: "bird", n: "Bird", k: "\u9149" }, { id: "dog", n: "Dog", k: "\u620C" }, { id: "boar", n: "Boar", k: "\u4EA5" },
 ];
 const SPEC_COMBAT = {
   nin:  { tai: 0.85, nin: 1.25, gen: 0.9,  label: "ninjutsu specialist" },
@@ -14529,13 +14566,13 @@ function SealQTEPanel({ qte, answer, cancel, accent, stepMs }) {
           const done = i < results.length;
           const good = done && results[i];
           return (
-            <span key={i} style={{
-              width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 10, fontWeight: 800,
+            <span key={i} className="sl-seal-step" style={{
+              minWidth: 46, height: 40, padding: "0 6px", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              fontSize: 10, fontWeight: 800, lineHeight: 1.1,
               background: done ? (good ? T.good + "22" : T.bad + "22") : i === index ? accent + "22" : T.panel,
               border: "1px solid " + (done ? (good ? T.good : T.bad) : i === index ? accent : T.line),
               color: done ? (good ? T.good : T.bad) : i === index ? accent : T.dim,
-            }}>{done ? (good ? "✓" : "✕") : s.n.slice(0, 2).toUpperCase()}</span>
+            }}>{done ? (good ? "✓" : "✕") : <><span style={{ fontSize: 15 }}>{s.k}</span><span>{s.n.toUpperCase()}</span></>}</span>
           );
         })}
       </div>
@@ -14548,7 +14585,7 @@ function SealQTEPanel({ qte, answer, cancel, accent, stepMs }) {
             style={{ background: T.panel, border: "1px solid " + T.line, color: T.text, borderRadius: 8, position: "relative" }}
             className="py-3 text-sm font-bold">
             <span style={{ position: "absolute", top: 4, left: 6, fontSize: 9, color: T.dim, fontWeight: 700 }}>{i + 1}</span>
-            {opt.n}
+            <span style={{ fontSize: 17, marginRight: 6 }}>{opt.k}</span>{opt.n}
           </button>
         ))}
       </div>
@@ -23975,7 +24012,8 @@ export default function ShinobiLife() {
         const yearDone = R.month >= 12;
         const PolBar = ({ k, n }) => <div className="flex items-center gap-2 mb-1"><span style={{ minWidth: 118, color: T.soft, fontSize: 12 }}>{n}</span><div style={{ flex: 1 }}><Bar v={R.pol[k]} col={R.pol[k] >= 55 ? T.good : R.pol[k] >= 35 ? T.gold : RED} h={6} /></div><b style={{ width: 34, textAlign: "right", fontSize: 12 }}>{Math.round(R.pol[k])}%</b></div>;
         const mine = (k) => R.armies.filter((a) => a.front === k && a.men > 0);
-        const home = MAP_POS[c.village] || [500, 300];
+        const home = roomPos(c, c.village);
+        const pv = preVillage(c);
         const selFront = wrFront && foes.some((f) => f.key === wrFront) ? wrFront : (foes[0] || {}).key;
         return (
           <Modal wide title="THE WAR ROOM" accent={RED} onClose={() => setModal(null)}>
@@ -24009,14 +24047,14 @@ export default function ShinobiLife() {
                 <div style={{ fontFamily: SERIF, fontSize: 15, marginTop: 4 }}>{R.incident.cmd} {INCIDENT_TEXT[R.incident.kind].us} at {R.incident.site}.</div>
                 <div style={{ color: T.dim, fontSize: 11.5, marginTop: 2 }}>{R.incident.rule ? "This breaks your own rules of engagement." : "Your rules of engagement did not forbid it. Everybody else's did."}</div>
                 <div className="flex gap-1.5 flex-wrap mt-3">
-                  {[["allow", "Allow it"], ["punish", "Punish the commander"], ["deny", "Deny responsibility"], ["report", "Report it to Tetsu"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("incident", k2)} style={{ background: T.panel2, color: T.text, border: "1px solid " + RED + "77", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">{n2}</button>)}
+                  {[["allow", "Allow it"], ["punish", "Punish the commander"], ["deny", "Deny responsibility"], ["report", "Report it to Tetsu"]].filter(([k2]) => !(pv && k2 === "report")).map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("incident", k2)} style={{ background: T.panel2, color: T.text, border: "1px solid " + RED + "77", borderRadius: 8 }} className="px-3 py-1.5 text-xs font-bold">{n2}</button>)}
                 </div>
               </div>
             )}
             {boss && R.crisis && (
               <div style={{ ...glass(RED), marginTop: 10 }} className="p-3.5 sl-war-crisis">
                 <div style={{ color: RED, fontSize: 10, letterSpacing: ".3em" }} className="font-bold">NATIONAL CRISIS</div>
-                <div style={{ fontFamily: SERIF, fontSize: 15, marginTop: 4 }}>The country is exhausted. War exhaustion {Math.round(R.exhaust)}%, approval {approvalOf(R)}%.</div>
+                <div style={{ fontFamily: SERIF, fontSize: 15, marginTop: 4 }}>{pv ? "The clan is exhausted." : "The country is exhausted."} War exhaustion {Math.round(R.exhaust)}%, approval {approvalOf(R)}%.</div>
                 <Row label="Continue the war and risk your government" sub="The council will start counting votes against you." right="Continue" onClick={() => warRoomAct("crisis", "continue")} tone={RED} />
                 <Row label="Negotiate from a weaker position" sub="They will talk. You cannot ask for annexation, abdication, disarmament or reparations." right="Negotiate" onClick={() => warRoomAct("crisis", "negotiate")} />
               </div>
@@ -24033,9 +24071,11 @@ export default function ShinobiLife() {
             {/* the theatre: every front drawn from your village to theirs, with the line where it actually is */}
             <div style={{ background: "radial-gradient(ellipse at 50% 55%, rgba(40,24,24,.5), rgba(6,8,12,.9))", border: "1px solid " + T.line, borderRadius: 12, overflow: "hidden", marginTop: 10 }}>
               <svg viewBox="0 0 1000 600" style={{ width: "100%", height: "auto", display: "block", maxHeight: 260 }} className="sl-theatre">
-                {VILLAGES.filter((v) => MAP_POS[v.id]).map((v) => { const [x, y] = MAP_POS[v.id]; const inWar = v.id === c.village || foes.some((f) => f.key === v.id) || committedAllies(w).some((a) => a.key === v.id); return <g key={v.id} opacity={inWar ? 1 : .35}><circle cx={x} cy={y} r={v.id === c.village ? 46 : 38} fill={v.id === c.village ? accent : foes.some((f) => f.key === v.id) ? RED : "#8fa3b8"} opacity=".35" /><text x={x} y={y + 9} textAnchor="middle" fill="#e8e4d8" fontSize="25" fontWeight="700">{VSHORT[v.id] || v.name}</text></g>; })}
-                {foes.filter((f) => MAP_POS[f.key]).map((f) => {
-                  const [x2, y2] = MAP_POS[f.key]; const F = R.fronts[f.key] || { line: 50 };
+                {VILLAGES.filter((v) => MAP_POS[v.id]).map((v) => { const [x, y] = MAP_POS[v.id]; const inWar = !pv && (v.id === c.village || foes.some((f) => f.key === v.id) || committedAllies(w).some((a) => a.key === v.id)); return <g key={v.id} opacity={inWar ? 1 : pv ? .22 : .35}><circle cx={x} cy={y} r={v.id === c.village ? 46 : 38} fill={v.id === c.village ? accent : foes.some((f) => f.key === v.id) ? RED : "#8fa3b8"} opacity=".35" /><text x={x} y={y + 9} textAnchor="middle" fill="#e8e4d8" fontSize="25" fontWeight="700">{villageExists(c, v.id) ? VSHORT[v.id] || v.name : v.land.replace(/^Land of /, "")}</text></g>; })}
+                {pv && (() => { const [hx, hy] = home; return <g><circle cx={hx} cy={hy} r="30" fill={accent} opacity=".55" /><text x={hx} y={hy - 38} textAnchor="middle" fill="#fff" fontSize="24" fontWeight="800">{myClanWord(c).toUpperCase()}</text></g>; })()}
+                {pv && foes.map((f) => { const [fx, fy] = roomPos(c, f.key); return <g key={"cl" + f.key}><circle cx={fx} cy={fy} r="26" fill={RED} opacity=".55" /><text x={fx} y={fy - 34} textAnchor="middle" fill="#ffd9d0" fontSize="22" fontWeight="800">{roomShort(c, f.key).toUpperCase()}</text></g>; })}
+                {foes.filter((f) => MAP_POS[f.key] || pv).map((f) => {
+                  const [x2, y2] = roomPos(c, f.key); const F = R.fronts[f.key] || { line: 50 };
                   const t = 0.15 + 0.7 * (F.line / 100); const mx = home[0] + (x2 - home[0]) * t, my = home[1] + (y2 - home[1]) * t;
                   return (
                     <g key={f.key}>
@@ -24051,7 +24091,7 @@ export default function ShinobiLife() {
             <div className="flex gap-1.5 mt-3 mb-1 overflow-x-auto sl-quick">
               {tabs.map(([k2, n2]) => <button key={k2} onClick={() => setWarTab(k2)} style={{ flexShrink: 0, background: warTab === k2 ? RED : T.panel2, color: warTab === k2 ? "#fff" : T.soft, border: "1px solid " + (warTab === k2 ? RED : T.line), borderRadius: 99 }} className="px-3 py-1.5 text-xs font-semibold">{n2}</button>)}
             </div>
-            {!boss && ["fronts", "armies", "plans", "production"].includes(warTab) && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }} className="mt-2">You can see all of it. Only the Kage gives the orders. Your part is under Your part.</div>}
+            {!boss && ["fronts", "armies", "plans", "production"].includes(warTab) && <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }} className="mt-2">You can see all of it. {pv ? "Only the head of the clan gives the orders." : "Only the Kage gives the orders."} Your part is under Your part.</div>}
 
             {warTab === "fronts" && foes.map((f) => {
               const F = R.fronts[f.key] || { line: 50, order: "hold", site: f.front };
@@ -24082,7 +24122,7 @@ export default function ShinobiLife() {
                       <div style={{ background: "rgba(0,0,0,.35)", border: "1px solid " + T.line, borderRadius: 10, marginTop: 8 }} className="p-3 sl-battlefield">
                         <div style={{ color: T.gold, fontSize: 10, letterSpacing: ".26em" }} className="font-bold">BATTLE OF {F.site.replace(/^the /, "").toUpperCase()}</div>
                         <div style={{ color: T.soft, fontSize: 12 }}>Terrain: {F.terrain} · Weather: {F.weather} · Your force: {ms.toLocaleString()} · Enemy: {R.intel >= 60 ? tsn.toLocaleString() : "~" + (Math.round(tsn / 5000) * 5000).toLocaleString()}</div>
-                        <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.25, color: T.soft, margin: "8px 0", textAlign: "center" }}>{"       " + (VSHORT[f.key] || "ENEMY").toUpperCase() + "\n   " + "█".repeat(Math.max(3, Math.min(15, Math.round(tsn / 3000)))) + "\n      ↓ ↓\n" + "─".repeat(15) + "  ← LINE " + F.line + "\n   ▲       ▲\n " + mine(f.key).slice(0, 2).map((a) => a.n.split(" ")[0] + " " + (VSHORT[c.village] || "")).join("  ")}</pre>
+                        <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.25, color: T.soft, margin: "8px 0", textAlign: "center" }}>{"       " + roomShort(c, f.key).toUpperCase() + "\n   " + "█".repeat(Math.max(3, Math.min(15, Math.round(tsn / 3000)))) + "\n      ↓ ↓\n" + "─".repeat(15) + "  ← LINE " + F.line + "\n   ▲       ▲\n " + mine(f.key).slice(0, 2).map((a) => a.n.split(" ")[0] + " " + (VSHORT[c.village] || "")).join("  ")}</pre>
                         {boss ? (
                           <div className="flex gap-1.5 flex-wrap">
                             {[["reserves", "Commit reserves"], ["retreat", "Order retreat"], ["flank", "Attack the flank"], ["commander", "Call the commander"], ["delegate", "Delegate"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("field", f.key, k2)} disabled={done2} style={{ background: T.panel2, color: done2 ? T.dim : T.text, border: "1px solid " + T.line, borderRadius: 8 }} className="px-2.5 py-1 text-xs font-bold">{n2}</button>)}
@@ -24198,7 +24238,7 @@ export default function ShinobiLife() {
                   const avg = ms.length ? Math.round(ms.reduce((s2, a) => s2 + a.supply, 0) / ms.length) : 0;
                   return (
                     <div key={f.key} style={{ background: T.panel2, border: "1px solid " + (rt.cut ? RED : T.line), borderRadius: 10 }} className="p-3 mt-2 sl-route">
-                      <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.3, color: T.soft, margin: 0 }}>{(VSHORT[c.village] || "HOME").toUpperCase() + "\n  │ supply route" + (rt.cut ? "  ✖ CUT (" + rt.cut + " months)" : "") + "\n  ▼\n" + (rt.depot || "the depot").replace(/^the /, "").toUpperCase() + "   secure " + Math.round(rt.secure || 0) + "%\n  │\n  ▼\n" + (ms.map((a) => a.n.toUpperCase()).join(", ") || "NO ARMY") + "   supply " + avg + "%\n  │\n  ▼\n" + F.site.replace(/^the /, "").toUpperCase() + " FRONT"}</pre>
+                      <pre style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.3, color: T.soft, margin: 0 }}>{roomShort(c, c.village).toUpperCase() + "\n  │ supply route" + (rt.cut ? "  ✖ CUT (" + rt.cut + " months)" : "") + "\n  ▼\n" + (rt.depot || "the depot").replace(/^the /, "").toUpperCase() + "   secure " + Math.round(rt.secure || 0) + "%\n  │\n  ▼\n" + (ms.map((a) => a.n.toUpperCase()).join(", ") || "NO ARMY") + "   supply " + avg + "%\n  │\n  ▼\n" + F.site.replace(/^the /, "").toUpperCase() + " FRONT"}</pre>
                       {boss && (
                         <div className="flex gap-1.5 flex-wrap mt-2">
                           {[["protect", "Protect the route"], ["reroute", "Establish another route (60k)"], ["airlift", c.summon ? "Carry supplies by summons (20k)" : "Airlift by scroll (50k)"], ["raid", "Capture enemy logistics"]].map(([k2, n2]) => <button key={k2} onClick={() => warRoomAct("route", f.key, k2)} style={{ background: "transparent", color: T.soft, border: "1px solid " + T.line, borderRadius: 6 }} className="px-2 py-1 text-xs font-semibold">{n2}</button>)}
@@ -24266,7 +24306,7 @@ export default function ShinobiLife() {
                     </div>
                   ))}
                   <div className="flex items-center gap-2 mt-2"><span style={{ color: T.dim, fontSize: 10, letterSpacing: ".12em", minWidth: 110 }}>WILL THEY SIGN</span><div style={{ flex: 1 }}><Bar v={odds} col={odds >= 60 ? T.good : odds >= 35 ? T.gold : RED} h={6} /></div><b style={{ fontSize: 12 }}>{odds}%</b></div>
-                  <Row label="Put the terms on the table" sub={boss ? "If they sign, they are out of the war on these terms. If they walk out, the war goes on and they are angrier." : "Only the Kage can sign a peace."} right="Propose" onClick={() => warRoomAct("peace", f.key, sel)} disabled={!boss} tone={T.gold} />
+                  <Row label="Put the terms on the table" sub={boss ? "If they sign, they are out of the war on these terms. If they walk out, the war goes on and they are angrier." : pv ? "Only the head of the clan can make peace." : "Only the Kage can sign a peace."} right="Propose" onClick={() => warRoomAct("peace", f.key, sel)} disabled={!boss} tone={T.gold} />
                 </div>
               );
             })}
@@ -24436,7 +24476,7 @@ export default function ShinobiLife() {
                         <button onClick={() => setPlanOpen(op ? null : p.key)} className="w-full text-left">
                           <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{p.name}</span><span style={{ color: tc, fontSize: 9.5, letterSpacing: ".16em" }} className="font-bold">{tj.toUpperCase()}</span></div>
                           <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{p.t}.</div>
-                          <div className="flex items-center gap-2 mt-1"><div style={{ flex: 1 }}><Bar v={p.prog} col={tc} /></div><span style={{ color: T.dim, fontSize: 10.5 }}>{p.prog}% {"·"} {vName2(p.vid)}</span></div>
+                          <div className="flex items-center gap-2 mt-1"><div style={{ flex: 1 }}><Bar v={p.prog} col={tc} /></div><span style={{ color: T.dim, fontSize: 10.5 }}>{p.prog}% {"·"} {planWhere(c, p)}</span></div>
                         </button>
                         {op && (
                           <div style={{ marginTop: 6, fontFamily: SERIF, fontSize: 12, color: T.soft }}>
@@ -24595,6 +24635,7 @@ export default function ShinobiLife() {
                 <H col={G}>INFLUENCE</H>
                 <p style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Soft power: military, economic, diplomatic, cultural, religious, informational, scientific and legal reach. How far each village gets without sending an army. Press one for its profile.</p>
                 <div className="sl-influence">
+                  {!liveVillages12(c).length && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">There are no villages yet. Influence belongs to whichever clan won its last battle.</div>}
                   {liveVillages12(c).map((v) => ({ v, sp: softPower(c, v.id, true) })).sort((a, b) => b.sp.total - a.sp.total).map(({ v, sp }) => (
                     <button key={v.id} onClick={() => goTo({ land: v.id })} className="w-full text-left flex items-center gap-2 mb-1">
                       <span style={{ minWidth: 118, color: v.id === c.village ? G : T.soft, fontFamily: SERIF, fontSize: 12.5 }}>{v.name}</span>
@@ -24652,7 +24693,7 @@ export default function ShinobiLife() {
 
             {hub === "society" && (() => {
               const vid = c.village; const A = c.ag || {};
-              if (!A.inst || !A.inst[vid] || !villageExists(c, vid)) return <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm sl-society">{c.rogue ? "You have no village to belong to. Its institutions go on without you; open its country profile to see them." : "The village has not had a year to decide anything yet. Age up once."}</div>;
+              if (!A.inst || !A.inst[vid] || !villageExists(c, vid)) return <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm sl-society">{preVillage(c) ? "There is no village yet. In the age of the clans there is no Academy, no council and no hospital: there is the clan, its elders and its blood. When a village is founded it will have institutions, posts, generations and districts, and they will show up here." : c.rogue ? "You have no village to belong to. Its institutions go on without you; open its country profile to see them." : "The village has not had a year to decide anything yet. Age up once."}</div>;
               const I = instOf(c, vid, true);
               const Pp = (A.posts || {})[vid] || {};
               const succ = (A.succ || []).filter((s2) => s2.vid === vid && !s2.done);
