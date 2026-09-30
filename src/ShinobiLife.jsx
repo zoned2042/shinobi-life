@@ -9079,7 +9079,7 @@ function v12Situation(c) {
 function v12Tick(c, L) {
   if (!c.world || !c.world.lands) return;
   AG(c);
-  [histTick, instTick, genTick, planTick, knowTick, vacuumTick, postTick, scarTick, vetTick, civilTick, famTick, distTick, taleTick, softTick, sandboxAge, ageTick12].forEach((fn) => safeTick(fn, c, L));
+  [histTick, instTick, genTick, planTick, knowTick, vacuumTick, postTick, scarTick, vetTick, civilTick, famTick, distTick, taleTick, softTick, sandboxAge, ageTick12, prisonerTick].forEach((fn) => safeTick(fn, c, L));
   /* the hard questions */
   if (!c.dilemma && !c.watching && !c.rogue && c.age >= 18 && c.rank >= 3 && villageExists(c, c.village) && roll(5 * simMul(c, "hardq"))) hardQStart(c);
 }
@@ -9087,6 +9087,7 @@ function v12Tick(c, L) {
 function v12Heir(old, nc) {
   nc.ag = clone(old.ag || {});
   nc.simMode = old.simMode || "chronicle";
+  nc.prisoners = clone(old.prisoners || []); nc.held = clone(old.held || []);
   const A = AG(nc);
   try { repRecord(old, nc, old); } catch (e) { /* the record survives without a reputation */ }
   const roles = [];
@@ -9115,6 +9116,204 @@ function dossierV12(c, id, out) {
   const p = Object.values(c.ag.plans || {}).find((x) => x.name === n.name);
   if (p) out.plan = p;
   out.trust = trustOf(c, n.name);
+}
+
+
+/* ============================================================
+   12.0.2 — TAKEN ALIVE
+   A beaten enemy does not have to die. Take the head of a clan, a
+   champion or an army's commander alive, take prisoners off their
+   outposts, and then decide what they are worth: a ransom, a peace,
+   a sworn sword, a public example, or a debt of mercy.
+   ============================================================ */
+const PRISONER_VAL = { head: 420000, champion: 180000, commander: 220000, captain: 150000, fighter: 45000 };
+const PRISONER_KIND = { head: "head of the clan", champion: "champion", commander: "army commander", captain: "war captain", fighter: "fighter" };
+const prisonerSide = (x) => x.clan || x.vid || null;
+const prisonerWhose = (x) => (x.clan ? "the " + x.clan : x.vid ? vName2(x.vid) : "the enemy");
+function prisonerFoe(c, x) { const w = c.war; return w ? (w.foes || []).find((f) => !f.out && f.key === prisonerSide(x)) || null : null; }
+function prisonerTake(c, L, p) {
+  if (!c.prisoners) c.prisoners = [];
+  if (c.prisoners.some((x) => x.name === p.name && !x.done)) return null;
+  const x = { ...p, y: c.year, by: c.name, done: null, fate: null, tries: 0 };
+  c.prisoners.push(x);
+  if (x.id && NAMED[x.id]) c.held = (c.held || []).filter((y) => y !== x.id).concat([x.id]);
+  x.root = chron(c, { cat: "war", big: x.kind === "head" || x.kind === "commander", line: c.name, txt: x.name + (x.title ? ", " + x.title + "," : "") + " is taken alive by " + c.name + (x.war ? " during " + lowerName(x.war) : "") + "." });
+  remember(c, x.name, "You took me alive when you could have killed me", -1);
+  const f = prisonerFoe(c, x);
+  if (f) f.will = cl(foeWill(f) - (x.kind === "head" ? 25 : x.kind === "commander" ? 12 : x.kind === "champion" ? 10 : 4));
+  const ph = c.phil || (c.phil = {}); ph.mercy = cl((ph.mercy || 0) + 3, -100, 100);
+  if (c.prisoners.length > 40) c.prisoners = c.prisoners.filter((y) => !y.done || c.year - y.done < 30).slice(-40);
+  return x;
+}
+function prisonerFree(c, x) { if (x.id) c.held = (c.held || []).filter((y) => y !== x.id); }
+/* the war ends because you handed back the one person they could not do without */
+function prisonerPeace(c, L, x) {
+  const w = c.war; const f = prisonerFoe(c, x); if (!w || !f) return false;
+  if (x.kind === "fighter") return false;
+  /* a clan head is worth a peace. anybody less is worth one only if they were already tired of it */
+  if (x.kind !== "head") {
+    const odds = cl(85 - foeWill(f), 10, 85);
+    if (!roll(odds)) { P(L, cap(f.name) + " would not sign for " + x.name + ". They want them back, just not that much. (" + Math.round(odds) + "%; the less fight they have left, the likelier.)", "n"); remember(c, x.name, "My own people would not trade for me", -1); return "refused"; }
+  }
+  f.out = true; f.peace = true;
+  if (!c.pacts) c.pacts = {};
+  c.pacts[f.key] = c.year + rr(8, 15);
+  const txt = cap(f.name) + " signs for " + x.name + ". " + cap(prisonerWhose(x)) + " leave " + lowerName(w.name) + " and swear not to come back across the line until " + c.pacts[f.key] + ".";
+  chron(c, { cat: "war", big: true, line: c.name, cause: x.root, txt });
+  newsItem(c, txt, "WAR", true);
+  P(L, "You handed " + x.name + " back across the line. " + cap(f.name) + " signed the same afternoon.", "e");
+  c.standing = cl((c.standing || 0) + 8);
+  if (!liveFoes(w).length) {
+    if (w.room && typeof occupationCarry === "function") occupationCarry(c);
+    chron(c, { cat: "war", big: true, line: c.name, txt: w.name + " ends at the exchange, not on the field." });
+    addTitle(c, "Ended " + w.name + " with a prisoner");
+    c.war = null;
+  } else focusFoe(w, 0);
+  return true;
+}
+function prisonerAct(c, L, i, act) {
+  const x = (c.prisoners || [])[i]; if (!x || x.done) return;
+  const whose = prisonerWhose(x);
+  const ph = c.phil || (c.phil = {});
+  const done = (fate) => { prisonerFree(c, x); x.done = c.year; x.fate = fate; };
+  if (act === "ransom") {
+    const v = Math.round((PRISONER_VAL[x.kind] || 60000) * (0.8 + Math.random() * 0.5));
+    c.ryo += v; done("ransomed");
+    remember(c, x.name, "You sold me back to my own people", -1);
+    const f = prisonerFoe(c, x); if (f) f.will = cl(foeWill(f) + 4);
+    chron(c, { cat: "war", line: c.name, cause: x.root, txt: whose.charAt(0).toUpperCase() + whose.slice(1) + " pay " + money(v) + " to get " + x.name + " back from " + c.name + "." });
+    P(L, cap(whose) + " paid " + money(v) + " for " + x.name + ". The money came in a lacquered box, counted twice.", "g");
+  } else if (act === "exchange") {
+    const r = prisonerPeace(c, L, x);
+    if (r === true) { done("exchanged for peace"); remember(c, x.name, "You traded me for a peace, and kept your word", 3); }
+    else if (!r) P(L, x.kind === "fighter" ? "Nobody signs a peace for one fighter. Ransom them, or keep them." : "There is no war with " + whose + " to trade " + x.name + " for.", "n");
+  } else if (act === "recruit") {
+    const odds = cl(22 + (c.standing || 0) / 4 + (trustOf(c, x.name).v - 50) / 2 - (x.kind === "head" ? 18 : 0) + (c.year - x.y) * 4, 5, 85);
+    if (roll(odds)) {
+      done("sworn to you");
+      remember(c, x.name, "I swore to you, and meant it", 6);
+      if (x.kind === "head" && x.clan) {
+        if (c.rule && !c.rule.allies.includes(x.clan)) c.rule.allies.push(x.clan);
+        const f = prisonerFoe(c, x); if (f) { f.out = true; f.peace = true; }
+        if (c.war && !liveFoes(c.war).length) { chron(c, { cat: "war", big: true, line: c.name, txt: c.war.name + " ends when " + x.name + " swears the " + x.clan + " to " + c.name + "." }); c.war = null; }
+        newsItem(c, x.name + ", head of the " + x.clan + ", has sworn the clan to " + c.name + " from inside a cell. The " + x.clan + " fight under your banner now.", "THE COURTS", true);
+      } else if (c.clan && c.clan !== "Civilian-born" && c.clanMembers) {
+        const r = c.clanMembers[c.clan] || (c.clanMembers[c.clan] = buildClanMembers(c.clan));
+        r.push({ name: x.name, role: "Warrior", alive: true, pw: rr(35, 60), sworn: x.clan || x.vid || true });
+      }
+      chron(c, { cat: "war", big: x.kind === "head", line: c.name, cause: x.root, txt: x.name + ", once of " + whose + ", swears to fight for " + c.name + "." });
+      P(L, x.name + " knelt, and meant it. They fight for you now.", "e");
+    } else {
+      remember(c, x.name, "You asked me to betray my own people", -3);
+      P(L, x.name + " spat on the floor of the cell. Not yet. Maybe not ever. (" + Math.round(odds) + "% this time; it gets likelier the longer they are held and the more they trust you.)", "n");
+    }
+  } else if (act === "release") {
+    done("released");
+    c.standing = cl((c.standing || 0) + 4); ph.mercy = cl((ph.mercy || 0) + 10, -100, 100);
+    remember(c, x.name, "You let me go for nothing", 6);
+    if (x.vid) rememberVillage(c, x.vid, c.name + " let one of ours go", 3);
+    const f = prisonerFoe(c, x); if (f) f.will = cl(foeWill(f) - 6);
+    chron(c, { cat: "war", line: c.name, cause: x.root, txt: c.name + " lets " + x.name + " walk home to " + whose + ", asking nothing." });
+    P(L, "You opened the door and pointed. " + x.name + " looked back twice on the way out.", "g");
+  } else if (act === "execute") {
+    done("executed");
+    if (x.id && NAMED[x.id] && !isDead(c, x.id)) killNamed(c, x.id, L, "was executed as a prisoner of " + c.name);
+    else killFolk(c, x.name);
+    c.kills += 1; c.infamy = cl((c.infamy || 0) + 10); ph.mercy = cl((ph.mercy || 0) - 14, -100, 100);
+    const f = prisonerFoe(c, x); if (f) f.will = cl(foeWill(f) + (x.kind === "head" ? -15 : 6));
+    if (x.kind === "head" || x.id) vendettaStart(c, L, x.name, "the execution of " + x.name + " as a prisoner", x.kind === "head" ? 70 : 50);
+    chron(c, { cat: "deaths", big: x.kind === "head", line: c.name, cause: x.root, txt: x.name + (x.title ? ", " + x.title + "," : "") + " is executed as a prisoner of " + c.name + "." });
+    P(L, "You had " + x.name + " executed where " + whose + " could see it. It was meant as a message and it was read as one.", "b");
+  }
+}
+function prisonerTick(c, L) {
+  (c.prisoners || []).forEach((x) => {
+    if (x.done) return;
+    if (x.id && isDead(c, x.id)) { x.done = c.year; x.fate = "died in your cells"; return; }
+    const f = prisonerFoe(c, x);
+    if (f) f.will = cl(foeWill(f) - (x.kind === "head" ? 4 : 1));
+    /* their people come for them */
+    if (roll(x.kind === "head" ? 16 : x.kind === "fighter" ? 5 : 9)) {
+      x.tries += 1;
+      if (roll(40)) {
+        prisonerFree(c, x); x.done = c.year; x.fate = "escaped";
+        remember(c, x.name, "You kept me in a cell for " + Math.max(1, c.year - x.y) + " years", -4);
+        chron(c, { cat: "war", big: x.kind === "head", cause: x.root, txt: prisonerWhose(x).charAt(0).toUpperCase() + prisonerWhose(x).slice(1) + " break " + x.name + " out of " + c.name + "'s hold in the night." });
+        if (!c.watching) P(L, x.name + " is gone. " + cap(prisonerWhose(x)) + " came for them in the night, and this time they got through.", "b");
+      } else {
+        chron(c, { cat: "war", cause: x.root, txt: "An attempt by " + prisonerWhose(x) + " to free " + x.name + " fails at the gate." });
+        if (!c.watching) P(L, "Somebody came for " + x.name + " in the night. They did not get to the cell.", "n");
+      }
+    }
+  });
+}
+/* after a fight you won: they are on the ground, and it is your call */
+function beatenKill(c, L, x) {
+  const w = c.war;
+  c.kills += 1;
+  if (x.kind === "head" && w) {
+    const f = (w.foes || []).find((f2) => f2.key === x.clan);
+    if (x.id && NAMED[x.id] && !isDead(c, x.id)) { killNamed(c, x.id, L, "was killed in single combat by " + c.name + " in front of both war bands"); killFeat(c, L, x.id); }
+    const nh = setClanHead(c, x.clan);
+    w.leaderName = nh; if (f) { f.leaderName = nh; f.leaderId = null; }
+    addTitle(c, "Killed " + x.name);
+    P(L, "You killed " + x.name + " where they lay. " + nh + " has the clan now.", "e");
+    newsItem(c, x.name + ", head of the " + x.clan + ", was killed in single combat by " + c.name + ". " + nh + " has taken the clan.", "OBITUARIES", true);
+  } else if (x.kind === "commander" && w && w.room) {
+    const a = ((w.room.foes || {})[x.foeKey] || []).find((y) => y.cmd && y.cmd.name === x.name);
+    if (x.id && NAMED[x.id] && !isDead(c, x.id)) { killNamed(c, x.id, L, "was killed commanding at the front by " + c.name); killFeat(c, L, x.id); }
+    else killFolk(c, x.name);
+    if (a) { a.cmd = { name: freshName(c, x.clan || null), id: null, traits: ["Cautious"] }; a.morale = cl(a.morale - 20); }
+    P(L, "You finished it. The " + (a ? a.n : "enemy army") + " has a new commander by nightfall, and a worse one.", "e");
+  } else {
+    if (x.id && NAMED[x.id] && !isDead(c, x.id)) { killNamed(c, x.id, L, "was killed in single combat with " + c.name + " on the front line"); killFeat(c, L, x.id); }
+    else killFolk(c, x.name);
+    P(L, "You finished " + x.name + ". Their side watched you do it.", "e");
+  }
+}
+function beatenTake(c, L, x) {
+  const w = c.war;
+  if (x.kind === "head" && w) {
+    const f = (w.foes || []).find((f2) => f2.key === x.clan);
+    const nh = freshName(c, x.clan);
+    if (c.clanHeads) c.clanHeads[x.clan] = nh;
+    w.leaderName = nh; if (f) { f.leaderName = nh; f.leaderId = null; }
+    prisonerTake(c, L, x);
+    addTitle(c, "Took " + x.name + " alive");
+    P(L, "You bound " + x.name + "'s hands in front of both war bands and walked them back through your own line. " + nh + " holds the " + x.clan + " until they come home, if they come home.", "e");
+    newsItem(c, x.name + ", head of the " + x.clan + ", was beaten in single combat by " + c.name + " and taken alive. " + nh + " holds the clan while they are a prisoner.", "WAR", true);
+  } else if (x.kind === "commander" && w && w.room) {
+    const a = ((w.room.foes || {})[x.foeKey] || []).find((y) => y.cmd && y.cmd.name === x.name);
+    if (a) { a.cmd = { name: freshName(c, x.clan || null), id: null, traits: ["Cautious"] }; a.morale = cl(a.morale - 25); a.org = cl((a.org || 70) - 15); }
+    prisonerTake(c, L, x);
+    P(L, "You brought " + x.name + " back through the line alive. The " + (a ? a.n : "enemy army") + " woke up without its commander.", "e");
+  } else {
+    prisonerTake(c, L, x);
+    P(L, "You took " + x.name + " alive. They will be worth more to you breathing.", "e");
+  }
+}
+function beatenOffer(c, L, x) {
+  if (c.dilemma || c.watching) { beatenKill(c, L, x); return; }
+  c.dilemma = "takealive"; c.dilemmaCtx = x;
+}
+/* raid their outposts for prisoners */
+function takeCaptives(c, L) {
+  const w = c.war; if (!w) return;
+  const f = (w.foes || [])[w.active] || liveFoes(w)[0]; if (!f) return;
+  if (!roll(cl(34 + c.stats.spd * 0.35 + c.stats.int * 0.35, 10, 90))) { const d = rr(8, 22); c.health = cl(c.health - d); P(L, "The outpost was waiting for you. You came back with nobody and " + d + " less health.", "b"); return; }
+  const clan = f.kind === "clan" ? f.key : null;
+  const roster = clan && c.clanMembers ? (c.clanMembers[clan] || (c.clanMembers[clan] = buildClanMembers(clan))) : null;
+  const n = rr(1, 2); const got = [];
+  for (let i = 0; i < n; i++) {
+    const live = roster ? roster.filter((m) => m.alive && m.role !== "Clan Head" && !(c.prisoners || []).some((p) => p.name === m.name && !p.done)) : [];
+    const m = live.length ? pick(live) : null;
+    const name = m ? m.name : freshName(c, clan);
+    if (m) m.alive = false;
+    const x = prisonerTake(c, L, { kind: m && /Captain/.test(m.role) ? "captain" : "fighter", name, clan, vid: f.kind === "village" ? f.key : null, title: m ? m.role + " of the " + clan : "a " + (clan ? clan : vName2(f.key)) + " fighter", war: w.name });
+    if (x) got.push(name);
+  }
+  w.momentum = cl(w.momentum + rr(4, 8)); w.contribution += 1;
+  P(L, "You hit their outpost at " + (f.front || w.front) + " before dawn and came back with " + joinList(got) + " in ropes. Momentum " + w.momentum + "%.", "g");
 }
 
 /* ---------------- NOBODY LIVES FOREVER ----------------
@@ -10910,6 +11109,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.0.2", n: "Taken Alive", items: [
+    "You can take people alive now, not only the enemy. Beat the head of an enemy clan when you call them out, answer their champion and win, or win your personal battle at a War Room front, and the fight ends with a choice: kill them, or take them alive",
+    "Take the head of a clan alive and their clan is led by somebody keeping the seat warm, their will to fight drops hard, and you hold the one person they will pay anything for",
+    "Take prisoners at the front: a new war action raids one of their outposts before dawn and brings back one or two of their people alive, by name, off their clan's own roll",
+    "Your prisoners are listed in the war screen and in Politics. Ransom them for money, trade a clan head back for a peace (the war ends and they swear not to come back for years), offer a captain, champion or commander for peace if the enemy is tired enough, ask them to join you (likelier the longer they are held and the more they trust you; a clan head who swears brings the clan with them), let them go, or execute them, which starts a blood feud",
+    "While you hold them, their side's will to fight keeps wearing down, and their people come for them in the night: sometimes they get out. Named people you hold are off the field. Your prisoners pass to your heir",
+  ] },
   { v: "12.0.1", n: "The Age of the Clans", items: [
     "Simming years with the War Room open no longer announces a new named OPERATION every year. The months that pass while you are living your life are fought, not narrated: new enemy offensives are only planned in months you advance yourself, and one already under way finishes without a full-screen banner",
     "Before the villages exist, the War Room speaks of clans. Your armies are war bands of your own clan (1st Uchiha war band), led by named commanders of your own clan; enemy clans are led by theirs. The theatre map draws the clans and the lands, not villages that have not been founded, and nothing names Konohagakure or the Leaf",
@@ -13076,6 +13282,12 @@ const DILEMMAS = [
       { t: "Agree to the match", e: (c, L) => { const x = c.dilemmaCtx || {}; const k = (c.kids || []).find((y) => y.name === x.kid); if (k) k.wed = givenName(k.gender === "m" ? "f" : "m") + " " + pick(SURNAMES); scarAdd(c, c.village, x.foe, -30, "a marriage between the two villages"); rememberVillage(c, x.foe, "Your family married into ours", 5); chron(c, { cat: "villages", line: c.name, big: true, txt: (x.kid || "A child of " + c.name) + " marries into a family from " + vName2(x.foe) + ". Old soldiers on both sides refuse to attend. Their grandchildren will not remember why." }); P(L, "They married. Half of both families stayed home. The other half danced.", "e"); } },
       { t: (c) => "Leave it to " + ((c.dilemmaCtx || {}).kid || "them").split(" ")[0], e: (c, L) => { const x = c.dilemmaCtx || {}; if (roll(50)) { const k = (c.kids || []).find((y) => y.name === x.kid); if (k) k.wed = givenName(k.gender === "m" ? "f" : "m") + " " + pick(SURNAMES); scarAdd(c, c.village, x.foe, -22, "a marriage between the two villages"); chron(c, { cat: "villages", line: c.name, txt: (x.kid || "A child of " + c.name) + " chooses to marry into a family from " + vName2(x.foe) + "." }); P(L, (x.kid || "They") + " said yes. It was their choice, and they made it.", "g"); } else P(L, (x.kid || "They") + " said no, kindly. The go-between went home.", "n"); } },
       { t: "Refuse", e: (c, L) => { const x = c.dilemmaCtx || {}; scarAdd(c, c.village, x.foe, 4, "a marriage refused"); rememberVillage(c, x.foe, "Your family refused ours", -2); P(L, "You refused. It will be remembered, over there, as an insult.", "n"); } },
+    ] },
+  { id: "takealive", w: () => false, t: (c) => ((c.dilemmaCtx || {}).name || "They") + " is on the ground",
+    d: (c) => { const x = c.dilemmaCtx || {}; return x.name + ", " + (x.title || "their commander") + ", is beaten and cannot get up. " + (x.kind === "head" ? "Both war bands are watching. Kill them and the clan passes to somebody else tonight. Take them alive and their clan is led by somebody waiting for them to come home, and you hold the one thing they will pay anything for." : "Kill them, or take them alive: a prisoner can be ransomed, traded for a peace, turned, released or made an example of.") ; },
+    a: [
+      { t: "Kill them", e: (c, L) => beatenKill(c, L, c.dilemmaCtx || {}) },
+      { t: "Take them alive", e: (c, L) => beatenTake(c, L, c.dilemmaCtx || {}) },
     ] },
   { id: "infiltration", w: () => false, t: (c) => "A cloak with red clouds",
     d: (c) => "You have seen it: somebody high in the company takes orders from Akatsuki. They know you saw. They are offering you a share of whatever is coming.",
@@ -15957,6 +16169,7 @@ export default function ShinobiLife() {
     commit((c, L) => {
       spend(c);
       const w2 = c.war;
+      if (kind === "captives") takeCaptives(c, L);
       if (kind === "command") {
         if (roll(cl(40 + c.stats.int * 0.7, 10, 92))) { w2.momentum = cl(w2.momentum + rr(6, 12)); w2.contribution += 1; P(L, "You took a division at " + w2.front + " and read " + w2.leaderName + "'s formation before it closed. The line advances.", "g"); }
         else { w2.momentum = cl(w2.momentum - rr(4, 10)); P(L, "Your orders were a beat too slow and " + w2.enemyArmy + " turned the flank. The division paid for it.", "b"); }
@@ -16852,6 +17065,7 @@ export default function ShinobiLife() {
       else if (kind === "back") succBack(c2, L, a, b2);
       else if (kind === "steady") vacuumSteady(c2, L, a);
       else if (kind === "civil") civilSide(c2, L, a, b2);
+      else if (kind === "prisoner") { prisonerAct(c2, L, a, b2); if (c2.war && !liveFoes(c2.war).length) endWar(c2, L); }
     });
   }
   function v11Act(kind, a, b2) {
@@ -16960,6 +17174,37 @@ export default function ShinobiLife() {
         <div className="mt-1.5">
           {ds.map((d, i) => <div key={i} style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}><b style={{ color: col[d.k] || accent }}>{d.n}</b> <span style={{ color: T.dim, fontSize: 10.5 }}>{d.y}</span> {"—"} {d.why}.{d.last ? " Lately: " + d.last + "." : ""}</div>)}
         </div>
+      </div>
+    );
+  }
+  /* 12.0.2: the people you hold, and what you can do with them */
+  function prisonersEl() {
+    const ps = (c.prisoners || []).map((x, i) => ({ ...x, i })).filter((x) => !x.done);
+    const past = (c.prisoners || []).filter((x) => x.done).slice(-4).reverse();
+    if (!ps.length && !past.length) return null;
+    const Btn = ({ on, dis, col, children }) => <button onClick={on} disabled={dis} style={{ color: dis ? T.dim : col || T.soft, fontSize: 12, border: "1px solid " + T.line, borderRadius: 6, padding: "2px 9px" }} className="font-semibold">{children}</button>;
+    return (
+      <div className="sl-prisoners mt-2">
+        <div style={{ color: T.gold, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-1.5">YOUR PRISONERS</div>
+        {ps.map((x) => {
+          const foeNow = c.war && (c.war.foes || []).some((f) => !f.out && f.key === (x.clan || x.vid));
+          const est = Math.round((PRISONER_VAL[x.kind] || 60000) / 1000) * 1000;
+          const no = c.actions < 1;
+          return (
+            <div key={x.i} style={{ background: T.panel2, border: "1px solid " + T.gold + "44", borderRadius: 10 }} className="p-3 mb-2 sl-prisoner">
+              <div className="flex justify-between items-baseline gap-2"><span style={{ fontFamily: SERIF, fontSize: 14 }} className="font-bold">{x.name}</span><span style={{ color: T.dim, fontSize: 11 }}>{x.title || PRISONER_KIND[x.kind]} {"\u00b7"} held since {x.y}</span></div>
+              <div style={{ color: T.soft, fontFamily: SERIF, fontSize: 12 }}>{cap(prisonerWhose(x))} want them back.{x.kind === "head" ? " Their clan is led by somebody keeping the seat warm." : ""}{foeNow ? " While you hold them, their side's will to fight wears down every year." : ""}{x.tries ? " They have tried to get them out " + x.tries + " time" + (x.tries === 1 ? "" : "s") + "." : ""}</div>
+              <div className="flex gap-1.5 flex-wrap mt-1.5">
+                <Btn on={() => v12Act("prisoner", x.i, "ransom")} dis={no} col={T.gold}>Ransom (~{money(est)})</Btn>
+                {foeNow && x.kind !== "fighter" && <Btn on={() => v12Act("prisoner", x.i, "exchange")} dis={no} col={T.good}>{x.kind === "head" ? "Trade them for peace" : "Offer them for peace"}</Btn>}
+                <Btn on={() => v12Act("prisoner", x.i, "recruit")} dis={no}>Ask them to join you</Btn>
+                <Btn on={() => v12Act("prisoner", x.i, "release")} dis={no}>Let them go</Btn>
+                <Btn on={() => v12Act("prisoner", x.i, "execute")} dis={no} col={T.blood}>Execute</Btn>
+              </div>
+            </div>
+          );
+        })}
+        {past.map((x, i) => <div key={"p" + i} style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>{x.name} {"\u2014"} {x.fate}, {x.done}.</div>)}
       </div>
     );
   }
@@ -19223,13 +19468,10 @@ export default function ShinobiLife() {
         spend(c); c.war.intel = false;
         if (b.win) {
           c.war.momentum = cl(c.war.momentum + 35); c.war.contribution += 5;
-          c.kills += 1; c.wins += 1; c.health = cl(c.health - rr(8, 20));
-          const dead = c.war.leaderName;
-          if (c.clanHeads[c.war.foeClan]) c.clanHeads[c.war.foeClan] = givenName(roll(50) ? "m" : "f") + " " + c.war.foeClan;
-          c.war.leaderName = c.clanHeads[c.war.foeClan] || dead;
-          addTitle(c, "Killed " + dead);
-          P(L, "You killed " + dead + " in front of both war bands. Their line broke where they stood. Momentum " + c.war.momentum + "%.", "e");
-          newsItem(c, dead + ", head of the " + c.war.foeClan + ", was killed in single combat by " + c.name + ". " + c.war.leaderName + " has taken the clan.", "OBITUARIES", true);
+          c.wins += 1; c.health = cl(c.health - rr(8, 20));
+          const fh = (c.war.foes || []).find((f2) => f2.key === c.war.foeClan);
+          P(L, "You put " + c.war.leaderName + " on the ground in front of both war bands. Their line broke where they stood. Momentum " + c.war.momentum + "%.", "e");
+          beatenOffer(c, L, { kind: "head", name: c.war.leaderName, id: fh && fh.leaderId && NAMED[fh.leaderId] ? fh.leaderId : null, clan: c.war.foeClan, title: "head of the " + c.war.foeClan, war: c.war.name });
         } else {
           P(L, c.war.leaderName + " did not stop when you went down. That was the point of calling them out.", "b");
           die(c, L, "was killed in single combat by " + c.war.leaderName);
@@ -19308,7 +19550,8 @@ export default function ShinobiLife() {
           }
           if (ctx.champion) {
             c.defeated.push(b.e.name); addTitle(c, "Beat " + b.e.name);
-            killNamed(c, ctx.id, L, "was killed in single combat with " + c.name + " on the front line"); killFeat(c, L, ctx.id);
+            c.kills -= 1;
+            beatenOffer(c, L, { kind: "champion", name: b.e.name, id: ctx.id && NAMED[ctx.id] ? ctx.id : null, clan: ctx.foeClan || (tgt && tgt.kind === "clan" ? tgt.key : null), vid: tgt && tgt.kind === "village" ? tgt.key : null, title: "champion of " + (tgt ? tgt.name : "the enemy"), war: c.war.name });
             /* that is one fewer champion they have, which is the whole point of answering one */
             if (ctx.champU && tgt && tgt.champRoster) tgt.champRoster.gen = tgt.champRoster.gen.filter((x) => x.u !== ctx.champU);
             const f4 = tgt && tgt.champRoster ? champsLeft(c, tgt) : -1;
@@ -19547,7 +19790,12 @@ export default function ShinobiLife() {
           }
         }
       }
-      if (ctx.type === "warfront") { battleFront(c, L, ctx.key, !!b.win); }
+      if (ctx.type === "warfront") {
+        battleFront(c, L, ctx.key, !!b.win);
+        const R9 = c.war && c.war.room; const f9 = c.war && (c.war.foes || []).find((x9) => x9.key === ctx.key);
+        const a9 = R9 && ((R9.foes || {})[ctx.key] || []).filter((y) => y.men > 0 && y.cmd).sort((p9, q9) => q9.men - p9.men)[0];
+        if (b.win && a9) beatenOffer(c, L, { kind: "commander", name: a9.cmd.name, id: a9.cmd.id && NAMED[a9.cmd.id] ? a9.cmd.id : null, foeKey: ctx.key, clan: f9 && f9.kind === "clan" ? f9.key : null, vid: f9 && f9.kind === "village" ? f9.key : null, title: "commander of the " + a9.n, war: c.war.name });
+      }
       if (ctx.type === "clearname") {
         spend(c);
         if (b.win && c.wrongful) { c.kills += 0; clearName(c, L, "won"); }
@@ -23445,7 +23693,9 @@ export default function ShinobiLife() {
             <Row label={"Burn " + w.enemyName + "'s supply camp"} sub={"In and out behind " + w.front + " before the alarm. Speed " + c.stats.spd} right="+7 to 14%" onClick={() => warAct("raid")} />
             <Row label="Scout their lines" sub={"Bring back their order of battle. Your next engagement starts on your terms."} right={w.intel ? "Held" : "+4 to 9%"} onClick={() => warAct("scout")} disabled={!!w.intel} />
             <Row label="Run the field hospital" sub="Unglamorous, and it saves more people than the front does." right="+4 to 9%" onClick={() => warAct("medic")} />
-            {c.war.foeClan && <Row label={"Call out " + c.war.leaderName} sub={"Head of the " + c.war.foeClan + ", in front of both war bands. Kill them and the line breaks. Lose and you do not come back."} right="+35% · lethal" onClick={duelClanHead} tone={T.blood} />}
+            {c.war.foeClan && <Row label={"Call out " + c.war.leaderName} sub={"Head of the " + c.war.foeClan + ", in front of both war bands. Beat them and the line breaks, and then you decide: kill them, or take them alive. Lose and you do not come back."} right="+35% · lethal" onClick={duelClanHead} tone={T.blood} />}
+            <Row label={"Take prisoners at " + w.front} sub={"Hit one of " + w.enemyName + "'s outposts before dawn and bring people back alive, to ransom, trade, turn or hold. Speed " + c.stats.spd + ", intellect " + c.stats.int} right="+4 to 8%" onClick={() => warAct("captives")} />
+            {prisonersEl()}
             {c.akatsuki && <Row label={w.akHelp ? "The Akatsuki are in this one" : "Send word to the Akatsuki"}
               sub={w.akHelp ? "Two of them are on the front and neither side is advancing." : "They do not take orders and they do not fight for free. Ask anyway — infamy " + c.infamy + ", " + (c.akatsuki.jobs || 0) + " jobs behind you."}
               right={w.akHelp ? "In the field" : "Ask"} onClick={() => warAct("callak")} disabled={!!w.akHelp || c.actions < 1} tone={T.blood} />}
@@ -24656,6 +24906,7 @@ export default function ShinobiLife() {
                     </div>
                   ); });
                 })()}
+                {prisonersEl()}
                 {(c.occupations || []).length > 0 && <H col={T.blood}>OCCUPATIONS</H>}
                 {(c.occupations || []).map((O2) => (
                   <div key={O2.key} style={{ background: T.panel2, border: "1px solid " + (O2.resist >= 50 ? T.blood + "88" : T.line), borderRadius: 10 }} className="p-3 mb-2 sl-post-occ">
