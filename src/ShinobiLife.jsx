@@ -259,6 +259,7 @@ const MUSIC_TRACKS = [
   { id: "parajo", tag: "Shippuden OP 3", name: "Blue Bird", by: "Ikimono-gakari", src: "audio/parajo.mp3" },
   { id: "hotaru", tag: "Shippuden OP 5", name: "Hotaru no Hikari", by: "Ikimono-gakari", src: "audio/hotaru.mp3" },
   { id: "toumei", tag: "Shippuden OP 7", name: "Toumei Datta Sekai", by: "Motohiro Hata", src: "audio/toumei.mp3" },
+  { id: "diver", tag: "Shippuden OP 8", name: "Diver", by: "NICO Touches the Walls", src: "audio/diver.mp3" },
   { id: "foryou", tag: "Shippuden ED 12", name: "For You", by: "Azu", src: "audio/foryou.mp3" },
   { id: "utakata", tag: "Shippuden ED 14", name: "Utakata Hanabi", by: "supercell", src: "audio/utakata.mp3" },
 ];
