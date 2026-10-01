@@ -8355,7 +8355,7 @@ function vacuumOpen(c, vid, role, who, why) {
   A.vac.push(vc); if (A.vac.length > 16) A.vac.shift();
   if (role === "kage" && c.world && c.world.stability && vid) c.world.stability[vid] = cl((c.world.stability[vid] || 50) - rr(3, 8));
   if (role === "kage" && vid && GREAT_VILLAGES.includes(vid) && roll(35)) { const I = instOf(c, vid); if (I.anbu.p !== 2) instChange(c, vid, "anbu", 2, [who + " died", "for a season, ANBU answered to nobody, and found it liked that"]); }
-  vc.root = chron(c, { cat: "villages", big: vid === c.village && role === "kage", txt: "The vacuum " + who + " left" + (vid ? " in " + vName2(vid) : "") + ": " + list.map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join("; ") + "." });
+  vc.root = chron(c, { cat: "villages", big: vid === c.village && role === "kage", txt: "The vacuum " + who + " left" + (vid && villageExists(c, vid) ? " in " + vName2(vid) : "") + ": " + list.map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join("; ") + "." });
   return vc;
 }
 function vacuumTick(c, L) {
@@ -8373,7 +8373,8 @@ function vacuumTick(c, L) {
   Object.entries(c.clanHeads || {}).forEach(([clan, h]) => {
     const was = A.heads[clan];
     if (was && was !== h && roll(60)) {
-      const vc = vacuumOpen(c, (CLANS.find((x) => x.n === clan) || {}).v || null, "clan", was + " of the " + clan, null);
+      const cv = (CLANS.find((x) => x.n === clan) || {}).v || null;
+      const vc = vacuumOpen(c, cv && villageExists(c, cv) ? cv : null, "clan", was + " of the " + clan, null);
       if (roll(25)) chron(c, { cat: "villages", cause: vc.root, txt: "The " + clan + " splits over it. " + h + " holds the house; " + freshName(c, clan) + " takes a third of it and goes." });
     }
     A.heads[clan] = h;
