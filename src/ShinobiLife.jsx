@@ -404,7 +404,7 @@ const MOVES = {};
     MOVES[g] = { name: g, tier: 3 + Math.floor(i / 3), kind: "buff", eff: "gate", nature: null, pow: 0, cost: 10 + i * 4 };
   });
   ["Lariat", "Coral Palm", "Gentle Fist", "Front Lotus", "Reverse Lotus", "Morning Peacock", "Dance of the Camellia"].forEach((n) => { if (MOVES[n]) MOVES[n].kind = "tai"; });
-  /* hand seals: how many seals make up the quick-time sequence before a technique fires,
+  /* hand seals: how many seals a technique takes before it fires,
      resolved in the same turn as the cast rather than spent across several. Taijutsu and
      pure physical techniques are instant. Support casts (buffs/heals) are capped low so
      keeping yourself alive never turns into the hardest thing in the fight. Computed last,
@@ -11110,6 +11110,13 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.0.3", n: "The Hands", items: [
+    "Hand seals are hands now. All twelve seals are drawn as two hands making the sign: the fist closed around two raised fingers, the Tiger's raised fingers and crossed thumb, the Horse's triangle, the Bird's spread wings, the Dog's flat hand on a fist. The animal names are gone from the panel; each seal keeps its zodiac character",
+    "No clock. Picking a technique that needs seals opens the panel, and you form its seals one at a time from the twelve, as slowly as you like. A wrong seal shows as wrong and the technique still fires, weaker",
+    "Every technique always takes the same seals, so they can be learned. A few use their sequences from the series: Lightning Blade is Ox, Hare, Monkey; Reaper Death Seal is all nine; Water Dragon Bullet opens with its first six; Edo Tensei and Summoning have theirs. Everything else has its own fixed sequence",
+    "Learning them: the first times you cast a technique you read its seals off the scroll. Cast it clean twice and you know it by heart, and from then on you form it from memory with the sequence hidden. A clean sequence from memory hits harder than one read off the scroll. You can look at the scroll mid-cast if you lose your place, and give up the bonus",
+    "Keys 1 to 9, 0, minus and equals form the twelve seals in order. Escape cancels",
+  ] },
   { v: "12.0.2", n: "Taken Alive", items: [
     "You can take people alive now, not only the enemy. Beat the head of an enemy clan when you call them out, answer their champion and win, or win your personal battle at a War Room front, and the fight ends with a choice: kill them, or take them alive",
     "Take the head of a clan alive and their clan is led by somebody keeping the seat warm, their will to fight drops hard, and you hold the one person they will pay anything for",
@@ -12236,9 +12243,9 @@ function loss(c, L, who) {
 /* Range: close (tai dominant), mid (balanced / ninjutsu sweet spot), far (ninjutsu & ranged)
    Momentum: the aggressor who keeps landing hits gains pressure; the one on the back foot pays for it.
    Specialty: your chosen path warps the numbers and the language.
-   Hand seals: forming them is a quick-time sequence resolved on the spot, in the same turn
-   you spend casting — not a multi-turn commitment that leaves you eating free hits while you
-   build it. Accuracy on the sequence scales the technique's power instead of making it. */
+   Hand seals: formed with the hands, one seal at a time, in the same turn you spend casting —
+   not a multi-turn commitment that leaves you eating free hits while you build it. Every
+   technique always takes the same seals; accuracy on them scales its power instead of making it. */
 const RANGE_LABEL = { close: "Close range", mid: "Mid range", far: "Long range" };
 /* the twelve seals, same order the histories use */
 const HAND_SEALS = [
@@ -12246,6 +12253,146 @@ const HAND_SEALS = [
   { id: "dragon", n: "Dragon", k: "\u8FB0" }, { id: "snake", n: "Snake", k: "\u5DF3" }, { id: "horse", n: "Horse", k: "\u5348" }, { id: "ram", n: "Ram", k: "\u672A" },
   { id: "monkey", n: "Monkey", k: "\u7533" }, { id: "bird", n: "Bird", k: "\u9149" }, { id: "dog", n: "Dog", k: "\u620C" }, { id: "boar", n: "Boar", k: "\u4EA5" },
 ];
+const SEAL_FING = { i: { x: 11, w: 7.6, L: 27 }, m: { x: 3.8, w: 8.2, L: 30 }, r: { x: -3.6, w: 7.8, L: 28 }, l: { x: -10.6, w: 6.8, L: 22 } };
+function sealHandNodes(p) {
+  const out = [];
+  const skin = p.dark ? "#d4a27c" : "#ecc6a0", line = "#5a3b28", sleeve = p.dark ? "#1d2639" : "#283553";
+  const T = (x, y, r) => "translate(" + x + " " + y + ") rotate(" + (r || 0) + ")";
+  if (p.sleeve !== false) out.push({ t: "rect", a: { x: -14, y: 4, width: 28, height: 70, rx: 3, fill: sleeve, stroke: "#0d1220", strokeWidth: 1.2 } });
+  out.push({ t: "rect", a: { x: -11, y: -8, width: 22, height: 16, rx: 5, fill: skin, stroke: line, strokeWidth: 1.3 } });
+  const fan = p.spread || 0;
+  const ang = { i: fan, m: fan / 3, r: -fan / 3, l: -fan };
+  const finger = (k, st) => {
+    const F = SEAL_FING[k]; const a = (ang[k] || 0) + ((p.fa || {})[k] || 0);
+    const L = F.L * (p.fl || 1); const w = F.w;
+    const g = { t: "g", a: { transform: T(F.x, -34, a) }, c: [] };
+    if (st === "e") {
+      g.c.push({ t: "rect", a: { x: -w / 2, y: -L, width: w, height: L + 6, rx: w / 2, fill: skin, stroke: line, strokeWidth: 1.3 } });
+      [0.38, 0.68].forEach((f) => g.c.push({ t: "line", a: { x1: -w * 0.28, y1: -L * f, x2: w * 0.28, y2: -L * f, stroke: line, strokeWidth: 0.9, opacity: 0.45 } }));
+      if (p.nails) g.c.push({ t: "rect", a: { x: -w * 0.3, y: -L + 1.5, width: w * 0.6, height: 5, rx: 2, fill: "#f6dcc3", stroke: line, strokeWidth: 0.6, opacity: 0.8 } });
+    } else if (st === "b") {
+      const s1 = L * 0.52, s2 = L * 0.5, bend = p.bend == null ? 55 : p.bend;
+      g.c.push({ t: "rect", a: { x: -w / 2, y: -s1, width: w, height: s1 + 6, rx: w / 2, fill: skin, stroke: line, strokeWidth: 1.3 } });
+      g.c.push({ t: "g", a: { transform: T(0, -s1 + 2, bend) }, c: [
+        { t: "rect", a: { x: -w / 2, y: -s2, width: w, height: s2 + 4, rx: w / 2, fill: skin, stroke: line, strokeWidth: 1.3 } },
+      ] });
+    } else if (st === "c") {
+      /* folded down over the palm: the knuckle on top, the finger lying across the palm */
+      g.c.push({ t: "rect", a: { x: -w / 2, y: -5, width: w, height: 22, rx: w / 2, fill: skin, stroke: line, strokeWidth: 1.3 } });
+      g.c.push({ t: "line", a: { x1: -w * 0.32, y1: 6, x2: w * 0.32, y2: 6, stroke: line, strokeWidth: 0.9, opacity: 0.5 } });
+    }
+    return g;
+  };
+  const fs = p.f || {};
+  const order = ["l", "r", "m", "i"];
+  /* extended fingers sit behind the palm's top edge; curled ones in front of it */
+  order.forEach((k) => { if ((fs[k] || "e") === "e" || fs[k] === "b") out.push(finger(k, fs[k] || "e")); });
+  out.push({ t: "rect", a: { x: -15.5, y: -40, width: 31, height: 42, rx: 11, fill: skin, stroke: line, strokeWidth: 1.4 } });
+  out.push({ t: "path", a: { d: "M -9 -10 Q 0 -4 9 -12", fill: "none", stroke: line, strokeWidth: 0.9, opacity: 0.35 } });
+  order.forEach((k) => { if (fs[k] === "c") out.push(finger(k, "c")); });
+  const th = p.th || "e";
+  if (th !== "h") {
+    const ta = p.ta != null ? p.ta : { e: -58, up: -14, in: -112, cross: -88, down: 150 }[th];
+    const tl = p.tl || (th === "in" ? 19 : 22);
+    out.push({ t: "g", a: { transform: T(12.5, -12, ta) }, c: [
+      { t: "rect", a: { x: -4.4, y: -tl, width: 8.8, height: tl + 6, rx: 4.4, fill: skin, stroke: line, strokeWidth: 1.3 } },
+      { t: "line", a: { x1: -2.4, y1: -tl * 0.5, x2: 2.4, y2: -tl * 0.5, stroke: line, strokeWidth: 0.9, opacity: 0.45 } },
+    ] });
+  }
+  return { t: "g", a: { transform: "translate(" + p.x + " " + p.y + ") rotate(" + (p.r || 0) + ") scale(" + ((p.flip ? -1 : 1) * (p.s || 1)) + " " + (p.s || 1) + ")" }, c: out };
+}
+const SE_E = "e", SE_C = "c", SE_B = "b";
+const SE_FIST = { i: SE_C, m: SE_C, r: SE_C, l: SE_C };
+const SE_FLAT = { i: SE_E, m: SE_E, r: SE_E, l: SE_E };
+const SE_TWO = { i: SE_E, m: SE_E, r: SE_C, l: SE_C };
+/* the twelve, as two hands each. drawn back hand first */
+const SEAL_ART = {
+  rat: [
+    { x: 64, y: 108, r: 0, f: SE_TWO, th: "in", dark: true, nails: true },
+    { x: 40, y: 82, r: 90, flip: true, f: SE_FIST, th: "cross", ta: -95, s: 0.95 },
+  ],
+  ox: [
+    { x: 74, y: 98, r: -82, f: SE_FLAT, th: "up", dark: true },
+    { x: 54, y: 18, r: 180, f: SE_TWO, th: "in" },
+  ],
+  tiger: [
+    { x: 57, y: 104, r: -3, flip: true, f: SE_TWO, th: "h", dark: true, nails: true, fl: 1.08 },
+    { x: 62, y: 110, r: 2, f: SE_TWO, th: "cross", ta: -100, tl: 26 },
+  ],
+  hare: [
+    { x: 84, y: 112, r: -4, f: SE_FLAT, th: "up", dark: true },
+    { x: 18, y: 66, r: 88, flip: true, f: SE_FLAT, th: "up", s: 0.95 },
+  ],
+  dragon: [
+    { x: 43, y: 112, r: 6, f: SE_FIST, th: "up", ta: -4, tl: 34, dark: true },
+    { x: 77, y: 112, r: -6, flip: true, f: SE_FIST, th: "up", ta: -4, tl: 34 },
+  ],
+  snake: [
+    { x: 52, y: 106, r: 6, f: SE_FIST, th: "h", dark: true },
+    { x: 68, y: 108, r: -6, flip: true, f: SE_FIST, th: "cross", ta: -95, tl: 24 },
+  ],
+  horse: [
+    { x: 30, y: 112, r: 14, f: { i: SE_E, m: SE_C, r: SE_C, l: SE_C }, th: "e", ta: 62, tl: 26, dark: true, fa: { i: 12 }, fl: 1.22 },
+    { x: 90, y: 112, r: -14, flip: true, f: { i: SE_E, m: SE_C, r: SE_C, l: SE_C }, th: "e", ta: 62, tl: 26, fa: { i: 12 }, fl: 1.22 },
+  ],
+  ram: [
+    { x: 50, y: 100, r: -6, f: SE_TWO, th: "in", dark: true, nails: true },
+    { x: 70, y: 114, r: 6, flip: true, f: SE_TWO, th: "in", s: 0.96 },
+  ],
+  monkey: [
+    { x: 46, y: 108, r: 26, f: SE_FLAT, th: "e", dark: true },
+    { x: 74, y: 108, r: -26, flip: true, f: SE_FLAT, th: "e" },
+  ],
+  bird: [
+    { x: 54, y: 104, r: -30, f: SE_FLAT, spread: 9, th: "cross", ta: -70, dark: true },
+    { x: 66, y: 104, r: 30, flip: true, f: SE_FLAT, spread: 9, th: "cross", ta: -70 },
+  ],
+  dog: [
+    { x: 60, y: 110, r: 0, f: SE_FIST, th: "in", dark: true },
+    { x: 92, y: 64, r: -90, f: SE_FLAT, th: "up", ta: -30 },
+  ],
+  boar: [
+    { x: 30, y: 110, r: 36, f: SE_FLAT, th: "up", ta: -20, dark: true },
+    { x: 90, y: 110, r: -36, flip: true, f: SE_FLAT, th: "up", ta: -20 },
+  ],
+};
+
+/* draw a seal: two hands, the back one first */
+const sealNode = (n, k) => React.createElement(n.t, { key: k, ...(n.a || {}) }, (n.c || []).map(sealNode));
+function SealHands({ id, size, title }) {
+  const parts = (SEAL_ART[id] || []).map(sealHandNodes);
+  return (
+    <svg viewBox="0 0 120 120" width={size || 64} height={size || 64} role="img" aria-label={title || id} style={{ display: "block" }}>
+      {title ? <title>{title}</title> : null}
+      {parts.map(sealNode)}
+    </svg>
+  );
+}
+/* every technique always takes the same seals. a few are the ones from the histories;
+   the rest are fixed per technique, so a sequence you have cast is a sequence you can learn */
+const CANON_SEAL_SEQ = {
+  "Lightning Style: Lightning Blade": ["ox", "hare", "monkey"],
+  "Water Style: Water Dragon Bullet": ["ox", "monkey", "hare", "rat", "boar", "bird"],
+  "Reaper Death Seal": ["snake", "boar", "ram", "hare", "dog", "rat", "bird", "horse", "snake"],
+  "Edo Tensei": ["tiger", "snake", "dog", "dragon"],
+  "Fire Style: Fireball Jutsu": ["snake", "ram", "monkey", "boar", "horse", "tiger"],
+  "Fire Style: Phoenix Flower": ["rat", "tiger", "dog", "ox", "hare", "tiger"],
+};
+const canonSeals = (name) => CANON_SEAL_SEQ[name] || (/^Summoning/.test(name || "") ? ["boar", "dog", "bird", "monkey", "ram"] : null);
+function sealSeqFor(name, n) {
+  const canon = canonSeals(name);
+  if (canon) return canon.slice();
+  const ids = HAND_SEALS.map((x) => x.id);
+  let h = String(name || "").split("").reduce((a, ch) => (a * 33 + ch.charCodeAt(0)) >>> 0, 5381);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    h = (Math.imul(h ^ (h >>> 13), 2654435761) + i * 97) >>> 0;
+    let id = ids[h % 12];
+    if (out.length && out[out.length - 1] === id) id = ids[(h + 5) % 12];
+    out.push(id);
+  }
+  return out;
+}
 const SPEC_COMBAT = {
   nin:  { tai: 0.85, nin: 1.25, gen: 0.9,  label: "ninjutsu specialist" },
   tai:  { tai: 1.30, nin: 0.80, gen: 0.75, label: "taijutsu specialist" },
@@ -14756,54 +14903,58 @@ function Bar({ v, max, col, h = 6 }) {
 function Chip({ children, col }) {
   return <span className="sl-pop" style={{ background: T.panel2, border: "1px solid " + (col ? col + "66" : T.line), color: col || T.soft, padding: "3px 8px", borderRadius: 99, fontSize: 11, whiteSpace: "nowrap" }}>{children}</span>;
 }
-/* the hand-seal quick-time panel: form the sequence shown, in order, before the beat runs
-   out. Every step answers something — right, wrong, or timed out — and the sequence always
-   completes in the same number of beats, so there is no way to get stuck in it. */
-function SealQTEPanel({ qte, answer, cancel, accent, stepMs }) {
-  const { move, sequence, options, index, hits, results } = qte;
+/* the hand-seal panel. no clock: the technique always takes the same seals, and you form
+   them one by one from the twelve. while you are still learning it you read them off the
+   scroll; once you have cast it cleanly twice you can form it from memory, and a clean
+   sequence from memory hits harder. a wrong seal still costs the cast some strength. */
+const SEAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+function SealQTEPanel({ qte, answer, cancel, peek, accent }) {
+  const { move, sequence, index, hits, results, picks, memory, mastery } = qte;
   const total = sequence.length;
-  const cur = options[Math.min(index, options.length - 1)] || [];
+  const sz = total > 6 ? 46 : 56;
   return (
-    <div className="sl-rise" style={{ padding: "4px 0" }}>
-      <style>{`
-        @keyframes sealBeatShrink { from { width: 100%; } to { width: 0%; } }
-        .seal-beat-bar { animation: sealBeatShrink var(--sealms) linear forwards; }
-        @media (prefers-reduced-motion: reduce) { .seal-beat-bar { animation-duration: calc(var(--sealms) * 1) !important; } }
-      `}</style>
-      <div className="flex items-center justify-between mb-2">
-        <div style={{ color: accent, fontSize: 11, letterSpacing: ".14em" }} className="font-bold">FORM THE SEALS — {move.name.toUpperCase()}</div>
+    <div className="sl-rise sl-seals" style={{ padding: "4px 0" }}>
+      <div className="flex items-center justify-between mb-1">
+        <div style={{ color: accent, fontSize: 11, letterSpacing: ".14em" }} className="font-bold">FORM THE SEALS {"—"} {move.name.toUpperCase()}</div>
         <button onClick={cancel} style={{ color: T.dim, fontSize: 11 }} className="font-semibold px-2">Cancel</button>
       </div>
-      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+      <div className="flex items-center justify-between gap-2 mb-2" style={{ fontSize: 11 }}>
+        <span style={{ color: memory ? T.gold : T.dim }} className="sl-seal-mode">
+          {memory ? "From memory. Form it clean and it lands harder." : mastery >= 1 ? "Reading it off the scroll. One more clean cast and you will know it by heart." : "Reading it off the scroll. Cast it clean twice and you will know it by heart."}
+        </span>
+        {memory && !qte.done && <button onClick={peek} style={{ color: T.soft, fontSize: 11, border: "1px solid " + T.line, borderRadius: 6, padding: "1px 8px", flexShrink: 0 }} className="font-semibold">Look at the scroll</button>}
+      </div>
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap sl-seal-seq">
         {sequence.map((s, i) => {
           const done = i < results.length;
           const good = done && results[i];
+          const cur = i === index && !qte.done;
+          const show = done ? picks[i] : memory ? null : s.id;
           return (
-            <span key={i} className="sl-seal-step" style={{
-              minWidth: 46, height: 40, padding: "0 6px", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              fontSize: 10, fontWeight: 800, lineHeight: 1.1,
-              background: done ? (good ? T.good + "22" : T.bad + "22") : i === index ? accent + "22" : T.panel,
-              border: "1px solid " + (done ? (good ? T.good : T.bad) : i === index ? accent : T.line),
-              color: done ? (good ? T.good : T.bad) : i === index ? accent : T.dim,
-            }}>{done ? (good ? "✓" : "✕") : <><span style={{ fontSize: 15 }}>{s.k}</span><span>{s.n.toUpperCase()}</span></>}</span>
+            <div key={i} className="sl-seal-step" data-seal={show || ""} data-state={done ? (good ? "good" : "bad") : cur ? "current" : "todo"}
+              style={{ width: sz, height: sz, borderRadius: 9, position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+                background: done ? (good ? T.good + "1c" : T.bad + "1c") : cur ? accent + "1c" : T.panel,
+                border: (cur ? 2 : 1) + "px solid " + (done ? (good ? T.good : T.bad) : cur ? accent : T.line), opacity: !done && !cur && !memory ? 0.75 : 1 }}>
+              {show ? <SealHands id={show} size={sz - 4} title={(HAND_SEALS.find((x) => x.id === show) || {}).n} /> : <span style={{ color: cur ? accent : T.dim, fontSize: 18, fontWeight: 800 }}>?</span>}
+              {done && <span style={{ position: "absolute", top: 1, right: 4, fontSize: 11, fontWeight: 900, color: good ? T.good : T.bad }}>{good ? "✓" : "✕"}</span>}
+            </div>
           );
         })}
       </div>
-      <div style={{ background: T.panel2, borderRadius: 99, height: 5, overflow: "hidden", marginBottom: 14 }}>
-        <div key={index} className="seal-beat-bar" style={{ "--sealms": stepMs + "ms", height: "100%", background: accent }} />
-      </div>
-      <div className="grid grid-cols-2 gap-2" style={{ opacity: qte.done ? .5 : 1, pointerEvents: qte.done ? "none" : "auto" }}>
-        {cur.map((opt, i) => (
-          <button key={opt.id} onClick={() => answer(opt.id)} disabled={qte.done}
-            style={{ background: T.panel, border: "1px solid " + T.line, color: T.text, borderRadius: 8, position: "relative" }}
-            className="py-3 text-sm font-bold">
-            <span style={{ position: "absolute", top: 4, left: 6, fontSize: 9, color: T.dim, fontWeight: 700 }}>{i + 1}</span>
-            <span style={{ fontSize: 17, marginRight: 6 }}>{opt.k}</span>{opt.n}
+      <div className="grid gap-1.5 sl-seal-palette" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))", opacity: qte.done ? .5 : 1, pointerEvents: qte.done ? "none" : "auto" }}>
+        {HAND_SEALS.map((s, i) => (
+          <button key={s.id} onClick={() => answer(s.id)} disabled={qte.done} aria-label={s.n + " seal"} title={s.n}
+            className="sl-seal-btn" data-seal={s.id}
+            style={{ background: T.panel, border: "1px solid " + T.line, borderRadius: 9, position: "relative", padding: "2px 0 3px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <span style={{ position: "absolute", top: 2, left: 5, fontSize: 8.5, color: T.dim, fontWeight: 700 }}>{SEAL_KEYS[i]}</span>
+            <span style={{ position: "absolute", top: 2, right: 5, fontSize: 10, color: T.dim }}>{s.k}</span>
+            <div style={{ width: "100%", maxWidth: 74, aspectRatio: "1 / 1" }}><SealHands id={s.id} size="100%" /></div>
           </button>
         ))}
       </div>
       <div style={{ color: T.dim, fontSize: 10.5, marginTop: 8 }}>
-        Tap the seal, or press 1-4. {hits}/{total} clean so far.
+        {qte.done ? (hits === total ? (memory ? "From memory, and clean." : "Clean.") : hits + " of " + total + " right. It still fires, weaker.") : "Seal " + Math.min(index + 1, total) + " of " + total + ". Tap the hands, or press 1–9, 0, −, =. " + hits + "/" + Math.max(0, index) + " right so far."}
+        {mastery > 0 ? " Cast clean " + mastery + " time" + (mastery === 1 ? "" : "s") + "." : ""}
       </div>
     </div>
   );
@@ -18833,7 +18984,7 @@ export default function ShinobiLife() {
     if (c.specialty && SPEC_COMBAT[c.specialty]) {
       lg.push({ t: "You fight as a " + SPEC_COMBAT[c.specialty].label + ".", k: "n" });
     }
-    lg.push({ t: "Anything past a basic technique means forming seals — a quick sequence, on the spot. Catch it clean and the technique lands harder.", k: "n" });
+    lg.push({ t: "Anything past a basic technique means forming its seals with your hands. Read them off the scroll until you know them; form them clean from memory and the technique lands harder.", k: "n" });
     setQuest(null);
     /* a fight worth a movie moment — same tiers as a kill that matters, just before the first hit lands.
        Cinema Mode forces the same face-off and frame onto every fight, not just the legendary ones —
@@ -19014,15 +19165,18 @@ export default function ShinobiLife() {
   }
   /* ============================ HAND-SEAL COMBAT ============================
      You do not spend turns weaving while the enemy gets free hits on you. Picking a
-     technique that needs seals opens a quick-time sequence — press the seal shown before
-     the beat runs out. It resolves in the same turn as the cast: your accuracy on the
-     sequence scales how well the technique lands, but a botched sequence still fires,
-     just weaker. Instant techniques (tai, basic) skip the sequence entirely. */
+     technique that needs seals opens the seal panel: form its seals with your hands, in
+     order, from the twelve. There is no clock. Each technique always takes the same seals;
+     you read them off the scroll until you have cast it clean twice, then you form them
+     from memory for a stronger technique. Your accuracy scales how well it lands, and a
+     botched sequence still fires, just weaker. Instant techniques skip the panel. */
   function sealsNeeded(m) {
     if (!m) return 0;
-    if (m.seals !== undefined) return m.seals;
     const t = m.tier || 2;
-    return t <= 2 ? 0 : t === 3 ? 3 : t === 4 ? 4 : t === 5 ? 5 : 6;
+    const base = m.seals !== undefined ? m.seals : t <= 2 ? 0 : t === 3 ? 3 : t === 4 ? 4 : t === 5 ? 5 : 6;
+    /* a technique the histories give a sequence to takes that sequence */
+    const canon = base > 0 ? canonSeals(m.name) : null;
+    return canon ? canon.length : base;
   }
   function sealGlyphs(n, done) {
     const total = Math.max(1, n);
@@ -19168,49 +19322,37 @@ export default function ShinobiLife() {
       }
     }
   }
-  /* how long each beat stays live — a little tighter for a longer sequence, never brutal */
-  function sealStepMs(total) { return Math.max(820, 1500 - total * 55); }
   function openSealQTE(move) {
     if (!bt || bt.over || sealQTE) return;
     const need = sealsNeeded(move);
     const cost = move.kind === "buff" && move.eff === "evade" ? evadeCost(bt.p, move.cost || 0) : (move.cost || 0);
     if (cost > bt.p.ck) return;
-    const sequence = [];
-    for (let i = 0; i < need; i++) {
-      const pool = i > 0 ? HAND_SEALS.filter((x) => x.id !== sequence[i - 1].id) : HAND_SEALS;
-      sequence.push(pick(pool));
-    }
-    const options = sequence.map((s) => {
-      const rest = HAND_SEALS.filter((x) => x.id !== s.id);
-      const decoys = [];
-      while (decoys.length < 3) { const d = pick(rest); if (!decoys.some((x) => x.id === d.id)) decoys.push(d); }
-      const four = [s, ...decoys];
-      for (let i = four.length - 1; i > 0; i--) { const j = R(i + 1); const t = four[i]; four[i] = four[j]; four[j] = t; }
-      return four;
-    });
-    setSealQTE({ move, sequence, options, index: 0, hits: 0, results: [] });
+    const sequence = sealSeqFor(move.name, need).map((id) => HAND_SEALS.find((x) => x.id === id) || HAND_SEALS[0]);
+    const mastery = ((c && c.sealMastery) || {})[move.name] || 0;
+    setSealQTE({ move, sequence, index: 0, hits: 0, results: [], picks: [], mastery, memory: mastery >= 2 });
   }
   function closeSealQTE() {
     if (sealQTETimer.current) { clearTimeout(sealQTETimer.current); sealQTETimer.current = null; }
     setSealQTE(null);
   }
+  function peekSealQTE() { setSealQTE((prev) => (prev && !prev.done ? { ...prev, memory: false, peeked: true } : prev)); }
   function answerSealQTE(pickedId) {
-    /* whoever calls this (a click, or the beat timer firing) is the one answer for this
-       step — clear any pending timer so it cannot also fire and double-advance */
     if (sealQTETimer.current) { clearTimeout(sealQTETimer.current); sealQTETimer.current = null; }
-    setSealQTE((prev) => {
-      if (!prev || prev.done) return prev;
-      const correct = prev.sequence[prev.index].id === pickedId;
-      const hits = prev.hits + (correct ? 1 : 0);
-      const results = [...prev.results, correct];
-      const nextIndex = prev.index + 1;
-      if (nextIndex >= prev.sequence.length) {
-        const acc = hits / prev.sequence.length;
-        setTimeout(() => { act(prev.move, null, acc); setSealQTE(null); }, 260);
-        return { ...prev, hits, results, index: nextIndex, done: true };
-      }
-      return { ...prev, hits, results, index: nextIndex };
-    });
+    const prev = sealQTE;
+    if (!prev || prev.done || !pickedId) return;
+    const correct = prev.sequence[prev.index].id === pickedId;
+    const hits = prev.hits + (correct ? 1 : 0);
+    const results = [...prev.results, correct];
+    const picks = [...(prev.picks || []), pickedId];
+    const nextIndex = prev.index + 1;
+    if (nextIndex < prev.sequence.length) { setSealQTE({ ...prev, hits, results, picks, index: nextIndex }); return; }
+    const clean = hits === prev.sequence.length;
+    /* from memory and clean is the best a sequence gets */
+    const acc = clean && prev.memory ? 1.15 : hits / prev.sequence.length;
+    setSealQTE({ ...prev, hits, results, picks, index: nextIndex, done: true });
+    if (clean) setC((cc) => (cc ? { ...cc, sealMastery: { ...(cc.sealMastery || {}), [prev.move.name]: ((cc.sealMastery || {})[prev.move.name] || 0) + 1 } } : cc));
+    const mv = prev.move;
+    sealQTETimer.current = setTimeout(() => { sealQTETimer.current = null; act(mv, null, acc); setSealQTE(null); }, 520);
   }
   /* ---- an old word for a hall nobody advertises ----
      Type it anywhere outside a text box and the door is there. */
@@ -19226,23 +19368,21 @@ export default function ShinobiLife() {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bt]);
-  /* the beat timer and the keyboard input (1-4, matching the four seals on screen) */
+  /* no clock: the keyboard is a shortcut to the twelve seals, in their order */
   useEffect(() => {
     if (!sealQTE || sealQTE.done) return;
-    const total = sealQTE.sequence.length;
-    if (sealQTETimer.current) clearTimeout(sealQTETimer.current);
-    sealQTETimer.current = setTimeout(() => answerSealQTE(null), sealStepMs(total));
     const onKey = (ev) => {
-      const n = { "1": 0, "2": 1, "3": 2, "4": 3 }[ev.key];
-      if (n === undefined) return;
-      const opts = sealQTE.options[sealQTE.index];
-      if (!opts || !opts[n]) return;
-      answerSealQTE(opts[n].id);
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (ev.key === "Escape") { closeSealQTE(); return; }
+      const n = SEAL_KEYS.indexOf(ev.key);
+      if (n < 0 || !HAND_SEALS[n]) return;
+      answerSealQTE(HAND_SEALS[n].id);
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sealQTE && sealQTE.index, sealQTE && !!sealQTE.done]);
+  }, [sealQTE]);
   useEffect(() => { if (!bt) closeSealQTE(); }, [bt]);
   function act(move, itemId, qteAcc) {
     if (!bt || bt.over) return;
@@ -19298,8 +19438,8 @@ export default function ShinobiLife() {
     }
 
     /* ---------- cast a technique, instant or sealed ----------
-       any hand seals this needed already ran as a quick-time sequence before act() was
-       called — see openSealQTE / resolveSealQTE — so by the time we get here it always
+       any hand seals this needed were already formed in the seal panel before act() was
+       called — see openSealQTE / answerSealQTE — so by the time we get here it always
        resolves in this single turn. qteAcc (0-1, undefined for seal-less moves) carries
        how clean that sequence was and scales the result in resolveTech. */
     if (!move) { setBt(b); return; }
@@ -19358,7 +19498,7 @@ export default function ShinobiLife() {
     let d = calcDmg(p, e, move.kind, move.pow, move.nature, move.pierce);
     /* a rushed or botched seal sequence still fires — just weaker. a clean one gets a
        small bonus on top, so playing it well is worth something beyond just "not worse". */
-    const sealMult = qteAcc === undefined ? 1 : cl(0.55 + qteAcc * 0.53, 0.55, 1.08);
+    const sealMult = qteAcc === undefined ? 1 : cl(0.55 + qteAcc * 0.53, 0.55, 1.16);
     d = Math.round(d * sealMult);
     if (c.cheats && c.cheats.oneShot) d = 999999;
     const crit = roll(p.eva * 0.36 * (qteAcc === undefined ? 1 : cl(0.4 + qteAcc, 0.4, 1.3)));
@@ -19376,7 +19516,8 @@ export default function ShinobiLife() {
     let hitLine = move.name + " connects. " + d + " damage.";
     if (crit) hitLine = move.name + " lands perfect — no defence, no recovery. Critical. " + d + " damage.";
     if (qteAcc !== undefined) {
-      if (qteAcc >= 0.99) hitLine += " The seals came together clean.";
+      if (qteAcc > 1.05) hitLine += " Formed from memory, every seal clean. It lands harder for it.";
+      else if (qteAcc >= 0.99) hitLine += " The seals came together clean.";
       else if (qteAcc < 0.4) hitLine += " The seals were rushed and sloppy — it still lands, just not at full strength.";
     }
     if (nm > 1.2) hitLine += " Nature advantage. Their element folds under yours.";
@@ -22900,7 +23041,7 @@ export default function ShinobiLife() {
                 </div>
               );
             })() : sealQTE ? (
-              <SealQTEPanel qte={sealQTE} answer={answerSealQTE} cancel={closeSealQTE} accent={accent} stepMs={sealStepMs(sealQTE.sequence.length)} />
+              <SealQTEPanel qte={sealQTE} answer={answerSealQTE} cancel={closeSealQTE} peek={peekSealQTE} accent={accent} />
             ) : (
               <div style={{ maxHeight: "34vh" }} className="overflow-auto">
                 <div className="grid grid-cols-2 gap-2 mb-2">
