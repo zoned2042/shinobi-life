@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kendrick Heardle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  /* Layout: one centered column, a tape-counter bar of 7 clip lengths, guess list below. Single dark look on purpose. */
+  :root {
+    --bg: #14110f;
+    --panel: #1f1a17;
+    --line: #3a312b;
+    --fg: #f1e9df;
+    --muted: #a3978b;
+    --gold: #d9a441;
+    --red: #c2413a;
+    --green: #5fa36a;
+    --display: "Archivo Black", Impact, sans-serif;
+    --body: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); }
+  main { max-width: 34rem; margin: 0 auto; padding: 2rem 16px 4rem; display: flex; flex-direction: column; gap: 1.25rem; }
+  header { display: flex; justify-content: space-between; align-items: end; gap: 1rem; flex-wrap: wrap; }
+  h1 { font-family: var(--display); font-size: 2.2rem; line-height: .95; margin: 0; text-transform: uppercase; letter-spacing: .01em; }
+  h1 span { color: var(--gold); display: block; font-size: .5em; letter-spacing: .2em; }
+  .stats { font-family: var(--mono); font-size: .8rem; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--fg); font-size: 1.1rem; }
+  .status { color: var(--muted); font-size: .9rem; min-height: 1.3em; }
+  .tape { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .seg { border: 1px solid var(--line); padding: .5rem 0; text-align: center; font-family: var(--mono); font-size: .75rem; color: var(--muted); border-radius: 3px; }
+  .seg.on { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+  .seg.miss { background: var(--red); color: var(--fg); border-color: var(--red); }
+  .seg.skip { background: var(--line); color: var(--fg); }
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; }
+  button { font: 600 1rem var(--body); border-radius: 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: .7rem 1rem; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--gold); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .play { background: var(--gold); color: var(--bg); border-color: var(--gold); flex: 1; font-family: var(--display); text-transform: uppercase; letter-spacing: .05em; font-size: 1.1rem; }
+  .guess-wrap { position: relative; }
+  input { width: 100%; font: 1rem var(--body); padding: .75rem; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+  .sugg { position: absolute; left: 0; right: 0; top: 100%; background: var(--panel); border: 1px solid var(--line); border-top: 0; max-height: 14rem; overflow-y: auto; z-index: 5; list-style: none; margin: 0; padding: 0; }
+  .sugg li { padding: .55rem .75rem; cursor: pointer; font-size: .95rem; }
+  .sugg li small { color: var(--muted); }
+  .sugg li:hover, .sugg li.hl { background: var(--line); }
+  ol.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  ol.log li { border: 1px solid var(--line); border-radius: 3px; padding: .45rem .7rem; font-size: .9rem; display: flex; justify-content: space-between; gap: .5rem; }
+  ol.log li.x { color: var(--red); } ol.log li.s { color: var(--muted); }
+  .reveal { display: flex; gap: 1rem; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem; }
+  .reveal img { width: 96px; height: 96px; border-radius: 3px; flex: none; }
+  .reveal div { min-width: 0; }
+  .reveal h2 { font-family: var(--display); margin: 0 0 .2rem; font-size: 1.25rem; text-wrap: balance; }
+  .reveal p { margin: 0; color: var(--muted); font-size: .9rem; }
+  .verdict { font-family: var(--mono); font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .3rem; }
+  .verdict.win { color: var(--green); } .verdict.lose { color: var(--red); }
+  .bar { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--gold); }
+  footer { color: var(--muted); font-size: .75rem; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><span>Guess the song</span>Kendrick Heardle</h1>
+    <div class="stats">score <b id="score">0</b><br>streak <b id="streak">0</b> · best <b id="best">0</b></div>
+  </header>
+
+  <div class="status" id="status">Loading Kendrick's catalog…</div>
+
+  <div class="tape" id="tape"></div>
+  <div class="bar"><i id="prog"></i></div>
+
+  <div class="row">
+    <button class="play" id="play" disabled>▶ Play 0.1s</button>
+    <button id="skip" disabled>Skip (+time)</button>
+  </div>
+
+  <div class="guess-wrap">
+    <input id="guess" placeholder="Type a song title…" autocomplete="off" disabled>
+    <ul class="sugg" id="sugg" hidden></ul>
+  </div>
+
+  <ol class="log" id="log"></ol>
+  <div id="reveal"></div>
+  <button id="next" hidden>Next song →</button>
+
+  <footer>30-second previews from Apple's iTunes. Needs an internet connection. Points: 0.1s = 100, then 70, 50, 35, 20, 10, 5.</footer>
+</main>
+
+<script>
+const STEPS = [0.1, 0.5, 1, 2, 4, 8, 15];
+const POINTS = [100, 70, 50, 35, 20, 10, 5];
+const ARTIST_ID = 368183298; // Kendrick Lamar on iTunes
+const $ = id => document.getElementById(id);
+
+let songs = [], cur = null, step = 0, done = false, results = [];
+let score = 0, streak = 0, best = 0;
+let audioCtx = null, buffer = null, audioEl = null, startAt = 0, stopTimer = null, src = null, raf = null;
+try { best = +localStorage.getItem('kdot-best') || 0; } catch (e) {}
+$('best').textContent = best;
+
+// JSONP so it works when opened straight from a file
+function jsonp(url) {
+  return new Promise((res, rej) => {
+    const cb = 'cb' + Math.random().toString(36).slice(2);
+    const s = document.createElement('script');
+    window[cb] = d => { res(d); delete window[cb]; s.remove(); };
+    s.onerror = () => { rej(new Error('network')); s.remove(); };
+    s.src = url + '&callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+
+const clean = t => t.replace(/\s*[\(\[](feat|with|ft)\.?[^\)\]]*[\)\]]/ig, '').trim();
+const norm = t => clean(t).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+async function loadSongs() {
+  const urls = [
+    `https://itunes.apple.com/lookup?id=${ARTIST_ID}&entity=song&limit=200&country=us`,
+    `https://itunes.apple.com/search?term=kendrick+lamar&entity=song&attribute=artistTerm&limit=200&country=us`
+  ];
+  const all = [];
+  for (const u of urls) { try { all.push(...(await jsonp(u)).results); } catch (e) {} }
+  const seen = new Map();
+  for (const r of all) {
+    if (r.wrapperType !== 'track' || !r.previewUrl || !/kendrick lamar/i.test(r.artistName)) continue;
+    const k = norm(r.trackName);
+    if (!k) continue;
+    const prev = seen.get(k);
+    if (!prev || (r.trackExplicitness === 'explicit' && prev.trackExplicitness !== 'explicit')) seen.set(k, r);
+  }
+  songs = [...seen.values()].map(r => ({
+    title: clean(r.trackName), full: r.trackName, album: r.collectionName,
+    year: (r.releaseDate || '').slice(0, 4), art: (r.artworkUrl100 || '').replace('100x100', '300x300'),
+    url: r.previewUrl, key: norm(r.trackName)
+  })).sort((a, b) => a.title.localeCompare(b.title));
+  if (!songs.length) { $('status').textContent = "Couldn't reach iTunes. Check your connection and reload."; return; }
+  newRound();
+}
+
+function renderTape() {
+  $('tape').innerHTML = STEPS.map((s, i) => {
+    let c = '';
+    if (results[i] === 'x') c = 'miss'; else if (results[i] === 's') c = 'skip';
+    else if (i <= step && !done) c = 'on';
+    return `<div class="seg ${c}">${s}s</div>`;
+  }).join('');
+  $('play').textContent = done ? '▶ Play 15s' : `▶ Play ${STEPS[step]}s`;
+  $('skip').textContent = step >= STEPS.length - 1 ? 'Give up' : `Skip (+${(STEPS[step + 1] - STEPS[step]).toFixed(1).replace('.0','')}s)`;
+}
+
+async function newRound() {
+  stopAudio();
+  cur = songs[Math.floor(Math.random() * songs.length)];
+  step = 0; done = false; results = []; buffer = null;
+  $('log').innerHTML = ''; $('reveal').innerHTML = ''; $('next').hidden = true;
+  $('guess').value = ''; $('guess').disabled = false; $('skip').disabled = false;
+  $('play').disabled = true;
+  $('status').textContent = `Loading clip… (${songs.length} songs in the pool)`;
+  renderTape();
+  // Try Web Audio for precise short clips; fall back to an <audio> element.
+  try {
+    const r = await fetch(cur.url);
+    const ab = await r.arrayBuffer();
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    buffer = await audioCtx.decodeAudioData(ab);
+    startAt = Math.random() * Math.max(0, buffer.duration - 15.5);
+  } catch (e) {
+    buffer = null;
+    audioEl = new Audio(cur.url); audioEl.preload = 'auto';
+    await new Promise(r => { audioEl.addEventListener('loadedmetadata', r, { once: true }); audioEl.addEventListener('error', r, { once: true }); setTimeout(r, 5000); });
+    startAt = Math.random() * Math.max(0, (audioEl.duration || 30) - 15.5);
+  }
+  $('play').disabled = false;
+  $('status').textContent = 'Press play. Guess the song.';
+}
+
+function stopAudio() {
+  clearTimeout(stopTimer); cancelAnimationFrame(raf);
+  if (src) { try { src.stop(); } catch (e) {} src = null; }
+  if (audioEl) audioEl.pause();
+  $('prog').style.width = '0';
+}
+
+async function play() {
+  stopAudio();
+  const len = done ? 15 : STEPS[step];
+  const t0 = performance.now();
+  const tick = () => { const p = Math.min(1, (performance.now() - t0) / 1000 / 15); $('prog').style.width = p * 100 + '%'; if (p < len / 15) raf = requestAnimationFrame(tick); };
+  if (buffer) {
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    src = audioCtx.createBufferSource(); src.buffer = buffer;
+    const g = audioCtx.createGain(); src.connect(g).connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(1, now + len - 0.01); g.gain.linearRampToValueAtTime(0, now + len);
+    src.start(now, startAt, len);
+  } else {
+    audioEl.currentTime = startAt;
+    try { await audioEl.play(); } catch (e) { $('status').textContent = "Couldn't play the clip. Try Next song."; return; }
+    stopTimer = setTimeout(() => audioEl.pause(), len * 1000);
+  }
+  tick();
+}
+
+function advance(kind, text) {
+  results[step] = kind;
+  const li = document.createElement('li');
+  li.className = kind;
+  li.innerHTML = `<span>${kind === 's' ? 'Skipped' : '✗ ' + text.replace(/</g, '&lt;')}</span><span>${STEPS[step]}s</span>`;
+  $('log').appendChild(li);
+  if (step >= STEPS.length - 1) return finish(false);
+  step++; renderTape(); play();
+}
+
+function guess(title) {
+  if (done || !title.trim()) return;
+  $('guess').value = ''; hideSugg();
+  if (norm(title) === cur.key) finish(true); else advance('x', title);
+}
+
+function finish(win) {
+  done = true;
+  if (win) {
+    const pts = POINTS[step]; score += pts; streak++;
+    if (score > best) { best = score; try { localStorage.setItem('kdot-best', best); } catch (e) {} }
+  } else { streak = 0; }
+  $('score').textContent = score; $('streak').textContent = streak; $('best').textContent = best;
+  $('reveal').innerHTML = `<div class="reveal">${cur.art ? `<img src="${cur.art}" alt="">` : ''}<div>
+    <div class="verdict ${win ? 'win' : 'lose'}">${win ? `Got it in ${STEPS[step]}s · +${POINTS[step]}` : 'Out of time'}</div>
+    <h2>${cur.full}</h2><p>${cur.album}${cur.year ? ' · ' + cur.year : ''}</p></div></div>`;
+  $('guess').disabled = true; $('skip').disabled = true; $('next').hidden = false;
+  $('status').textContent = 'Play the full 15s, or go to the next song.';
+  renderTape(); $('next').focus();
+}
+
+// Autocomplete
+let hl = -1;
+function hideSugg() { $('sugg').hidden = true; hl = -1; }
+$('guess').addEventListener('input', () => {
+  const q = $('guess').value.toLowerCase().trim();
+  if (!q) return hideSugg();
+  const m = songs.filter(s => s.title.toLowerCase().includes(q)).slice(0, 8);
+  $('sugg').innerHTML = m.map(s => `<li data-t="${s.title.replace(/"/g, '&quot;')}">${s.title} <small>· ${s.album}</small></li>`).join('');
+  $('sugg').hidden = !m.length; hl = -1;
+});
+$('sugg').addEventListener('mousedown', e => { const li = e.target.closest('li'); if (li) { e.preventDefault(); guess(li.dataset.t); } });
+$('guess').addEventListener('keydown', e => {
+  const items = [...$('sugg').querySelectorAll('li')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); if (!items.length) return;
+    hl = (hl + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((li, i) => li.classList.toggle('hl', i === hl));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    guess(hl >= 0 && items[hl] ? items[hl].dataset.t : (items.length === 1 ? items[0].dataset.t : $('guess').value));
+  } else if (e.key === 'Escape') hideSugg();
+});
+$('guess').addEventListener('blur', () => setTimeout(hideSugg, 100));
+$('play').addEventListener('click', play);
+$('skip').addEventListener('click', () => { if (!done) advance('s'); });
+$('next').addEventListener('click', newRound);
+
+renderTape();
+loadSongs();
+</script>
+</body>
+</html>
