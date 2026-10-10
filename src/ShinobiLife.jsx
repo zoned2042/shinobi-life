@@ -11111,6 +11111,11 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.2.3", n: "Fire First", items: [
+    "Fixed: Madara was born with no chakra nature at all, so at eight the game rolled him a random one and he could grow up with Water or Earth and no fire. He is born with Fire now, and Fireball",
+    "He picks up more fire as his life goes on: Phoenix Flower after the first brother dies (8), Dragon Flame Bomb with Izuna (11), Great Fire Annihilation as clan head (18), Great Fire Destruction with the Mangekyo (20), and Majestic Destroyer Flame when Izuna dies, whether or not he takes the eyes",
+    "An existing Madara save that was handed a random nature gets Fire and Fireball added back the next year",
+  ] },
   { v: "12.2.2", n: "A Price That Only Goes Up", items: [
     "Your bounty keeps climbing for as long as you are wanted. It used to be set once, when your Bingo Book rank went up, from a formula that stopped growing at 100 infamy, so an S-rank page sat near 1.2 million however many people you killed",
     "Every kill adds to it at your rank's rate: 20,000 at C, 45,000 at B, 90,000 at A, 180,000 at S. A named kill adds what that name was worth, and twice that for anyone who ever held a Kage's hat. New infamy and every tailed beast you bring in for the Akatsuki add more",
@@ -12679,7 +12684,7 @@ const CANON_STARTS = [
     stats: { nin: 60, tai: 52, gen: 48, int: 76, spd: 62, ck: 46 }, jutsu: ["Lightning Style: Lightning Blade", "Lightning Style: False Darkness"], d: "Jonin at thirteen, your father's name around your neck, and a war on." },
   { id: "boruto", n: "Boruto Uzumaki", role: "born", era: "boruto", born: 1006, village: "konoha", clan: "Uzumaki", squad: "next7",
     stats: { nin: 50, tai: 44, gen: 30, int: 52, spd: 52, ck: 60 }, jutsu: ["Shadow Clone Jutsu", "Rasengan"], d: "Your father is the Hokage and is never home. The mark on your hand is nobody's fault yet." },
-  { id: "madara", n: "Madara Uchiha", role: "born", era: "warring", born: 858, village: "konoha", clan: "Uchiha", kg: "Sharingan",
+  { id: "madara", n: "Madara Uchiha", role: "born", era: "warring", born: 858, village: "konoha", clan: "Uchiha", kg: "Sharingan", natures: ["Fire"],
     stats: { nin: 52, tai: 50, gen: 44, int: 58, spd: 52, cha: 56 }, jutsu: ["Fire Style: Fireball Jutsu"],
     d: "Eldest of five brothers in the Warring States. A river, a boy on the other bank, a clan, a village you name, a valley, sixty years beside a statue, a death that does not take, and the moon. All of it, in order." },
   /* --- take the seat as --- */
@@ -13477,6 +13482,12 @@ const madaraEyes = (c, lv) => {
   if ((c.eye.lv || 0) < lv) c.eye.lv = lv;
   return c.eye;
 };
+/* Madara is fire before he is anything else: born with it, and a new flame every few chapters */
+function madaraFire(c, L, list, line) {
+  if (!(c.natures || []).includes("Fire")) c.natures = ["Fire"].concat(c.natures || []);
+  const got = madaraLearn(c, ["Fire Style: Fireball Jutsu"].concat(list || []));
+  if (got.length && line) P(L, line + " " + joinList(got) + ".", "e");
+}
 function madaraBrother(c, L, who) {
   c.madara.brothers = Math.max(0, (c.madara.brothers == null ? 4 : c.madara.brothers) - 1);
   loss(c, L, who, { g: "m" });
@@ -13492,7 +13503,7 @@ const MADARA_BEATS = [
     ] },
   { id: "brother1", y: 866, part: 1, n: "The First Brother", head: "THE CLAN WARS", art: "graves",
     story: "There were five of you. The clan brings the youngest home on a door they took off somebody's house. He was six. The Senju were paid by the same lord who paid the Uchiha the year before.",
-    choices: [{ id: "bury", t: "BURY HIM", fx: (c, L) => madaraBrother(c, L, "your youngest brother") }] },
+    choices: [{ id: "bury", t: "BURY HIM", fx: (c, L) => { madaraBrother(c, L, "your youngest brother"); madaraFire(c, L, ["Fire Style: Phoenix Flower"], "Your father teaches you Phoenix Flower the week after the funeral. It is what Uchiha fathers do instead of talking."); } }] },
   { id: "stone", y: 867, part: 1, n: "The Stone", head: "THE FATHERS FIND OUT", art: "stone",
     story: "Your father knows about the river. So does his. Tajima tells you to go tomorrow and find out which clan the boy belongs to, and kill him if he is Senju. You already know the answer. You scratch a word into a stone.",
     choices: [
@@ -13501,7 +13512,7 @@ const MADARA_BEATS = [
     ] },
   { id: "brothers", y: 869, part: 1, n: "Two More", head: "FIVE BECOME TWO", art: "graves",
     story: "Two more of your brothers come home on doors before the winter is out. There were five of you. There are two now, you and Izuna, and you have stopped letting him out of your sight.",
-    choices: [{ id: "izuna", t: "PROTECT IZUNA", fx: (c, L) => { madaraBrother(c, L, "your brother"); madaraBrother(c, L, "another brother"); c.stats.tai = cl(c.stats.tai + 4); } }] },
+    choices: [{ id: "izuna", t: "PROTECT IZUNA", fx: (c, L) => { madaraBrother(c, L, "your brother"); madaraBrother(c, L, "another brother"); c.stats.tai = cl(c.stats.tai + 4); madaraFire(c, L, ["Fire Style: Dragon Flame Bomb"], "You and Izuna learn the Dragon Flame Bomb off the same scroll, racing each other for it."); } }] },
   { id: "head", y: 876, part: 1, n: "Head of the Uchiha", head: "THE UCHIHA HAVE A HEAD", art: "crest",
     story: "Tajima Uchiha does not come back from the field. The elders do not put it to a vote. At eighteen you are head of the Uchiha, and the first thing anybody hands you is the list of the dead. The second is your father's war fan.",
     choices: [{ id: "fan", t: "TAKE THE GUNBAI", fx: (c, L) => {
@@ -13541,6 +13552,7 @@ const MADARA_BEATS = [
         c.lostSomeone = (c.lostSomeone || 0) + 1;
         if (!e.mangekyo) mangekyoOpen(c, L, { k: "loss", who: "Izuna", g: "m", power: "avatar" });
         e.blind = cl((e.blind || 0) + 30); e.heart = cl((e.heart || 0) + 20, -100, 100);
+        madaraLearn(c, ["Fire Style: Majestic Destroyer Flame"]);
         P(L, "You buried him with his eyes. The dark at the edges came on faster after that, and you let it.", "b");
       } },
     ] },
@@ -13635,6 +13647,8 @@ const madaraNext = (c) => (c.madara ? MADARA_BEATS.find((b) => !c.madara.done[b.
 function madaraTick(c, L) {
   const M = c.madara;
   if (!M || c.canonId !== "madara" || M.phase === "dead" || M.phase === "over") return;
+  /* an older save of Madara that was handed a random nature still gets his fire */
+  if (!(c.natures || []).includes("Fire") || !c.jutsu.includes("Fire Style: Fireball Jutsu")) madaraFire(c, L, [], "");
   /* ash and paper: a reanimated body is whole again by the next morning */
   if (M.phase === "edo" && c.health < 100) c.health = 100;
   if (c.scene || c.eyeAwake || c.tsuku) return;
