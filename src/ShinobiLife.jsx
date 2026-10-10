@@ -11111,6 +11111,18 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.1", n: "Every Road", items: [
+    "All five chakra natures, for anyone. A third at jonin rank or Ninjutsu 50. A fourth at Kage rank, with a three-tomoe Sharingan, or at Ninjutsu 65 and Chakra 55. A fifth with the Rinnegan, Six Paths chakra, or Ninjutsu 80, Chakra 70 and Control 60. The Nature Transformation row now says what you hold and exactly what the next one needs. Every failed attempt makes the next more likely, and holding all five gets its own screen",
+    "Kekkei Tota. Hold Fire, Wind and Earth and the training ground lets you try to force them into one: Dust Release. The odds come from Ninjutsu, Chakra and Control, and every failed try gets you closer. If you are in Iwagakure while Onoki or Mu is alive, they stand over you while you try. It brings three Dust techniques, one of them new (Particle Cube), and its own screen",
+    "The Uchiha road to the Rinnegan. Senju cells are open to any Mangekyo now, not only the Eternal: power 70, with the odds shown (the Eternal Mangekyo adds 20). Sometimes the cells take and the eyes wait years, the way Madara's did. The Sage's chakra can also find an Uchiha with power 85: rarely in a quiet year, more often near death in a fight. That Rinnegan comes with six tomoe and Amenotejikara. Any Rinnegan now holds all five natures",
+    "The Rinne Sharingan for an Uchiha. With the Rinnegan, take all nine tailed beasts into yourself (the Akatsuki's statue counts if you wear the ring), or eat the God Tree's fruit. You become the Ten-Tails' jinchuriki, open a third eye with nine tomoe, and gain Infinite Tsukuyomi, Rinne Sharingan: Reflection, Truth-Seeking Orbs and Six Paths Sage Mode. It has its own screen",
+    "Tailed beast hunts say what you are hunting. Every beast is listed by tails and name ('Four-Tails \u00b7 Son Goku') with where it is now: the village and its current host, or loose with no host. Beasts in the Akatsuki's statue cannot be hunted. The Akatsuki's 'Hunt a jinchuriki' job lets you pick the target from the same list instead of sending you after a random one, and the fight opens by naming the village and the host",
+    "Fixed: the Akatsuki hunt could send you after a beast that was already in the statue, so the collection listed the same beast several times ('6-Tails, 6-Tails, 6-Tails'). Sealed beasts cannot be picked any more, each capture is recorded once with its village, and the collection names each beast once ('the Six-Tails of Kirigakure')",
+    "Your Way, in Ninja Path: choose The Strongest Shinobi or The Missing-Nin. Each has seven steps, checked every year and after every fight, and every step gives a stat reward. The Ninja path tile shows '!' when the final fight is ready",
+    "The Strongest Shinobi: power 45, three natures, a Bingo Book kill, a power nobody teaches (Sage Mode, the Sixth Gate, a Mangekyo or Rinnegan, a tailed beast at stage four, a Kekkei Tota, or the second Curse Mark state), all five natures, power 90. Then challenge the strongest name alive in the Bingo Book and win in front of witnesses. If there is nobody left, you can claim it",
+    "The Missing-Nin: defect, survive three hunter-nin teams, reach infamy 60, make a Bingo Book kill, join the Akatsuki or an organisation, reach infamy 80. Then walk into a village and kill its Kage in their own office",
+    "Finishing a way gives a title (The Strongest Shinobi Alive, or The Shadow Over the Five Villages), +3 to every stat, a Chronicle entry and its own screen",
+  ] },
   { v: "12.0.4", n: "Your Blood Remembers", items: [
     "The Sharingan now opens on screen. Each stage gets its own full-screen moment: the eye opens like an eyelid, the new tomoe burns in with a red flash, and the ring spins up and keeps turning. The screen says what woke it, what your body gained, what it unlocked, and what the next stage will take",
     "The tomoe come from how you live. Three ways in. Genjutsu mastery: an Uchiha eye opens at Genjutsu 30, the second tomoe comes at 45, the third at 62. Danger: near-deaths, losing fights and living, years at war and missions that go wrong all fill a Danger meter that forces the next tomoe. Loss: when someone close dies (a parent, a teammate, your child, your brother or sister) a dormant eye always opens from age six on, and a later tomoe often does",
@@ -12190,9 +12202,9 @@ function learn(c, L, name, why) { if (c.jutsu.includes(name)) return false; c.ju
    the ones the histories call complete — the Professor, the Copy Ninja — learn all five. */
 function natureCap(c) {
   if (c.polymath) return 5;
-  if (c.rank >= 6) return 4;
-  if (c.rank >= 4) return 3;
-  return 2;
+  let cap = 2;
+  [3, 4, 5].forEach((n) => { if (NATURE_TIERS[n].ok(c)) cap = Math.max(cap, n); });
+  return cap;
 }
 /* take a new nature by working at it rather than by being handed one */
 function trainNature(c, L) {
@@ -12201,26 +12213,29 @@ function trainNature(c, L) {
   if (!base.length) { P(L, "There are no basic natures left to take. You hold all five.", "n"); return; }
   const held = c.natures.filter((n) => NATURES.includes(n)).length;
   if (held >= cap) {
-    P(L, "You cannot hold another. " + (c.polymath ? "Even you have a ceiling and this is it." : "Two comes naturally, three with rank, and beyond that you would have to be somebody the histories call complete."), "b");
+    P(L, "You cannot hold another yet. " + natureLine(c), "b");
     return;
   }
   /* each one after the first is markedly harder than the last — the fourth and fifth
      are the work of a decade, which is why so few names in the records hold them */
-  const odds = cl(20 + c.stats.nin * 0.30 + c.stats.cha * 0.22 + c.stats.int * 0.12 - held * 20 + (c.polymath ? 15 : 0), 5, 84);
+  const odds = cl(20 + c.stats.nin * 0.30 + c.stats.cha * 0.22 + c.stats.int * 0.12 - held * 16 + (c.polymath ? 15 : 0) + (c.natureTries || 0) * 5, 5, 84);
   if (roll(odds)) {
     const n = pick(base);
     c.natures.push(n);
+    c.natureTries = 0;
     c.stats.nin = cl(c.stats.nin + rr(2, 5));
     P(L, "It took the whole year and it took. " + n + " Release is yours — that is " + (held + 1) + " natures now, and most people never get past one.", "e");
     if (held + 1 >= 5) {
       addTitle(c, "Master of Five Natures");
       newsItem(c, c.name + " is being called complete. All five nature transformations, held by one person, which almost nobody in the records has managed.", "BINGO BOOK", true);
       P(L, "All five. There is a very short list of people who have done this and everybody on it is remembered.", "e");
+      powerShow(c, { stage: "five", head: "ALL FIVE", title: "Master of Five Natures", story: "Fire, wind, lightning, earth and water, and all of them answer you. The chakra paper does not know what to do: it burns, splits, crumples, crumbles and soaks through at once.", gains: [["Ninjutsu", 3]], unlock: ["Title: Master of Five Natures"].concat(KEKKEI_TOTA.filter((k) => !(c.natures || []).includes(k.n)).map((k) => k.n + " (Kekkei Tota) can now be forged")), next: "Fire, wind and earth can be forced into one shape: Dust Release, the Kekkei Tota. The training ground has it.", btn: "HOLD THEM ALL", btn2: null, dh: 0, k: "five" });
     } else if (held + 1 >= 3) {
       newsItem(c, c.name + " of " + (c.founded ? c.founded.name : vName2(c.village)) + " is fielding a third nature. The tower has taken an interest.", "THE VILLAGES");
     }
   } else {
     c.health = cl(c.health - rr(2, 6));
+    c.natureTries = (c.natureTries || 0) + 1;
     P(L, pick([
       "A year of leaves that would not cut and water that would not climb. The nature did not take.",
       "You burned through the exercises and got nothing back but a headache that lasted into autumn.",
@@ -13099,6 +13114,7 @@ function eyeBattle(c, L, b, kills0) {
     const hp = b.p && b.p.max ? b.p.hp / b.p.max : 1;
     if (!e.mangekyo && !e.rinnegan && (e.lv || 0) < 3 && hp < 0.25 && roll(e.lv ? 55 : 85) && eyeAwaken(c, L, { k: "near", foe })) return;
     if (!kills0 && (c.kills || 0) > 0 && !e.lv && eyeAwaken(c, L, { k: "kill", foe })) return;
+    if (e.mangekyo && !e.rinnegan && hp < 0.2 && power(c) >= 85 && roll(15) && rinneganOpen(c, L, "sage")) return;
     eyeEdge(c, L, hp < 0.4 ? 14 : 5);
     if ((e.lv || 0) >= 1 && !c.copyNin && b.e && b.e.moves) {
       const tmax = e.mangekyo || e.rinnegan ? 6 : EYE_COPY_TIER[Math.min(3, e.lv)];
@@ -13125,11 +13141,8 @@ function eyeCheatNext(c, L) {
     eyeShow(c, { stage: "emk", lv: 3, mk: e.power || null, k: "eternal", head: "TWO PAIRS, ONE SIGHT", title: "Eternal Mangekyo Sharingan", story: "Your brother's eyes, and yours. The patterns lock together and the dark that was closing in from the edges pulls back for good.", gains: [], unlock: ["Perfect Susanoo"], btn: "SEE WITH BOTH", btn2: null, dh: 0 });
     return;
   }
-  if (!e.rinnegan) {
-    e.rinnegan = true; e.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => { if (!c.jutsu.includes(j)) c.jutsu.push(j); }); addTitle(c, "Rinnegan");
-    eyeShow(c, { stage: "rin", lv: 3, mk: null, k: "rinnegan", head: "THE EYE OF THE SAGE", title: "Rinnegan", story: "The red drains out of your eyes and rings spread through them like a stone dropped into still water. Four people in history have looked out through these.", gains: [], unlock: ["Almighty Push", "Universal Pull", "Chibaku Tensei"], btn: "STAND UP", btn2: null, dh: 0 });
-    return;
-  }
+  if (!e.rinnegan) { rinneganOpen(c, L, "sage"); return; }
+  if (!e.rinne) { rinneOpen(c, L, true); return; }
   P(L, "There is nothing further for these eyes to become.", "n");
 }
 /* the eye grows on its own when the life is hard enough */
@@ -13148,6 +13161,10 @@ function eyeTick(c, L) {
   if (!e.mangekyo && !e.rinnegan && e.lv < 3 && c.age >= (e.lv ? 6 : 8) && c.stats.gen >= EYE_GEN_AT[e.lv] && e.lastAt !== c.age && roll(e.lv ? 60 : 45)) eyeAwaken(c, L, { k: "mastery" });
   /* the Mangekyo does not come from winning — and hatred brings it sooner */
   if (e.lv >= 3 && !e.mangekyo && !e.rinnegan && (c.lostSomeone || 0) > 0 && e.lastAt !== c.age && roll(cl(22 + e.heart / 4, 10, 48))) mangekyoOpen(c, L, { k: "grief" });
+  /* cells that took and did nothing, until they did */
+  if (e.mangekyo && !e.rinnegan && c.senjuCells && c.age > c.senjuCells && !c.eyeAwake && roll(c.age >= 50 ? 30 : 8)) rinneganOpen(c, L, "late");
+  /* the Sage's chakra finds an Uchiha strong enough to carry it */
+  if (e.mangekyo && !e.rinnegan && power(c) >= 85 && e.lastAt !== c.age && !c.eyeAwake && roll(3)) rinneganOpen(c, L, "sage");
   /* with both eyes open long enough, the giant stands up */
   if (e.mangekyo && !c.jutsu.includes("Susanoo") && e.mkAt !== c.age && !c.eyeAwake && c.stats.gen >= 55 && roll(14)) {
     c.jutsu.push("Susanoo");
@@ -13165,6 +13182,235 @@ function eyeTick(c, L) {
       if (e.blind >= 100 && !e.blindDone) { e.blindDone = true; c.stats.gen = cl(c.stats.gen - 20); addTitle(c, "Went blind"); P(L, "It is dark now. You can still fight — you have been fighting by sound for two years — but the eyes are finished.", "b"); }
     }
   }
+}
+
+/* ============================ ALL FIVE, AND THREE AT ONCE ============================
+   Every body can take two natures. Past that it is rank, an eye that reads them, or years of
+   raw work: Ninjutsu, Chakra and Control high enough to hold one more without it tearing. The
+   Rinnegan and Six Paths chakra hold all five by nature. Hold fire, wind and earth at once and
+   you can try to force them into one shape: the Kekkei Tota. */
+const baseNatures = (c) => (c.natures || []).filter((n) => NATURES.includes(n)).length;
+const NATURE_TIERS = {
+  3: { why: "jonin rank, or Ninjutsu 50", ok: (c) => c.rank >= 4 || c.stats.nin >= 50, now: (c) => "Ninjutsu " + c.stats.nin + "/50" },
+  4: { why: "Kage rank, a three-tomoe Sharingan, or Ninjutsu 65 and Chakra 55", ok: (c) => c.rank >= 6 || (c.eye && c.eye.t === "Sharingan" && (c.eye.lv || 0) >= 3) || (c.stats.nin >= 65 && c.stats.cha >= 55),
+    now: (c) => "Ninjutsu " + c.stats.nin + "/65, Chakra " + c.stats.cha + "/55" },
+  5: { why: "the Rinnegan, Six Paths chakra, or Ninjutsu 80, Chakra 70 and Control 60", ok: (c) => !!(c.eye && c.eye.rinnegan) || !!c.sixPaths || (c.stats.nin >= 80 && c.stats.cha >= 70 && c.stats.con >= 60),
+    now: (c) => "Ninjutsu " + c.stats.nin + "/80, Chakra " + c.stats.cha + "/70, Control " + c.stats.con + "/60" },
+};
+const NATURE_WORD = ["", "first", "second", "third", "fourth", "fifth"];
+function natureLine(c) {
+  const held = baseNatures(c), cap = natureCap(c);
+  const have = (c.natures || []).filter((n) => NATURES.includes(n));
+  if (held >= 5) return "You hold all five: " + joinList(have) + ".";
+  const head = "You hold " + held + " of 5" + (have.length ? " (" + joinList(have) + ")" : "") + ". ";
+  if (held < cap) return head + "Your body can take a " + NATURE_WORD[held + 1] + " now — it is a year's work and it does not always take.";
+  const t = NATURE_TIERS[held + 1];
+  return head + "A " + NATURE_WORD[held + 1] + " needs " + t.why + " (" + t.now(c) + ").";
+}
+/* the Rinnegan does not learn the five. it simply has them. */
+function natureAll(c, L, why) {
+  const add = NATURES.filter((n) => !(c.natures || []).includes(n));
+  if (!add.length) return;
+  c.natures = (c.natures || []).concat(add);
+  addTitle(c, "Master of Five Natures");
+  P(L, (why || "All five natures answer you now.") + " " + joinList(add) + " Release " + (add.length === 1 ? "is" : "are") + " yours.", "e");
+}
+const KEKKEI_TOTA = [
+  { n: "Dust Release", of: ["Fire", "Wind", "Earth"], need: { nin: 70, cha: 60, con: 60 }, v: "iwa", teach: ["onoki", "mu"],
+    d: "Fire, wind and earth held in one shape at once. What it touches is taken apart, down to nothing at all.",
+    j: ["Dust Style: Particle Cube", "Dust Style: Primitive World", "Dust Style: Detachment of the Primitive World"] },
+];
+if (!MOVES["Dust Style: Particle Cube"]) MOVES["Dust Style: Particle Cube"] = { name: "Dust Style: Particle Cube", tier: 4, kind: "nin", nature: "Dust Release", pow: 104, cost: 30, eff: null, seals: 4 };
+const totaTeacher = (c, k) => (!c.rogue && c.village === k.v ? k.teach.find((id) => NAMED[id] && (c.roster || []).includes(id) && !isGone(c, id)) || null : null);
+function totaOdds(c, k) {
+  if (k.of.some((n) => !(c.natures || []).includes(n))) return 0;
+  const over = Object.entries(k.need).reduce((a, [s, v]) => a + (c.stats[s] - v), 0);
+  return Math.round(cl(12 + over * 0.7 + (totaTeacher(c, k) ? 25 : 0) + (c.polymath ? 10 : 0) + (c.totaTries || 0) * 4, 3, 85));
+}
+/* a moment that is not an eye still gets the same screen */
+function powerShow(c, a) { a.y = c.year; a.age = c.age; c.eyeAwake = a; }
+function totaForge(c, L, name) {
+  const k = KEKKEI_TOTA.find((x) => x.n === name);
+  if (!k) return;
+  if ((c.natures || []).includes(k.n)) { P(L, k.n + " is already yours.", "n"); return; }
+  const miss = k.of.filter((x) => !(c.natures || []).includes(x));
+  if (miss.length) { P(L, "Three at once means holding all three. You would need " + joinList(miss) + " first.", "b"); return; }
+  const t = totaTeacher(c, k);
+  if (!roll(totaOdds(c, k))) {
+    const d = rr(6, 16);
+    c.health = cl(c.health - d);
+    c.totaTries = (c.totaTries || 0) + 1;
+    P(L, pick([
+      "The three would not hold one shape. The cube came apart in your hands and took a strip of skin with it.",
+      "Fire and earth held. Wind slipped, and the whole thing went off sideways into a hillside that is not there any more.",
+      "A season of trying to keep three natures in one breath. Closer than last time. Not close enough.",
+    ]) + (t ? " " + NAMED[t].name + " watched, and said it was closer than they had been at your age." : "") + " −" + d + " health.", "b");
+    return;
+  }
+  c.natures.push(k.n);
+  c.tota = k.n;
+  k.j.forEach((j) => { if (MOVES[j] && !c.jutsu.includes(j)) c.jutsu.push(j); });
+  c.stats.nin = cl(c.stats.nin + 8); c.stats.con = cl(c.stats.con + 6);
+  addTitle(c, "Kekkei Tota: " + k.n);
+  const story = (t ? NAMED[t].name + " stood over you for the last of it. " : "") + "Fire, wind and earth stop being three things. For a moment there is a small, bright cube between your hands, and then there is nothing where the boulder was — not rubble, not dust, nothing.";
+  P(L, story, "e");
+  newsItem(c, c.name + " has been seen using " + k.n + ". It is a Kekkei Tota, three natures at once, and the list of people who have ever held one is very short.", "BINGO BOOK", true);
+  chron(c, { txt: c.name + " forged the Kekkei Tota " + k.n + " out of fire, wind and earth.", cat: "legend", big: true, line: c.name });
+  powerShow(c, { stage: "tota", nat: k.of, head: "THREE BECOME ONE", title: "Kekkei Tota: " + k.n, story, gains: [["Ninjutsu", 8], ["Control", 6]], unlock: k.j.slice(), next: "There is nothing past this but the Kekkei Mora, and nobody alive holds one.", btn: "HOLD IT", btn2: null, dh: 0, k: "tota" });
+}
+
+/* ============================ THE UCHIHA PAST THE MANGEKYO ============================
+   Three roads to the Rinnegan for an Uchiha: Senju cells (which sometimes take, and then wait
+   for decades the way Madara's did), or the Sage's chakra finding an Uchiha strong enough and
+   close enough to death. And past the Rinnegan, the Rinne Sharingan: the Ten-Tails' eye, for
+   whoever holds all nine beasts at once, or the God Tree's fruit. */
+if (!MOVES.Amenotejikara) MOVES.Amenotejikara = { name: "Amenotejikara", tier: 6, kind: "buff", nature: null, pow: 0, cost: 30, eff: "evade", seals: 0 };
+const rinCellOdds = (c) => Math.round(cl(15 + (power(c) - 75) * 2 + (c.eye && c.eye.eternal ? 20 : 0), 3, 65));
+function rinneganOpen(c, L, how) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.rinnegan || c.alive === false) return false;
+  e.rinnegan = true; e.blind = 0; e.rinFrom = how; e.lastAt = c.age;
+  if (!e.paths || !e.paths.length) e.paths = ["deva"];
+  const grant = how === "sage" ? ["Amenotejikara", "Almighty Push", "Chibaku Tensei"] : ["Almighty Push", "Universal Pull", "Chibaku Tensei"];
+  grant.forEach((j) => { if (MOVES[j] && !c.jutsu.includes(j)) c.jutsu.push(j); });
+  c.stats.nin = cl(c.stats.nin + 12); c.stats.cha = cl(c.stats.cha + 10);
+  addTitle(c, "Rinnegan");
+  natureAll(c, L, "The rings go all the way down.");
+  const story = how === "sage"
+    ? "Somewhere between one heartbeat and the next, an old man with horns and a staff stands over you and puts half of something into your open hand. When you wake, one eye has rings in it, and six tomoe."
+    : how === "late"
+    ? "Years after the Senju cells went in and did nothing, you wake one morning and the red is gone. Rings, like a stone dropped into still water. Madara waited most of his life for the same thing."
+    : "The Senju cells take. The red drains out of your eyes and rings spread through them like a stone dropped into still water. Four people in history have looked out through these.";
+  P(L, story, "e");
+  newsItem(c, c.name + " has been seen with the Rinnegan. An Uchiha with those eyes is the thing every village has a contingency for and none of them think will work.", "BINGO BOOK", true);
+  chron(c, { txt: c.name + " awakened the Rinnegan" + (how === "sage" ? ", touched by the Sage of Six Paths" : how === "late" ? ", years after the Senju cells" : " through Senju cells") + ".", cat: "legend", big: true, line: c.name });
+  eyeShow(c, { stage: "rin", lv: 3, mk: null, k: how, uchiha: true, head: "THE EYE OF THE SAGE", title: "Rinnegan", story, gains: [["Ninjutsu", 12], ["Chakra", 10]], unlock: grant.concat(["All five natures"]), btn: how === "sage" ? "TAKE WHAT HE GAVE YOU" : "STAND UP", btn2: null, dh: 0 });
+  return true;
+}
+const beastsHeld = (c) => {
+  const s = new Set();
+  (c.beastsSealed || []).forEach((n) => { const b = BEASTS.find((x) => x.name === n); if (b) s.add(b.id); });
+  if (c.beast) s.add(c.beast.id);
+  if (c.akatsuki && c.world) (c.world.akTaken || []).forEach((id) => s.add(id));
+  return s.size;
+};
+const rinneReady = (c) => !!(c.eye && c.eye.t === "Sharingan" && c.eye.rinnegan && !c.eye.rinne && (beastsHeld(c) >= 9 || c.fruit));
+function rinneOpen(c, L, force) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.rinne || (!force && !rinneReady(c))) return false;
+  e.rinne = true; e.rinnegan = true; e.blind = 0; e.lastAt = c.age;
+  c.sixPaths = true; c.tenTails = true;
+  const grant = ["Infinite Tsukuyomi", "Rinne Sharingan: Reflection", "Truth-Seeking Orbs", "Six Paths Sage Mode"];
+  grant.forEach((j) => { if (MOVES[j] && !c.jutsu.includes(j)) c.jutsu.push(j); });
+  c.stats.nin = cl(c.stats.nin + 20); c.stats.cha = cl(c.stats.cha + 22); c.stats.gen = cl(c.stats.gen + 20);
+  natureAll(c, L);
+  addTitle(c, "Jinchuriki of the Ten-Tails"); addTitle(c, "Rinne Sharingan");
+  const story = c.fruit && beastsHeld(c) < 9
+    ? "You eat the fruit of the God Tree. A third eye opens in the middle of your forehead, red and ringed, with nine tomoe on the rings. Somewhere very far above you the moon looks back."
+    : "All nine go into you at once, and what comes out the other side is the Ten-Tails with your face on it. A third eye opens in your forehead: red, ringed, nine tomoe. The moon is very close tonight.";
+  P(L, story, "e");
+  newsItem(c, "Every sensor in every village registered the same thing on the same night. The Ten-Tails has a jinchuriki, and the jinchuriki is " + c.name + ".", "THE BEASTS", true);
+  chron(c, { txt: c.name + " became the jinchuriki of the Ten-Tails and opened the Rinne Sharingan.", cat: "legend", big: true, line: c.name });
+  eyeShow(c, { stage: "rinne", lv: 3, mk: null, k: "rinne", head: "THE EYE OF THE TEN-TAILS", title: "Rinne Sharingan", story, gains: [["Ninjutsu", 20], ["Chakra", 22], ["Genjutsu", 20]], unlock: grant, btn: "LOOK UP AT THE MOON", btn2: null, dh: 0 });
+  return true;
+}
+
+/* ============================ THE NINE, BY NAME ============================ */
+const vNameOf = (vid) => (VILLAGES.find((v) => v.id === vid) || {}).name || "no village";
+const tailsWord = (n) => ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"][n] + "-Tails";
+/* where a beast is right now: in a person, loose, in the statue, or in you */
+function beastWhere(c, b) {
+  if (yoursBeast(c, b.id) || (c.beastsSealed || []).includes(b.name)) return { k: "yours", t: "Yours" };
+  if (c.world && (c.world.akTaken || []).includes(b.id)) return { k: "statue", t: "In the Akatsuki's statue" };
+  const h = c.world && c.world.hosts ? c.world.hosts[b.id] : null;
+  if (h && h.alive !== false && h.name && !h.loose) return { k: "host", t: vNameOf(h.village || b.v) + " · host: " + h.name, host: h.name, vid: h.village || b.v };
+  return { k: "loose", t: "Loose — no host, somewhere in the " + ((VILLAGES.find((v) => v.id === b.v) || {}).land || "wild"), vid: b.v };
+}
+
+/* ============================ YOUR WAY ============================
+   Two long roads a life can be pointed down. Each is a ladder of things the game already
+   tracks, a reward at every rung, and one fight at the top that nobody can do for you. */
+const legendaryPower = (c) => !!(c.sage || (c.gates || 0) >= 6 || (c.eye && (c.eye.mangekyo || c.eye.rinnegan || c.eye.tenseigan)) || (c.beast && (c.beast.stage || 0) >= 4) || c.tota || c.sixPaths || c.curse === 2);
+function strongestAlive(c) {
+  /* the same names the Bingo Book would show: nobody from an age that has not come, nobody already beaten, nobody pulled back from the dead */
+  return (c.roster || []).filter((id) => NAMED[id] && !isGone(c, id) && !isPlayerNamed(c, id) && (namedAge(c, id) == null || namedAge(c, id) >= 14)
+    && !(c.defeated || []).includes(NAMED[id].name) && (NAMED_ERA[id] === undefined || NAMED_ERA[id] <= eraIndex(c)) && !/Reanimated/.test(NAMED[id].title || ""))
+    .sort((a, b) => NAMED[b].lvl - NAMED[a].lvl)[0] || null;
+}
+function kageTargets(c) {
+  return VILLAGES.filter((v) => villageExists(c, v.id)).map((v) => {
+    const ln = c.line && c.line[v.id];
+    const id = ln && ln.current && ln.current.id;
+    if (!id || !NAMED[id] || isGone(c, id) || isPlayerNamed(c, id)) return null;
+    return { vid: v.id, id, name: NAMED[id].name, title: ((c.kages || {})[v.id] || {}).title || "Kage", village: v.name };
+  }).filter(Boolean);
+}
+const WAYS = {
+  strongest: { n: "The Strongest Shinobi", tag: "THE WAY OF THE STRONGEST", col: "#e2b553",
+    d: "Not the Kage, not the richest, not the most loved. The one nobody alive can beat.",
+    steps: [
+      { id: "s1", n: "Stand out from your year", d: "Power 45.", ok: (c) => power(c) >= 45, now: (c) => "power " + power(c) + "/45", gain: { tai: 3, nin: 3 } },
+      { id: "s2", n: "Three natures", d: "Hold three chakra natures.", ok: (c) => baseNatures(c) >= 3, now: (c) => baseNatures(c) + "/3", gain: { nin: 4, cha: 3 } },
+      { id: "s3", n: "A name in the book", d: "Kill someone the Bingo Book lists by name.", ok: (c) => (c.legendaryKills || []).length >= 1, now: (c) => (c.legendaryKills || []).length + "/1", gain: { spd: 4, str: 3 } },
+      { id: "s4", n: "A power nobody teaches", d: "Sage Mode, the Sixth Gate, a Mangekyo or Rinnegan, a beast you can talk to, a Kekkei Tota, or the Curse Mark's second state.", ok: legendaryPower, now: () => "", gain: { cha: 6, con: 4 } },
+      { id: "s5", n: "All five natures", d: "Hold every chakra nature.", ok: (c) => baseNatures(c) >= 5, now: (c) => baseNatures(c) + "/5", gain: { nin: 6, con: 4 } },
+      { id: "s6", n: "Power 90", d: "Strong enough that the top of the Bingo Book is a list of people you could beat.", ok: (c) => power(c) >= 90, now: (c) => "power " + power(c) + "/90", gain: { tai: 4, nin: 4, gen: 4 } },
+      { id: "s7", n: "Beat the strongest alive", d: "Challenge whoever stands highest in the Bingo Book, in front of witnesses, and win.", ok: (c) => !!(c.way && c.way.top), now: () => "", final: true },
+    ] },
+  rogue: { n: "The Missing-Nin", tag: "THE WAY OF THE MISSING-NIN", col: "#e0313a",
+    d: "No village, no orders, no one to answer to. A name every village keeps a page for.",
+    steps: [
+      { id: "r1", n: "Cut the headband", d: "Leave your village, or your clan, and go.", ok: (c) => !!c.rogue, now: () => "", gain: { spd: 3, tai: 2 } },
+      { id: "r2", n: "Outlive the hunter-nin", d: "Survive three hunter-nin teams sent after you.", ok: (c) => (c.huntersBeaten || 0) >= 3, now: (c) => (c.huntersBeaten || 0) + "/3", gain: { spd: 4, int: 3 } },
+      { id: "r3", n: "A page in the Bingo Book", d: "Reach A-rank: infamy 60.", ok: (c) => (c.infamy || 0) >= 60, now: (c) => "infamy " + (c.infamy || 0) + "/60", gain: { nin: 3, gen: 3 } },
+      { id: "r4", n: "Take a famous head", d: "Kill someone the Bingo Book lists by name.", ok: (c) => (c.legendaryKills || []).length >= 1, now: (c) => (c.legendaryKills || []).length + "/1", gain: { str: 4, tai: 3 } },
+      { id: "r5", n: "Under a cloak", d: "Join the Akatsuki, or an organisation of your own choosing.", ok: (c) => !!(c.akatsuki || c.org), now: () => "", gain: { cha: 4, int: 3 } },
+      { id: "r6", n: "S-rank", d: "Flee on sight. Infamy 80.", ok: (c) => (c.infamy || 0) >= 80, now: (c) => "infamy " + (c.infamy || 0) + "/80", gain: { nin: 5, spd: 4 } },
+      { id: "r7", n: "A Kage's head", d: "Walk into a village and kill the one wearing the hat.", ok: (c) => !!(c.way && c.way.kage), now: () => "", final: true },
+    ] },
+};
+function wayChoose(c, L, id) {
+  const w = WAYS[id];
+  if (!w) return;
+  const prev = c.way && c.way.id !== id ? c.way : null;
+  c.way = { id, since: c.year, done: {}, top: null, kage: null };
+  P(L, prev ? "You turned off the road you were on. " + w.n + ": " + w.d : "You have decided what this life is for. " + w.n + ": " + w.d, "e");
+  wayTick(c, L);
+}
+/* the ladder is checked every year and every time something big happens */
+function wayTick(c, L) {
+  const W = c.way && WAYS[c.way.id];
+  if (!W || c.alive === false) return;
+  if (!c.way.done) c.way.done = {};
+  for (const s of W.steps) {
+    if (c.way.done[s.id]) continue;
+    if (s.final) break;
+    if (!s.ok(c)) break;
+    c.way.done[s.id] = c.year;
+    const g = Object.entries(s.gain || {});
+    g.forEach(([k, n]) => { c.stats[k] = cl(c.stats[k] + n); });
+    P(L, W.tag.charAt(0) + W.tag.slice(1).toLowerCase() + " — " + s.n + ". " + g.map(([k, n]) => "+" + n + " " + (EYE_STAT_WORD[k] || k)).join(", ") + ".", "e");
+  }
+}
+const wayReady = (c) => { const W = c.way && WAYS[c.way.id]; return !!W && W.steps.filter((s) => !s.final).every((s) => c.way.done && c.way.done[s.id]); };
+function wayFinish(c, L, id, who) {
+  const W = WAYS[id];
+  if (!c.way || c.way.id !== id) c.way = { id, since: c.year, done: {} };
+  c.way.done = c.way.done || {};
+  c.way.done[id === "strongest" ? "s7" : "r7"] = c.year;
+  c.way.finished = c.year;
+  const strongest = id === "strongest";
+  addTitle(c, strongest ? "The Strongest Shinobi Alive" : "The Shadow Over the Five Villages");
+  STAT_KEYS.forEach(([k]) => { c.stats[k] = cl(c.stats[k] + 3); });
+  const story = strongest && !who
+    ? "There is nobody left alive in the Bingo Book who could stand in front of you, and every village has worked that out on its own. Nobody alive stands above you now."
+    : strongest
+    ? "You beat " + who + " in front of people who will spend the rest of their lives describing it. Nobody alive stands above you now. The Bingo Book moves your page to the front and leaves the line under your name blank."
+    : who + " is dead in their own office, under their own portrait, and you walked out the way you came in. Every village has a page for you now, and every one of them says the same thing at the top.";
+  P(L, story, "e");
+  newsItem(c, strongest && !who ? "No village will put a name forward against " + c.name + " any more. The Bingo Book has stopped printing a rank on that page." : strongest ? c.name + " has beaten " + who + ". There is a new name at the top of every list that ranks shinobi, and it is not a Kage." : c.name + " has killed " + who + ". A Kage, in their own village, by a missing-nin who was not stopped at the gate.", strongest ? "BINGO BOOK" : "OBITUARIES", true);
+  chron(c, { txt: strongest && !who ? c.name + " was called the strongest shinobi alive, with nobody left to dispute it." : strongest ? c.name + " beat " + who + " and was called the strongest shinobi alive." : c.name + ", a missing-nin, killed " + who + " in their own village.", cat: "legend", big: true, line: c.name });
+  powerShow(c, { stage: "way", way: id, head: W.tag, title: strongest ? "The Strongest Shinobi Alive" : "The Shadow Over the Five Villages", story, gains: [["to every stat", 3]], unlock: [strongest ? "Title: The Strongest Shinobi Alive" : "Title: The Shadow Over the Five Villages"], next: strongest ? "Stay there. Everybody who has ever held this has been challenged for it." : "There is no next. There is only who comes for you.", btn: strongest ? "STAY ON TOP" : "WALK OUT", btn2: null, dh: 0, k: "way" });
 }
 
 /* ============================ THE OTHER THREE DISCIPLINES ============================ */
@@ -15135,15 +15381,15 @@ function eyePatternNodes(id) {
   /* black / Amaterasu, and the default for an eye whose power was never recorded */
   return (<g>{rot(3, () => <path d="M0 -14 C24 -30 32 -58 14 -86 C48 -64 50 -26 12 -5 Z" fill={k} />)}<circle r="19" fill={k} /></g>);
 }
-function SharinganEye({ lv = 1, mk = null, stage = "", size = 280, intro = false }) {
+function SharinganEye({ lv = 1, mk = null, stage = "", size = 280, intro = false, uchiha = false }) {
   const uid = useRef("se" + Math.random().toString(36).slice(2, 8)).current;
-  const rin = stage === "rin";
-  const dormant = !rin && !mk && !lv && stage !== "mk" && stage !== "emk";
-  const isMk = !rin && (stage === "mk" || stage === "emk" || stage === "sus" || !!mk);
+  const rin = stage === "rin", rinne = stage === "rinne", ringed = rin || rinne;
+  const dormant = !ringed && !mk && !lv && stage !== "mk" && stage !== "emk";
+  const isMk = !ringed && (stage === "mk" || stage === "emk" || stage === "sus" || !!mk);
   const fresh = intro && /^t[123]$/.test(stage);
   const burn = fresh ? lv - 1 : -1;
   const iris = rin ? ["#e9e1fb", "#b4a3dd", "#7a69a8", "#3e3260"] : dormant ? ["#4a2a22", "#2a1712", "#170b08", "#0b0504"] : ["#ff4b3e", "#d3141d", "#7b070d", "#3c0306"];
-  const tomoeN = isMk ? (intro && stage === "mk" ? 3 : 0) : rin || dormant ? 0 : Math.min(3, lv);
+  const tomoeN = isMk ? (intro && stage === "mk" ? 3 : 0) : ringed || dormant ? 0 : Math.min(3, lv);
   return (
     <div className={"eye-root" + (intro ? " eye-intro" : "")} style={{ position: "relative", width: size, height: size }} data-stage={stage || "t" + lv}>
       <div className="eye-glow" aria-hidden style={{ position: "absolute", inset: "-22%", borderRadius: "50%", background: "radial-gradient(circle, " + (rin ? "rgba(167,139,250,.5)" : dormant ? "rgba(120,40,30,.22)" : "rgba(225,25,35,.5)") + " 0%, " + (rin ? "rgba(120,90,200,.18)" : "rgba(150,8,18,.2)") + " 40%, transparent 68%)" }} />
@@ -15156,14 +15402,21 @@ function SharinganEye({ lv = 1, mk = null, stage = "", size = 280, intro = false
           </defs>
           <circle r="97" fill="#0b0203" stroke={rin ? "#2b2140" : "#2a0507"} strokeWidth="3" />
           <circle r="88" fill={"url(#" + uid + ")"} />
-          {rin ? [16, 31, 46, 61, 76].map((r) => <circle key={r} r={r} fill="none" stroke="#2b2140" strokeWidth="2.4" />)
+          {ringed ? [16, 31, 46, 61, 76].map((r) => <circle key={r} r={r} fill="none" stroke={rinne ? "#2a0507" : "#2b2140"} strokeWidth="2.4" />)
             : !isMk && <circle r="58" fill="none" stroke={dormant ? "rgba(0,0,0,.35)" : "rgba(25,0,2,.55)"} strokeWidth="1.6" />}
-          <circle r={rin ? 7 : 17} fill="#060203" />
+          <circle r={ringed ? 7 : 17} fill="#060203" />
           <ellipse cx="-34" cy="-40" rx="17" ry="8" fill="rgba(255,255,255,.16)" transform="rotate(-32 -34 -40)" />
         </svg>
         {tomoeN > 0 && (
           <div className={"eye-ring " + (stage === "mk" && intro ? "eye-merge" : intro ? "eye-spinin" : "eye-spin")} style={{ position: "absolute", inset: 0 }}>
             <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>{eyeTomoeNodes(tomoeN, burn)}</svg>
+          </div>
+        )}
+        {(rinne || (rin && uchiha)) && (
+          <div className={"eye-ring " + (intro ? "eye-bloom eye-bloom-now" : "eye-spin-slow")} style={{ position: "absolute", inset: 0 }}>
+            <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+              {rinne ? [eyeTomoeRing(3, 31, 0.5, 0, "a"), eyeTomoeRing(3, 46, 0.55, 40, "b"), eyeTomoeRing(3, 61, 0.6, 80, "c")] : [eyeTomoeRing(3, 31, 0.5, 0, "a"), eyeTomoeRing(3, 46, 0.55, 60, "b")]}
+            </svg>
           </div>
         )}
         {isMk && (
@@ -15178,22 +15431,110 @@ function SharinganEye({ lv = 1, mk = null, stage = "", size = 280, intro = false
     </div>
   );
 }
+/* tomoe at any radius: the Uchiha Rinnegan carries six, the Rinne Sharingan nine */
+function eyeTomoeRing(n, r, scale, offset, key) {
+  return Array.from({ length: n }, (_, i) => (
+    <g key={key + i} transform={"rotate(" + (offset + (i * 360) / n) + ") translate(0 " + -r + ") scale(" + scale + ")"}>
+      <path d={EYE_TOMOE_PATH} fill="#0a0203" />
+    </g>
+  ));
+}
+/* the centrepiece for a moment that is not an eye: three natures made one, all five held, or the top of a Way */
+function PowerEmblem({ stage, nat, way, size = 280, intro = false }) {
+  const col = (n) => NC[n] || "#c9c2a8";
+  const glow = stage === "way" ? (way === "rogue" ? "rgba(224,49,58,.5)" : "rgba(226,181,83,.5)") : stage === "five" ? "rgba(140,190,255,.42)" : "rgba(215,205,170,.45)";
+  let body = null;
+  if (stage === "tota") {
+    const three = nat && nat.length ? nat : ["Fire", "Wind", "Earth"];
+    body = (
+      <>
+        <div className={"eye-ring " + (intro ? "eye-spinin" : "eye-spin")} style={{ position: "absolute", inset: 0 }}>
+          <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+            {three.map((n, i) => (
+              <g key={n} transform={"rotate(" + i * 120 + ")"}>
+                <circle cy="-62" r="15" fill={col(n)} opacity=".9" />
+                <circle cy="-62" r="23" fill="none" stroke={col(n)} strokeWidth="1.5" opacity=".5" />
+              </g>
+            ))}
+            <circle r="62" fill="none" stroke="rgba(255,255,255,.18)" strokeWidth="1" strokeDasharray="3 5" />
+          </svg>
+        </div>
+        <div className={"eye-ring " + (intro ? "eye-bloom eye-bloom-now" : "eye-spin-slow")} style={{ position: "absolute", inset: 0 }}>
+          <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+            <polygon points="0,-30 26,-15 26,15 0,30 -26,15 -26,-15" fill="rgba(245,240,225,.16)" stroke="#f3eedf" strokeWidth="2" />
+            <polygon points="0,-30 26,-15 0,0 -26,-15" fill="rgba(255,255,255,.32)" />
+            <polygon points="0,0 26,-15 26,15 0,30" fill="rgba(255,255,255,.12)" />
+            <line x1="0" y1="0" x2="0" y2="30" stroke="#f3eedf" strokeWidth="1.4" />
+            <line x1="0" y1="0" x2="-26" y2="-15" stroke="#f3eedf" strokeWidth="1.4" />
+            <line x1="0" y1="0" x2="26" y2="-15" stroke="#f3eedf" strokeWidth="1.4" />
+          </svg>
+        </div>
+      </>
+    );
+  } else if (stage === "five") {
+    const pts = NATURES.map((n, i) => { const a = (-90 + i * 72) * Math.PI / 180; return [Math.cos(a) * 64, Math.sin(a) * 64, n]; });
+    const star = [0, 2, 4, 1, 3, 0].map((i) => pts[i][0].toFixed(1) + "," + pts[i][1].toFixed(1)).join(" ");
+    body = (
+      <div className={"eye-ring " + (intro ? "eye-spinin" : "eye-spin-slow")} style={{ position: "absolute", inset: 0 }}>
+        <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+          <circle r="80" fill="rgba(10,14,26,.85)" stroke="rgba(255,255,255,.14)" strokeWidth="2" />
+          <polyline points={star} fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1.6" />
+          {pts.map(([x, y, n]) => <g key={n}><circle cx={x} cy={y} r="15" fill={col(n)} /><circle cx={x} cy={y} r="21" fill="none" stroke={col(n)} strokeWidth="1.2" opacity=".55" /></g>)}
+          <circle r="9" fill="#f3eedf" />
+        </svg>
+      </div>
+    );
+  } else {
+    const rogue = way === "rogue";
+    body = (
+      <div className={"eye-ring " + (intro ? "eye-bloom eye-bloom-now" : "eye-spin-slow")} style={{ position: "absolute", inset: 0 }}>
+        <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+          {rogue ? (
+            <g>
+              <rect x="-74" y="-30" width="148" height="60" rx="9" fill="#8d96a3" stroke="#3a3f47" strokeWidth="3" />
+              <rect x="-66" y="-22" width="132" height="44" rx="6" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="1.2" />
+              <circle r="15" fill="none" stroke="#3a3f47" strokeWidth="4" />
+              <line x1="-82" y1="-8" x2="82" y2="10" stroke="#e0313a" strokeWidth="6" strokeLinecap="round" />
+            </g>
+          ) : (
+            <g>
+              {Array.from({ length: 8 }, (_, i) => <path key={i} d="M0 -86 L11 -30 L0 -22 L-11 -30 Z" fill="#e2b553" transform={"rotate(" + i * 45 + ")"} />)}
+              <circle r="34" fill="#160f05" stroke="#e2b553" strokeWidth="4" />
+              <circle r="20" fill="none" stroke="#e2b553" strokeWidth="2" opacity=".7" />
+              <circle r="7" fill="#e2b553" />
+            </g>
+          )}
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <div className={"eye-root" + (intro ? " eye-intro" : "")} style={{ position: "relative", width: size, height: size }} data-stage={stage}>
+      <div className="eye-glow" aria-hidden style={{ position: "absolute", inset: "-22%", borderRadius: "50%", background: "radial-gradient(circle, " + glow + " 0%, transparent 66%)" }} />
+      <div className="eye-lids" style={{ position: "absolute", inset: 0 }}>{body}</div>
+    </div>
+  );
+}
 function EyeAwakening({ a, onChoose }) {
   const [skip, setSkip] = useState(false);
   const rin = a.stage === "rin";
-  const col = rin ? "#b49bff" : "#e0313a";
+  const emblem = a.stage === "tota" || a.stage === "five" || a.stage === "way";
+  const gold = a.stage === "tota" || (a.stage === "way" && a.way !== "rogue");
+  const col = rin ? "#b49bff" : gold ? "#e2b553" : a.stage === "five" ? "#8cbfff" : "#e0313a";
+  const btnBg = rin ? "linear-gradient(180deg,#8b6fe0,#5b43a8)" : gold ? "linear-gradient(180deg,#e2b553,#9a7420)" : a.stage === "five" ? "linear-gradient(180deg,#5b8de0,#2f5aa8)" : "linear-gradient(180deg,#e3343d,#a3111b)";
   const gains = (a.gains || []).map(([w, n]) => "+" + n + " " + w).join(", ");
   const d = (s) => ({ animationDelay: s + "s" });
   return (
     <div className={"fixed inset-0 z-50 eye-aw" + (skip ? " eye-skip" : "")} role="dialog" aria-modal="true" aria-label={a.title} data-stage={a.stage}
       onClick={(ev) => { if (!ev.target.closest || !ev.target.closest("button")) setSkip(true); }}
       style={{ zIndex: 90, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "max(28px, env(safe-area-inset-top)) 16px 30px",
-        background: "radial-gradient(ellipse at 50% 34%, " + (rin ? "#120b22" : "#1c0306") + " 0%, #050102 52%, #000 100%)" }}>
+        background: "radial-gradient(ellipse at 50% 34%, " + (rin ? "#120b22" : gold ? "#1a1305" : a.stage === "five" ? "#0a1222" : "#1c0306") + " 0%, #050102 52%, #000 100%)" }}>
       <div className="eye-flash" aria-hidden style={{ background: "radial-gradient(circle at 50% 36%, " + (rin ? "rgba(170,140,255,.45)" : "rgba(255,40,40,.5)") + ", transparent 62%)" }} />
       <div style={{ margin: "auto 0", width: "100%", maxWidth: 540, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
         <div className="eye-t" style={{ color: col, fontSize: 11, letterSpacing: ".42em", fontWeight: 800, ...d(0.1) }}>{a.head}</div>
         <div style={{ margin: "22px 0 18px" }}>
-          <SharinganEye lv={a.lv} mk={a.mk} stage={a.stage} size="min(300px, 66vw)" intro />
+          {emblem ? <PowerEmblem stage={a.stage} nat={a.nat} way={a.way} size="min(300px, 66vw)" intro />
+            : <SharinganEye lv={a.lv} mk={a.mk} stage={a.stage} uchiha={!!a.uchiha} size="min(300px, 66vw)" intro />}
         </div>
         <div className="eye-t eye-title" style={{ fontFamily: SERIF, fontSize: "clamp(27px, 6.4vw, 40px)", lineHeight: 1.1, fontWeight: 700, color: "#f4ede6", textShadow: "0 0 34px " + col + "66", ...d(1.7) }}>{a.title}</div>
         <div className="eye-t" style={{ color: "#cbc1b8", fontFamily: SERIF, fontSize: 15.5, lineHeight: 1.6, marginTop: 12, ...d(2.05) }}>
@@ -15208,7 +15549,7 @@ function EyeAwakening({ a, onChoose }) {
         {a.replay && a.choice && <div className="eye-t" style={{ color: "#8f837a", marginTop: 8, fontSize: 12, ...d(2.9) }}>Age {a.age}. You chose: {a.choice}.</div>}
         <div className="eye-t" style={{ marginTop: 26, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, ...d(3.05) }}>
           <button onClick={() => onChoose("main")} className="eye-btn"
-            style={{ background: rin ? "linear-gradient(180deg,#8b6fe0,#5b43a8)" : "linear-gradient(180deg,#e3343d,#a3111b)", color: "#fff", border: "1px solid " + (rin ? "#c4b1ff" : "#ff6a6a"), borderRadius: 10, padding: "13px 38px", fontWeight: 800, fontSize: 14.5, letterSpacing: ".08em", boxShadow: "0 10px 34px " + col + "55" }}>
+            style={{ background: btnBg, color: "#fff", border: "1px solid " + col, borderRadius: 10, padding: "13px 38px", fontWeight: 800, fontSize: 14.5, letterSpacing: ".08em", boxShadow: "0 10px 34px " + col + "55" }}>
             {a.replay ? "CLOSE" : a.btn}
           </button>
           {!a.replay && a.btn2 && (
@@ -15976,6 +16317,7 @@ export default function ShinobiLife() {
       otsutsukiTick(c, L);
       rollTick(c, L);
       eyeTick(c, L);
+      wayTick(c, L);
       checkEpithet(c, L);
       bingoTick(c, L);
       if (!c.kg && !c.myClan && c.age >= 6 && c.age <= 20 && roll(3)) {
@@ -16111,8 +16453,8 @@ export default function ShinobiLife() {
         P(L, "A ring and a black cloak arrived with no messenger. The ring is " + ringR.ring + " and your partner is " + c.akatsuki.partner + ".", "e");
       }
       if (c.rogue && roll(16 + c.infamy / 5)) {
-        if (roll(cl(50 + (power(c) - (30 + c.infamy / 2)) * 2, 10, 95))) { P(L, "Hunter-nin found your camp. You left four bodies and no trail.", "g"); c.kills += rr(2, 5); c.infamy = cl(c.infamy + 6); }
-        else { const d = rr(12, 30); c.health = cl(c.health - d); P(L, "Hunter-nin ambushed you. You escaped, barely. -" + d + " health.", "b"); }
+        if (roll(cl(50 + (power(c) - (30 + c.infamy / 2)) * 2, 10, 95))) { c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin found your camp. You left four bodies and no trail.", "g"); c.kills += rr(2, 5); c.infamy = cl(c.infamy + 6); }
+        else { const d = rr(12, 30); c.health = cl(c.health - d); c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin ambushed you. You escaped, barely. -" + d + " health.", "b"); }
       }
 
       for (let i = 0; i < (c.age < 6 ? 1 : rr(1, 2)); i++) { const p2 = EVENTS.filter((e) => e.c(c)); if (p2.length) pick(p2).f(c, L); }
@@ -17794,13 +18136,7 @@ export default function ShinobiLife() {
     commit((c2, L) => { spend(c2); clearName(c2, L, how); });
   }
   function akatsukiAct(kind) {
-    if (kind === "hunt") {
-      const beastIds = BEASTS.filter((b) => !yoursBeast(c, b.id)).map((b) => b.id);
-      const target = pick(beastIds);
-      startBattle("jin", { type: "akhunt", beast: target }, 0,
-        "Your partner takes the left. The host is somewhere in the town below and the town does not know yet.");
-      setModal(null); return;
-    }
+    if (kind === "hunt") { setModal("akhunt"); return; }
     commit((c, L) => {
       spend(c);
       if (c.akatsuki) c.akatsuki.jobsThisYear = (c.akatsuki.jobsThisYear || 0) + 1;
@@ -19369,6 +19705,7 @@ export default function ShinobiLife() {
         (path.grants || []).forEach((j) => learn(c2, L2, j, null));
         addTitle(c2, path.n);
         if (path.id === "rinnesharingan") addTitle(c2, "Planet Destroyer");
+        if (path.id === "rinnegan" || path.id === "rinnesharingan") natureAll(c2, L2);
         c2.otsu = (c2.otsu || 0) + 8;
         P(L2, "It opened. " + path.n + " — " + path.d, "e");
         newsItem(c2, "Something has been seen with eyes that are not on any clan register in any village. " + (c2.epithet ? cap(c2.epithet) : c2.name) + " is the name attached to the reports.", "BINGO BOOK", true);
@@ -20052,8 +20389,36 @@ export default function ShinobiLife() {
         }
         if (c.broadcast) c.broadcast = null;
       }
+      /* the top of a Way: one fight nobody can do for you */
+      if (ctx.type === "waytop" || ctx.type === "waykage") {
+        spend(c);
+        const nm = NAMED[ctx.id] ? NAMED[ctx.id].name : b.e.name;
+        if (b.win) {
+          c.wins += 1;
+          if (ctx.type === "waytop") {
+            if (!c.way) c.way = { id: "strongest", since: c.year, done: {} };
+            c.way.top = { id: ctx.id, name: nm, y: c.year };
+            c.defeated = (c.defeated || []).concat([nm]).filter((x, i, a) => a.indexOf(x) === i);
+            if (c.rogue) c.infamy = cl(c.infamy + 20); else c.standing = cl(c.standing + 20);
+            wayFinish(c, L, "strongest", nm);
+          } else {
+            c.kills += 1;
+            killNamed(c, ctx.id, L, "was killed in their own office by " + c.name);
+            killFeat(c, L, ctx.id);
+            if (!c.way) c.way = { id: "rogue", since: c.year, done: {} };
+            c.way.kage = { id: ctx.id, name: nm, vid: ctx.vid, y: c.year };
+            c.infamy = cl(c.infamy + 30); c.bingo = "S";
+            wayFinish(c, L, "rogue", nm);
+          }
+        } else {
+          const d = rr(22, 46); c.health = cl(c.health - d);
+          P(L, ctx.type === "waytop" ? nm + " did not need to finish it. They let you walk away, which is its own kind of answer. \u2212" + d + " health." : "You got as far as the office. " + nm + " was waiting. \u2212" + d + " health.", "b");
+          if (c.health <= 0) die(c, L, ctx.type === "waytop" ? "was killed challenging " + nm : "was killed trying to take " + nm + "'s head");
+        }
+      }
       /* the Sharingan is fed in fights: the near-deaths, the first kill, the ones you lose and live */
       eyeBattle(c, L, b, kills0);
+      wayTick(c, L);
       /* the Copy Ninja takes techniques off whoever shows him one */
       if (c.copyNin && b.win && b.e && b.e.moves) {
         const seen = b.e.moves.map((m) => m[0]).filter((n2) => MOVES[n2] && !c.jutsu.includes(n2) && (MOVES[n2].tier || 2) <= (c.eye && c.eye.mangekyo ? 6 : 5));
@@ -20359,7 +20724,7 @@ export default function ShinobiLife() {
         if (b.win) {
           const bd = BEASTS.find((x) => x.id === ctx.beast);
           c.kills += 1; c.infamy = cl(c.infamy + 22); c.ryo += rr(300000, 700000);
-          if (c.akatsuki) c.akatsuki.taken = (c.akatsuki.taken || []).concat([bd ? bd.tails + "-Tails" : "a beast"]);
+          if (c.akatsuki && !(bd && (c.akatsuki.taken || []).some((t) => t.startsWith(bd.tails + "-")))) c.akatsuki.taken = (c.akatsuki.taken || []).concat([bd ? bd.tails + "-Tails (" + bd.name + ", " + vNameOf(ctx.vid || bd.v) + ")" : "a beast"]);
           if (bd && c.world) {
             c.world.akTaken = (c.world.akTaken || []).concat([bd.id]).filter((x, i, a) => a.indexOf(x) === i);
             if (c.world.akTaken.length >= 9) {
@@ -20863,10 +21228,34 @@ export default function ShinobiLife() {
     });
     setModal(null);
   }
+  /* the Akatsuki's hunt: you pick the beast, and the file tells you where it is and who is carrying it */
+  function akHunt(id) {
+    const b = BEASTS.find((x) => x.id === id);
+    if (!b) return;
+    const w = beastWhere(c, b);
+    if (w.k === "statue" || w.k === "yours") return;
+    const vn = vNameOf(w.vid || b.v);
+    startBattle("jin", { type: "akhunt", beast: id, vid: w.vid || b.v }, 0,
+      w.k === "host"
+        ? "The " + tailsWord(b.tails) + " is in " + vn + ", sealed inside " + w.host + ". Your partner takes the left. The town below does not know yet."
+        : "The " + tailsWord(b.tails) + " has no host. " + b.name + " is loose near " + vn + ", and it saw you first.",
+      w.k === "host" ? { name: w.host, title: tailsWord(b.tails) + " jinchuriki of " + vn } : { name: b.name, title: tailsWord(b.tails) + ", loose near " + vn });
+    setModal(null);
+  }
+  /* the top of a Way */
+  function wayFight(kind, id, vid) {
+    if (!NAMED[id]) return;
+    setModal(null);
+    setTimeout(() => startBattle(id, { type: kind === "top" ? "waytop" : "waykage", id, vid }, 0,
+      kind === "top" ? "Witnesses on both sides of the field. " + NAMED[id].name + " has heard why you came and has decided to let you try."
+        : "Past the gate, up the stairs, past two guards who did not get a word out. " + NAMED[id].name + " is behind the desk."), 120);
+  }
+  function wayUi(kind, arg) { commit((c2, L) => { if (kind === "choose") wayChoose(c2, L, arg); if (kind === "leave") { c2.way = null; P(L, "You stopped walking any particular road.", "n"); } if (kind === "claim" && c2.way && wayReady(c2) && !strongestAlive(c2)) { c2.way.top = { id: null, name: null, y: c2.year }; wayFinish(c2, L, "strongest", null); } }); }
+  function totaUi(name) { commit((c2, L) => { spend(c2); totaForge(c2, L, name); }); setModal(null); }
   function huntBeast(id) {
     const b = BEASTS.find((x) => x.id === id);
     startBattle("beastRaw", { type: "mission", key: "S", beastId: id, story: { t: "Sealing " + b.name, pay: [200000, 500000] } }, 0,
-      "You found " + b.name + " \u2014 " + b.t + ".",
+      "You found " + b.name + ", the " + tailsWord(b.tails) + " \u2014 " + b.t + ". " + (beastWhere(c, b).k === "host" ? "Its host is in " + vNameOf(beastWhere(c, b).vid) + "; you went for the beast itself." : ""),
       /* it is the beast standing there, with the beast's own name and tails */
       { name: b.name, title: b.tails + "-Tails" });
     setModal(null);
@@ -20905,8 +21294,13 @@ export default function ShinobiLife() {
         } else { c.health = cl(c.health - rr(8, 20)); P(L, "You reached for a path that did not open. It took something out of you instead.", "b"); }
         return;
       }
-      if (kind === "rinnegan") { if (roll(cl(20 + (power(c) - 80) * 2, 3, 60))) { c.eye.rinnegan = true; addTitle(c, "Rinnegan"); c.eye.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => learn(c, L, j)); c.eye.blind = 0; P(L, "Senju cells took to your Uchiha eyes. Ripples spread across both irises.", "e");
-        if (c.eye.t === "Sharingan") eyeShow(c, { stage: "rin", lv: 3, mk: null, k: "rinnegan", head: "THE EYE OF THE SAGE", title: "Rinnegan", story: "The Senju cells take. The red drains out of your eyes and rings spread through them like a stone dropped into still water. Four people in history have looked out through these.", gains: [], unlock: ["Almighty Push", "Universal Pull", "Chibaku Tensei"], btn: "STAND UP", btn2: null, dh: 0 }); } else { c.health = cl(c.health - rr(15, 30)); P(L, "Your body rejected the transplant. You spent a year in the dark.", "b"); } }
+      if (kind === "rinnegan") {
+        if (!c.eye || c.eye.t !== "Sharingan") { if (roll(cl(20 + (power(c) - 80) * 2, 3, 60))) { c.eye.rinnegan = true; addTitle(c, "Rinnegan"); c.eye.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => learn(c, L, j)); c.eye.blind = 0; natureAll(c, L); P(L, "The rings spread across both irises.", "e"); } else { c.health = cl(c.health - rr(15, 30)); P(L, "Your body rejected the transplant. You spent a year in the dark.", "b"); } return; }
+        if (roll(rinCellOdds(c))) rinneganOpen(c, L, "cells");
+        else if (!c.senjuCells && roll(45)) { c.senjuCells = c.age; c.health = cl(c.health - rr(8, 16)); P(L, "The Senju cells took. The eyes did not change. You are carrying something that might wake in a year or in thirty \u2014 Madara's took most of his life.", "e"); }
+        else { c.health = cl(c.health - rr(15, 30)); P(L, "Your body rejected the transplant. You spent a year in the dark.", "b"); }
+      }
+      if (kind === "rinne") { if (!rinneOpen(c, L)) P(L, "Not yet. The Ten-Tails' eye needs all nine beasts in you at once, or the God Tree's fruit.", "b"); }
       if (kind === "tenseigan") { if (roll(cl(15 + (power(c) - 80) * 2, 2, 50))) { c.eye.tenseigan = true; addTitle(c, "Tenseigan"); ["Tenseigan Chakra Mode", "Truth-Seeking Orbs"].forEach((j) => learn(c, L, j)); P(L, "Your Byakugan turned. Pale blue, ringed, older than your clan.", "e"); } else P(L, "Nothing happened. Your eyes are still just very good eyes.", "b"); }
       if (kind === "curse2") { if (roll(cl(35 + c.stats.con * 0.4, 10, 80))) { c.curse = 2; c.stats.nin = cl(c.stats.nin + 10); c.stats.str = cl(c.stats.str + 8); learn(c, L, "Curse Mark: Second State"); P(L, "You let the mark spread across your whole body. Your skin changed colour. So did your voice.", "e"); } else { c.health = cl(c.health - rr(15, 30)); P(L, "The mark spread and nearly ate you. You clawed it back.", "b"); } }
     });
@@ -22360,7 +22754,7 @@ export default function ShinobiLife() {
     (c.rank >= 4 || c.students) && { id: "students", grp: "do", icon: "people", tone: T.gold, label: c.students ? (c.studentSquad || "Your cell") : "Take students", sub: c.students ? c.students.filter((x) => x.alive).length + " under you" : "A genin cell of your own", onClick: () => setModal("students"), disabled: c.actions < 1 },
     { id: "shop", grp: "do", icon: "shop", label: "Shop", sub: "Gear, pills, tutors", onClick: () => setModal("shop"), badge: itemCount || null },
     { id: "powers", grp: "do", icon: "powers", label: "Powers", sub: "Beast, eyes, gates", tone: T.epic, onClick: () => setModal("powers"), disabled: c.actions < 1 || !hasPowers },
-    { id: "path", grp: "do", icon: "path", label: "Ninja path", sub: "Exams, rank, village", onClick: () => setModal("path"), disabled: c.actions < 1, badge: canAcademy || canExam ? "!" : null },
+    { id: "path", grp: "do", icon: "path", label: "Ninja path", sub: "Exams, rank, village", onClick: () => setModal("path"), disabled: c.actions < 1, badge: canAcademy || canExam || (wayReady(c) && !c.way.finished) ? "!" : null },
     isLeader(c) && { id: "rule", grp: "do", icon: "rule", tone: T.gold, label: eraOf(c).hideVillages ? "Rule the Clan" : "Rule the Village", sub: c.rankName, onClick: () => setModal("rule"), disabled: c.actions < 1 },
     c.war && { id: "war", grp: "do", icon: "war", tone: T.blood, label: "The War", sub: (liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts \u00b7 vs " : "vs ") + (foeSummary(c.war, 2) || c.war.enemyName), onClick: () => setModal("war"), disabled: c.actions < 1 || c.rank < 2, badge: c.war.momentum + "%" },
     /* every person who signed your death warrant, in one building, for one year */
@@ -23559,7 +23953,18 @@ export default function ShinobiLife() {
             })()}
             {!c.specialty && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">You have not chosen a specialty yet. Pass {TT(c, "grad")} and you will be asked.</div>}
             <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-2 font-bold">CORE TRAINING</div>
-            {core.map((r) => <Row key={r.id} label={r.n} sub={r.d} right={line(r)} onClick={() => doTrain(r)} />)}
+            {core.map((r) => <Row key={r.id} label={r.n} sub={r.nature ? r.d + " " + natureLine(c) : r.d} right={line(r)} onClick={() => doTrain(r)} />)}
+            <div className="sl-tota">
+              <div style={{ color: T.gold, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">KEKKEI TOTA {"\u00b7"} THREE NATURES AT ONCE</div>
+              {KEKKEI_TOTA.map((k) => {
+                const has = (c.natures || []).includes(k.n);
+                const miss = k.of.filter((x) => !(c.natures || []).includes(x));
+                const t = totaTeacher(c, k);
+                return <Row key={k.n} label={(has ? "" : "Forge ") + k.n} tone={T.gold}
+                  sub={has ? "Yours. " + k.d : k.d + (miss.length ? " Needs " + joinList(k.of) + " \u2014 you are missing " + joinList(miss) + "." : " Ninjutsu 70, Chakra 60 and Control 60 make it likely" + (t ? ", and " + NAMED[t].name + " will stand over you while you try" : "") + ". Every failed try gets you closer.")}
+                  right={has ? "Held" : miss.length ? miss.length + " missing" : "~" + totaOdds(c, k) + "%"} onClick={() => totaUi(k.n)} disabled={has || miss.length > 0 || c.actions < 1} />;
+              })}
+            </div>
             {other.length > 0 && (
               <>
                 <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold">CROSS-TRAINING</div>
@@ -23762,7 +24167,7 @@ export default function ShinobiLife() {
             const paths = e.paths || [];
             const h = e.heart || 0;
             const hist = e.hist || [];
-            const st = e.rinnegan ? "rin" : e.eternal ? "emk" : e.mangekyo ? "mk" : "t" + lv;
+            const st = e.rinne ? "rinne" : e.rinnegan ? "rin" : e.eternal ? "emk" : e.mangekyo ? "mk" : "t" + lv;
             const at = EYE_GEN_AT[Math.min(lv, 2)];
             const replay = (x) => setEyeReplay({ ...x, replay: true, next: x === hist[hist.length - 1] ? eyeNext(c) : null });
             const bar = (pct, colr) => (
@@ -23775,12 +24180,12 @@ export default function ShinobiLife() {
                 <div className="flex gap-3 items-center">
                   <button onClick={() => hist.length && replay(hist[hist.length - 1])} aria-label="Look into your eyes" title={hist.length ? "Look into your eyes" : undefined}
                     style={{ flexShrink: 0, cursor: hist.length ? "pointer" : "default", borderRadius: "50%" }} className="sl-eyebtn">
-                    <SharinganEye lv={lv} mk={e.rinnegan ? null : e.mangekyo ? e.power || "black" : null} stage={st} size={76} />
+                    <SharinganEye lv={lv} mk={e.rinnegan ? null : e.mangekyo ? e.power || "black" : null} stage={st} uchiha size={76} />
                   </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
                       <div style={{ color: e.rinnegan ? T.epic : T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold">
-                        {e.rinnegan ? "RINNEGAN" : e.eternal ? "ETERNAL MANGEKYO" : e.mangekyo ? "MANGEKYO SHARINGAN" : lv ? "SHARINGAN" : "SHARINGAN · DORMANT"}
+                        {e.rinne ? "RINNE SHARINGAN" : e.rinnegan ? "RINNEGAN" : e.eternal ? "ETERNAL MANGEKYO" : e.mangekyo ? "MANGEKYO SHARINGAN" : lv ? "SHARINGAN" : "SHARINGAN · DORMANT"}
                       </div>
                       <div style={{ color: T.dim, fontSize: 10 }}>{e.rinnegan ? paths.length + " of 7 paths" : e.mangekyo ? "blindness " + (e.blind || 0) + "%" : lv ? TOMOE[Math.min(lv, 3) - 1].n : "not yet open"}</div>
                     </div>
@@ -23863,7 +24268,14 @@ export default function ShinobiLife() {
           })()}
           {c.eye && c.eye.rinnegan && (c.eye.paths || []).length < 7 && <Row label="Open another path" sub="Seven of them and each one is a different way of being unanswerable. They get harder as you go." right={(c.eye.paths || []).length + "/7"} onClick={() => eyeAction("path")} disabled={c.actions < 1} tone={T.epic} />}
           {c.eye && c.eye.mangekyo && !c.eye.eternal && c.sibling && c.sibling.alive && <Row label="Take your sibling's eyes" sub={c.sibling.name + " has offered. It stops the blindness forever."} right={"Blindness " + c.eye.blind} onClick={() => eyeAction("eternal")} />}
-          {c.eye && c.eye.t === "Sharingan" && c.eye.eternal && !c.eye.rinnegan && <Row label="Implant Senju cells" sub="Long odds. If it takes, the Rinnegan." onClick={() => eyeAction("rinnegan")} disabled={pw < 75} />}
+          {c.eye && c.eye.t === "Sharingan" && c.eye.mangekyo && !c.eye.rinnegan && (
+            <div className="sl-uchrin">
+              <Row label="Implant Senju cells" sub={(c.senjuCells ? "The cells from last time are still in you and have not woken the eyes yet. " : "") + "About " + rinCellOdds(c) + "% the Rinnegan opens" + (c.eye.eternal ? "" : " \u2014 the Eternal Mangekyo would add 20") + ". Sometimes the cells take and wait, the way Madara's did. Needs power 70."}
+                right={"~" + rinCellOdds(c) + "%"} onClick={() => eyeAction("rinnegan")} disabled={pw < 70 || c.actions < 1} tone={T.epic} />
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-3">The other road nobody asks for: the Sage's chakra finds an Uchiha strong enough to carry it (power 85), most often when they are close to dying.</div>
+            </div>
+          )}
+          {c.eye && c.eye.t === "Sharingan" && c.eye.rinnegan && !c.eye.rinne && <Row label="Become the Ten-Tails' jinchuriki" sub={"The Rinne Sharingan. All nine tailed beasts in you at once (" + beastsHeld(c) + " of 9" + (c.akatsuki ? ", counting the Akatsuki's statue" : "") + "), or the God Tree's fruit."} right={rinneReady(c) ? "Ready" : beastsHeld(c) + "/9"} onClick={() => eyeAction("rinne")} disabled={!rinneReady(c) || c.actions < 1} tone={T.blood} />}
           {c.eye && c.eye.t === "Byakugan" && !c.eye.tenseigan && <Row label="Awaken the Tenseigan" sub="Enormous chakra and a great deal of luck." onClick={() => eyeAction("tenseigan")} disabled={pw < 75} />}
           {c.curse === 1 && <Row label="Embrace the Curse Mark" sub="Second state. More power, less of you." onClick={() => eyeAction("curse2")} />}
           {!hasPowers && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nothing extraordinary has woken up in you yet.</div>}
@@ -23923,8 +24335,21 @@ export default function ShinobiLife() {
         <Modal title="THE NINE" accent={accent} onClose={() => setModal(null)}>
           <p style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">Track one down and beat it in open combat. Win, and it goes into a seal.</p>
           {BEASTS.map((b) => {
-            const held = c.beastsSealed.includes(b.name) || (c.beast && c.beast.id === b.id);
-            return <Row key={b.id} label={b.name + " · " + b.tails + "-Tails"} sub={held ? "Already yours" : b.t} right={held ? "Held" : "Hunt"} onClick={() => huntBeast(b.id)} disabled={held} />;
+            const w = beastWhere(c, b);
+            const held = w.k === "yours", gone = w.k === "statue";
+            return <Row key={b.id} label={tailsWord(b.tails) + " \u00b7 " + b.name} sub={held ? "Already yours" : gone ? "Sealed into the Akatsuki's statue. Nobody is getting this one back." : w.t + " \u2014 " + b.t} right={held ? "Held" : gone ? "Taken" : "Hunt"} onClick={() => huntBeast(b.id)} disabled={held || gone} />;
+          })}
+        </Modal>
+      )}
+
+      {modal === "akhunt" && (
+        <Modal title="HUNT A JINCHURIKI" accent={T.epic} onClose={() => setModal("akatsuki")}>
+          <p style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">Pick the beast. The file says where it is and who is carrying it.</p>
+          {BEASTS.map((b) => {
+            const w = beastWhere(c, b);
+            const off = w.k === "statue" || w.k === "yours";
+            return <Row key={b.id} label={tailsWord(b.tails) + " \u00b7 " + b.name} sub={w.k === "statue" ? "Already in the statue." : w.k === "yours" ? "Inside you. The organisation has noticed." : w.t}
+              right={w.k === "statue" ? "Sealed" : w.k === "yours" ? "Yours" : "Hunt"} onClick={() => akHunt(b.id)} disabled={off || c.actions < 1} tone={off ? null : T.blood} />;
           })}
         </Modal>
       )}
@@ -23971,6 +24396,63 @@ export default function ShinobiLife() {
 
       {modal === "path" && (
         <Modal title="NINJA PATH" accent={accent} onClose={() => setModal(null)}>
+          <div className="sl-way mb-4">
+            {(() => {
+              const W = c.way && WAYS[c.way.id];
+              if (!W) return (
+                <>
+                  <div style={{ color: accent, letterSpacing: ".2em", fontSize: 10 }} className="mb-1 font-bold">YOUR WAY</div>
+                  <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Point this life somewhere. Each way is a ladder of things you actually have to do, a reward at every rung, and one fight at the top that nobody can do for you.</div>
+                  {Object.entries(WAYS).map(([id, w]) => (
+                    <Row key={id} label={w.n} sub={w.d + " " + w.steps.length + " steps, ending in: " + w.steps[w.steps.length - 1].n + "."} right="Walk it" onClick={() => wayUi("choose", id)} tone={w.col} />
+                  ))}
+                </>
+              );
+              const done = c.way.done || {};
+              const ready = wayReady(c);
+              const fin = c.way.finished;
+              const top = c.way.id === "strongest" ? strongestAlive(c) : null;
+              const kg = c.way.id === "rogue" ? kageTargets(c) : [];
+              const other = Object.keys(WAYS).find((k) => k !== c.way.id);
+              let reached = false;
+              return (
+                <div style={{ ...glass(W.col) }} className="p-3.5">
+                  <div className="flex items-baseline justify-between gap-2 mb-1">
+                    <div style={{ color: W.col, letterSpacing: ".2em", fontSize: 10 }} className="font-bold">{W.tag}</div>
+                    <div style={{ color: T.dim, fontSize: 10.5 }}>{fin ? "Walked to the end in " + fin + " AH" : W.steps.filter((x) => done[x.id]).length + " of " + W.steps.length}</div>
+                  </div>
+                  <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs mb-2">{W.d}</div>
+                  {W.steps.map((x, i) => {
+                    const isDone = !!done[x.id];
+                    const cur = !isDone && !reached;
+                    if (cur) reached = true;
+                    return (
+                      <div key={x.id} className="flex gap-2.5 py-1.5 sl-way-step" data-done={isDone ? "1" : "0"} style={{ borderTop: i ? "1px solid " + T.line : "none", opacity: !isDone && !cur ? 0.55 : 1 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 99, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800,
+                          background: isDone ? W.col : cur ? W.col + "22" : "transparent", color: isDone ? ON() : cur ? W.col : T.dim, border: "1px solid " + (isDone || cur ? W.col : T.line) }}>{isDone ? "\u2713" : i + 1}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between gap-2"><span style={{ color: T.text, fontSize: 12.5 }} className="font-semibold">{x.n}</span><span style={{ color: T.dim, fontSize: 10.5, flexShrink: 0 }}>{isDone ? done[x.id] + " AH" : x.now(c)}</span></div>
+                          <div style={{ color: T.dim, fontSize: 11 }}>{x.d}{x.gain && !isDone ? " Reward: " + Object.entries(x.gain).map(([k, n]) => "+" + n + " " + (EYE_STAT_WORD[k] || k)).join(", ") + "." : ""}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!fin && ready && c.way.id === "strongest" && (top
+                    ? <Row label={"Challenge " + NAMED[top].name} sub={"The strongest name alive in the Bingo Book: " + namedTitle(c, top) + ", power " + NAMED[top].lvl + ". You are at " + pw + ". Win in front of witnesses."} right="Challenge" onClick={() => wayFight("top", top)} disabled={c.actions < 1 || !!bt} tone={W.col} />
+                    : <Row label="Claim it" sub="There is nobody alive left in the Bingo Book to challenge. Nobody is going to argue." right="Claim" onClick={() => wayUi("claim")} tone={W.col} />)}
+                  {!fin && ready && c.way.id === "rogue" && (kg.length
+                    ? kg.map((k) => <Row key={k.vid} label={"Take " + k.name + "'s head"} sub={k.title + " of " + k.village + ", power " + NAMED[k.id].lvl + ". You are at " + pw + "."} right="Go" onClick={() => wayFight("kage", k.id, k.vid)} disabled={c.actions < 1 || !!bt} tone={W.col} />)
+                    : top || strongestAlive(c) ? <Row label={"Take " + NAMED[strongestAlive(c)].name + "'s head"} sub="There are no Kage yet. The strongest name alive will do." right="Go" onClick={() => wayFight("kage", strongestAlive(c), null)} disabled={c.actions < 1 || !!bt} tone={W.col} /> : null)}
+                  {!fin && !ready && <div style={{ color: T.dim, fontSize: 11 }} className="mt-2">The last step opens when every step above it is done.</div>}
+                  {c.way.id === "rogue" && !c.rogue && <div style={{ color: T.dim, fontSize: 11 }} className="mt-1">The first step is below: defect.</div>}
+                  <div className="flex gap-3 mt-2" style={{ fontSize: 11 }}>
+                    <button onClick={() => wayUi("choose", other)} style={{ color: T.soft, textDecoration: "underline" }}>Walk {WAYS[other].n.replace(/^The /, "the ")} instead</button>
+                    <button onClick={() => wayUi("leave")} style={{ color: T.dim, textDecoration: "underline" }}>Stop walking it</button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
           {canAcademy && <Row label={eraOf(c).hideVillages ? "Go to your first battle" : "Sit " + TT(c, "grad")} sub={eraOf(c).hideVillages ? "No exam, no ceremony. They hand you a blade and point." : "Three stages: clones, accuracy, and a sparring match."} right="Enter" onClick={() => openExam("academy")} tone={accent} />}
           {!c.rogue && !c.founded && <>
             <Row label={eraOf(c).hideVillages ? "Prove yourself in the field" : "Enter " + TT(c, "exam")} sub={canExam ? (eraOf(c).hideVillages ? "Two engagements with the clan head watching. Win both and they say it out loud." : "Written test, the forest, then the arena.") : c.rank > 2 ? "Already passed" : c.rank < 2 ? "Graduate first" : "Not eligible this year"} onClick={() => openExam("chunin")} disabled={!canExam} tone={canExam ? accent : null} />
@@ -27513,7 +27995,7 @@ export default function ShinobiLife() {
                 <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11, marginTop: 6 }}>
                   {(c.world && c.world.akTaken ? c.world.akTaken.length : 0) >= 9
                     ? "All nine. The statue has its eyes open and nobody involved is telling you what happens next."
-                    : "Nine of them, and the statue in the cave has a hole for each. " + ((ak.taken || []).length ? "You brought in " + joinList(ak.taken) + "." : "You have not brought one in yet.")}
+                    : "Nine of them, and the statue in the cave has a hole for each. " + ((ak.taken || []).length ? "You brought in " + joinList(BEASTS.filter((bb) => (ak.taken || []).some((t) => t.startsWith(bb.tails + "-"))).map((bb) => "the " + tailsWord(bb.tails) + " of " + vNameOf(bb.v))) + "." : "You have not brought one in yet.")}
                 </div>
               </div>
               {(ak.brought || []).length > 0 && <div style={{ color: T.dim, fontSize: 11, marginTop: 3 }}>Brought in: {joinList(ak.brought)}</div>}
