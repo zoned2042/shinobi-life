@@ -568,7 +568,7 @@ const SHOP = [
   { id: "food", n: "Food Pills ×3", d: "Battle item. Restores 50 HP.", cost: 11000, kind: "item", ct: 3 },
   { id: "smoke", n: "Smoke Bombs ×3", d: "Battle item. Guarantees a dodge next turn.", cost: 7000, kind: "item", ct: 3 },
   { id: "tag", n: "Explosive Tags ×3", d: "Battle item. 38 damage, ignores defence.", cost: 13000, kind: "item", ct: 3 },
-  { id: "scroll", n: "Jutsu Scroll", d: "Learn a technique instantly, no failure roll.", cost: 30000, kind: "svc" },
+  { id: "scroll", n: "Jutsu Scrolls", d: "Pick the technique you want, sorted by type and starting with your own natures. Learned instantly, no failure roll.", cost: 20000, kind: "svc" },
   { id: "tutor", n: "Private Tutor", d: "A retired jonin drills you for a year. Big gains across four stats.", cost: 65000, kind: "svc" },
   { id: "medic", n: "Hospital Stay", d: "Restores your health to full.", cost: 18000, kind: "svc" },
   { id: "contract", n: "Summoning Contract", d: "Buy a contract from a broker.", cost: 100000, kind: "svc" },
@@ -11111,6 +11111,12 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.2.1", n: "The Scroll Broker", items: [
+    "Jutsu Scrolls in the shop now let you choose. The broker lists every technique you can learn at your rank in tabs: Your natures (your elemental ninjutsu, and the tab it opens on), Ninjutsu, Taijutsu, Genjutsu, Support and All. Every row shows the technique's real type, nature, tier, power, chakra cost and seals",
+    "Pay for exactly the one you want, 20,000 to 140,000 depending on tier. Or press 'Surprise me' for 30,000, which only ever draws from the tab you are looking at",
+    "Fixed: the old Jutsu Scroll drew at random from every pool you qualified for, including the taijutsu and genjutsu other systems add to the shared pool, so a ninjutsu user kept getting taijutsu and genjutsu they did not want",
+    "Fixed: Silent Killing and Shadow Shuriken Jutsu were filed as ninjutsu and now count as taijutsu, with no seals. Mirror Heaven Illusion is now a genjutsu",
+  ] },
   { v: "12.2", n: "The Life of Madara Uchiha", items: [
     "Madara Uchiha is playable. Pick him on the start screen and you are born in 858 AH in the Warring States: an Uchiha, the eldest of five brothers, with Izuna beside you",
     "His whole life arrives on the calendar as full-screen chapters, each with its own picture and a choice. The first life: the river where you meet Hashirama (865), the first brother brought home on a door (866), the stone you throw to warn him when your fathers find out (867), two more brothers (869), head of the Uchiha (876), the Mangekyo with Izuna (878), Izuna dying and offering you his eyes (880), the truce (889), naming Konohagakure (890), the vote that makes Hashirama Hokage (892), the stone tablet under the Naka Shrine (900), walking out with the Nine-Tails (902), the Valley of the End (910), the Gedo statue and Black Zetsu (911), the Rinnegan fifty years later (960), Obito under the rock (971) and the statue letting you go (972)",
@@ -13765,6 +13771,33 @@ EXTRA_ARTS.forEach((m) => {
   if (!JUTSU[pool]) JUTSU[pool] = [];
   if (!JUTSU[pool].some((x) => x[0] === m.n)) JUTSU[pool].push([m.n, m.t]);
 });
+/* three techniques were filed under the wrong discipline because of the pool they sat in */
+[["Silent Killing", "tai"], ["Shadow Shuriken Jutsu", "tai"], ["Mirror Heaven Illusion", "gen"]].forEach(([n, k]) => {
+  if (!MOVES[n]) return;
+  MOVES[n].kind = k;
+  if (k === "tai") MOVES[n].seals = 0;
+});
+
+/* ---- the scroll broker: every technique you could learn, sorted by what it actually is ---- */
+const SCROLL_PRICE = [0, 20000, 30000, 45000, 65000, 90000, 140000];
+const SCROLL_TABS = [["nature", "Your natures"], ["nin", "Ninjutsu"], ["tai", "Taijutsu"], ["gen", "Genjutsu"], ["sup", "Support"], ["all", "All"]];
+const KIND_WORD = { nin: "Ninjutsu", tai: "Taijutsu", gen: "Genjutsu", heal: "Medical", buff: "Support", guard: "Defence", ken: "Kenjutsu", wep: "Weapons" };
+function scrollCat(c, name) {
+  const m = MOVES[name];
+  if (!m) return "nin";
+  const body = m.kind === "tai" || m.kind === "ken" || m.kind === "wep";
+  /* your natures means your elemental ninjutsu: a fire-flavoured genjutsu is still a genjutsu */
+  if (m.nature && (c.natures || []).includes(m.nature) && !body && m.kind !== "gen") return "nature";
+  if (body) return "tai";
+  if (m.kind === "gen") return "gen";
+  if (m.kind === "heal" || m.kind === "buff" || m.kind === "guard") return "sup";
+  return "nin";
+}
+function scrollList(c, tab) {
+  return studyableJutsu(c).filter((n) => MOVES[n] && (tab === "all" || scrollCat(c, n) === tab))
+    .sort((a, b) => (MOVES[a].tier || 1) - (MOVES[b].tier || 1) || a.localeCompare(b));
+}
+const scrollTag = (m) => (m.nature && m.nature !== "Chakra" ? m.nature + " \u00b7 " : "") + (KIND_WORD[m.kind] || "Ninjutsu") + " \u00b7 tier " + (m.tier || 1);
 
 /* ============================ WHAT THE HAT TEACHES YOU ============================ */
 /* every village keeps one technique in the tower and hands it over with the seat.
@@ -16245,6 +16278,7 @@ export default function ShinobiLife() {
   const [yearFlash, setYearFlash] = useState(null);
   const [eyeReplay, setEyeReplay] = useState(null);
   const [tsukuFx, setTsukuFx] = useState(null);
+  const [scrollTab, setScrollTab] = useState("nature");
   const [arrival, setArrival] = useState(null);
   const [arrivalLeaving, setArrivalLeaving] = useState(false);
   function dismissArrival() {
@@ -17129,6 +17163,25 @@ export default function ShinobiLife() {
           else learn(c, L, pick(opts), null);
         }
       }
+    });
+  }
+  /* buy the scroll you chose, or a random one from the section you are looking at */
+  function buyScroll(name) {
+    commit((c2, L) => {
+      if (!name) {
+        const opts = scrollList(c2, scrollTab);
+        if (!opts.length || c2.ryo < 30000) return;
+        c2.ryo -= 30000;
+        const n = pick(opts);
+        learn(c2, L, n, "The broker picked for you: " + n + " (" + scrollTag(MOVES[n]) + ").");
+        return;
+      }
+      const m = MOVES[name];
+      if (!m || c2.jutsu.includes(name)) return;
+      const price = SCROLL_PRICE[m.tier || 1] || 30000;
+      if (c2.ryo < price) return;
+      c2.ryo -= price;
+      learn(c2, L, name, "You bought the scroll for " + name + " and had it down by the end of the week.");
     });
   }
   function availableJutsu(c) {
@@ -24759,12 +24812,46 @@ export default function ShinobiLife() {
               <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mb-2">{kind === "gear" ? "EQUIPMENT" : kind === "perk" ? "PERMANENT UPGRADES" : kind === "item" ? "BATTLE ITEMS" : "SERVICES"}</div>
               {SHOP.filter((s) => s.kind === kind).map((it) => {
                 const owned = (it.kind === "gear" && c.gear[it.slot] && c.gear[it.slot].id === it.id) || (it.kind === "perk" && c.perks.includes(it.perk));
+                if (it.id === "scroll") return <Row key={it.id} label={it.n} sub={it.d} right="Browse" onClick={() => setModal("scrolls")} />;
                 return <Row key={it.id} label={it.n} sub={it.d + (it.need && !c.jutsu.includes(it.need) ? " — you do not know it yet." : "")} right={owned ? "Owned" : money(it.cost)} onClick={() => buy(it)} disabled={owned || c.ryo < it.cost || ((it.id === "tutor" || it.id === "retreat") && c.actions < 1) || (it.need && !c.jutsu.includes(it.need))} />;
               })}
             </div>
           ))}
         </Modal>
       )}
+
+      {modal === "scrolls" && (() => {
+        const list = scrollList(c, scrollTab);
+        const tabName = (SCROLL_TABS.find((x) => x[0] === scrollTab) || SCROLL_TABS[0])[1];
+        const nat = (c.natures || []);
+        return (
+          <Modal wide title="THE SCROLL BROKER" accent={accent} onClose={() => setModal("shop")}>
+            <div className="flex justify-between items-center mb-2 gap-2">
+              <span style={{ color: T.gold }} className="font-bold">{money(c.ryo)}</span>
+              <span style={{ color: T.dim }} className="text-xs">{nat.length ? "Your natures: " + joinList(nat) : "No nature yet"}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-3 sl-scroll-tabs">
+              {SCROLL_TABS.map(([k, n]) => {
+                const on = scrollTab === k, ct = scrollList(c, k).length;
+                return <button key={k} data-tab={k} onClick={() => setScrollTab(k)} style={{ fontSize: 11.5, fontWeight: 700, padding: "5px 10px", borderRadius: 99, border: "1px solid " + (on ? accent : T.line), background: on ? accent + "22" : "transparent", color: on ? T.text : T.dim }}>{n} <span style={{ opacity: .7 }}>{ct}</span></button>;
+              })}
+            </div>
+            {list.length ? (
+              <>
+                <Row label="Surprise me" sub={"A random scroll from this section only (" + tabName.toLowerCase() + "). Cheaper than choosing."} right={money(30000)} onClick={() => buyScroll(null)} disabled={c.ryo < 30000} />
+                {list.map((n) => {
+                  const m = MOVES[n], p = SCROLL_PRICE[m.tier || 1] || 30000;
+                  return <Row key={n} label={n} sub={scrollTag(m) + (m.pow ? " \u00b7 power " + m.pow : "") + " \u00b7 " + (m.cost || 0) + " chakra" + (sealsNeeded(m) ? " \u00b7 " + sealsNeeded(m) + " seals" : " \u00b7 no seals")} right={money(p)} onClick={() => buyScroll(n)} disabled={c.ryo < p} />;
+                })}
+              </>
+            ) : (
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">
+                {scrollTab === "nature" ? "Nothing left for your natures at your rank. Higher tiers open with rank, or take another nature on the training ground." : "Nothing in this section you can learn at your rank."}
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
 
       {modal === "powers" && (
         <Modal title="POWERS" accent={accent} onClose={() => setModal(null)}>
