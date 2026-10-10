@@ -11111,6 +11111,18 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.2", n: "The Life of Madara Uchiha", items: [
+    "Madara Uchiha is playable. Pick him on the start screen and you are born in 858 AH in the Warring States: an Uchiha, the eldest of five brothers, with Izuna beside you",
+    "His whole life arrives on the calendar as full-screen chapters, each with its own picture and a choice. The first life: the river where you meet Hashirama (865), the first brother brought home on a door (866), the stone you throw to warn him when your fathers find out (867), two more brothers (869), head of the Uchiha (876), the Mangekyo with Izuna (878), Izuna dying and offering you his eyes (880), the truce (889), naming Konohagakure (890), the vote that makes Hashirama Hokage (892), the stone tablet under the Naka Shrine (900), walking out with the Nine-Tails (902), the Valley of the End (910), the Gedo statue and Black Zetsu (911), the Rinnegan fifty years later (960), Obito under the rock (971) and the statue letting you go (972)",
+    "His eyes keep to the story. The Sharingan opens when the first brother dies (the 'AVENGE HIM' screen), the Mangekyo is Susanoo and opens on its chapter, Izuna's eyes make it Eternal, and the Rinnegan comes in the cave. Nothing in his eyes rolls at random ahead of its time",
+    "The choices are remembered. Telling Hashirama your name, warning him, stopping him at the truce and swallowing the vote all count toward the end of the story. Keeping a close eye on Black Zetsu in the cave opens a second ending",
+    "When Madara dies, at any age and of anything, his death has its own screen. Then the world runs on without him, year by year, all the way to the Fourth Great Ninja War in 1000 AH, and Kabuto reanimates him. Chapters he never lived to see are marked as never lived, and he comes back with the eyes the histories gave him",
+    "The second life: Edo Tensei (a body of ash and paper that is whole again every year and cannot die), the Five Kage, Hashirama reanimated, Rinne Rebirth bringing you back to life, sealing the Ten-Tails into yourself for the Rinne Sharingan, and Might Guy's Eighth Gate. The fights wait in 'The Moon's Eye Plan' until you take them, and none of them kill you",
+    "Infinite Tsukuyomi has its own scene. The full moon rises, the Rinne Sharingan blooms across it, a red light floods down, everyone on earth looks up and falls asleep, and the God Tree's roots come up through the ground and wrap them. Casting it in any fight plays a short version, and anyone short of a legend falls asleep and the fight ends. Anyone else still takes the hit",
+    "Two endings. In the canon one, Black Zetsu's hand goes through your chest, Kaguya comes out of you, and Hashirama sits down beside you at the end. If you watched Zetsu in the cave, you can tear it off your back and stay the only one awake in a sleeping world",
+    "All of Madara's techniques: Great Fire Annihilation, Great Fire Destruction, Majestic Destroyer Flame, the Gunbai, Uchiha Return, Uchiha Flame Formation, Susanoo, Perfect Susanoo and its Yasaka Beads, Summoning: Nine-Tails, Izanagi, Wood Dragon, Deep Forest Emergence, Wood Clone, Flower Tree World Descent, the Gedo statue, Almighty Push, Universal Pull, Preta Path, Chibaku Tensei, Limbo: Border Jail, Heavenly Meteorite, Truth-Seeking Orbs, Six Paths Sage Mode and Infinite Tsukuyomi. Each one is learned on the chapter where he got it",
+    "'The Moon's Eye Plan' tile lists every chapter with its year and what happened. In the cave you can sleep beside the statue to skip to the next chapter. While you are officially dead, the Bingo Book and the hunter-nin leave you alone",
+  ] },
   { v: "12.1", n: "Every Road", items: [
     "All five chakra natures, for anyone. A third at jonin rank or Ninjutsu 50. A fourth at Kage rank, with a three-tomoe Sharingan, or at Ninjutsu 65 and Chakra 55. A fifth with the Rinnegan, Six Paths chakra, or Ninjutsu 80, Chakra 70 and Control 60. The Nature Transformation row now says what you hold and exactly what the next one needs. Every failed attempt makes the next more likely, and holding all five gets its own screen",
     "Kekkei Tota. Hold Fire, Wind and Earth and the training ground lets you try to force them into one: Dust Release. The odds come from Ninjutsu, Chakra and Control, and every failed try gets you closer. If you are in Iwagakure while Onoki or Mu is alive, they stand over you while you try. It brings three Dust techniques, one of them new (Particle Cube), and its own screen",
@@ -12264,8 +12276,9 @@ function loss(c, L, who, info) {
   if (!e || e.t !== "Sharingan" || e.rinnegan || c.age < 6 || c.alive === false) return;
   /* a death this close always answers. the eye decides how. */
   const cz = { k: "loss", who, g: info && info.g, how: (info && info.how) || "killed" };
-  if ((e.lv || 0) >= 3 && !e.mangekyo) { mangekyoOpen(c, L, cz); return; }
+  if ((e.lv || 0) >= 3 && !e.mangekyo) { if (madaraHold(c, "mangekyo")) { eyeEdge(c, L, 20); return; } mangekyoOpen(c, L, cz); return; }
   if (!e.mangekyo && (e.lv || 0) < 3) {
+    if (madaraHold(c, "brother1")) { eyeEdge(c, L, 20); return; }
     if (!(roll(!e.lv ? 100 : cz.how === "natural" ? 45 : 75) && eyeAwaken(c, L, cz))) eyeEdge(c, L, 40);
   }
 }
@@ -12652,6 +12665,9 @@ const CANON_STARTS = [
     stats: { nin: 60, tai: 52, gen: 48, int: 76, spd: 62, ck: 46 }, jutsu: ["Lightning Style: Lightning Blade", "Lightning Style: False Darkness"], d: "Jonin at thirteen, your father's name around your neck, and a war on." },
   { id: "boruto", n: "Boruto Uzumaki", role: "born", era: "boruto", born: 1006, village: "konoha", clan: "Uzumaki", squad: "next7",
     stats: { nin: 50, tai: 44, gen: 30, int: 52, spd: 52, ck: 60 }, jutsu: ["Shadow Clone Jutsu", "Rasengan"], d: "Your father is the Hokage and is never home. The mark on your hand is nobody's fault yet." },
+  { id: "madara", n: "Madara Uchiha", role: "born", era: "warring", born: 858, village: "konoha", clan: "Uchiha", kg: "Sharingan",
+    stats: { nin: 52, tai: 50, gen: 44, int: 58, spd: 52, cha: 56 }, jutsu: ["Fire Style: Fireball Jutsu"],
+    d: "Eldest of five brothers in the Warring States. A river, a boy on the other bank, a clan, a village you name, a valley, sixty years beside a statue, a death that does not take, and the moon. All of it, in order." },
   /* --- take the seat as --- */
   { id: "hashirama", n: "Hashirama Senju", role: "kage", era: "founding", village: "konoha", clan: "Senju", kg: "Wood Release", seat: true, seatAge: 35,
     stats: { nin: 96, tai: 82, gen: 74, int: 80, spd: 78, ck: 99 },
@@ -12985,6 +13001,8 @@ const EYE_DRILLS = [
   { id: "eyeread", n: "Read the Spin", d: "Your sensei throws and you call the spin before it lands. Then two at once. Then ten, in the dark.", s: { gen: 5, spd: 2 }, min: 1, eye: 1 },
   { id: "eyecast", n: "Cast Through the Eye", d: "Put a genjutsu on a clan elder by eye contact alone, then take the one they put back on you.", s: { gen: 7, int: 3, con: 2 }, min: 2, eye: 2 },
 ];
+/* Madara's eyes keep to his story: nothing opens before the chapter that opens it */
+const madaraHold = (c, beat) => !!(c && c.canonId === "madara" && c.madara && !c.madara.done[beat]);
 const eyeHeartWord = (h) => (h >= 25 ? "Hatred" : h <= -25 ? "Resolve" : "Torn");
 const eyeUp = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 function eyeNext(c) {
@@ -13063,8 +13081,9 @@ function mangekyoOpen(c, L, cz) {
   const h = e.heart || 0;
   const hot = ["black", "dream", "loop"], cold = ["avatar", "warp", "bind", "chain"];
   const pool = MANGEKYO_POWERS.filter((m) => (h >= 25 ? hot.includes(m.id) : h <= -25 ? cold.includes(m.id) : true));
-  const mk = pick(pool.length ? pool : MANGEKYO_POWERS);
+  const mk = (cz.power && MANGEKYO_POWERS.find((m) => m.id === cz.power)) || pick(pool.length ? pool : MANGEKYO_POWERS);
   e.power = mk.id; e.powerName = mk.n;
+  if (c.canonId === "madara") e.pattern = "chain";
   if (!c.jutsu.includes(mk.j)) c.jutsu.push(mk.j);
   c.stats.gen = cl(c.stats.gen + 12);
   addTitle(c, "Mangekyo: " + mk.n);
@@ -13076,14 +13095,14 @@ function mangekyoOpen(c, L, cz) {
   newsItem(c, c.name + " has been seen with a pattern in the eyes that nobody in the clan records recognises.", "BINGO BOOK", true);
   chron(c, { txt: c.name + " awakened the Mangekyo Sharingan" + (cz.k === "loss" ? " when " + who + " died" : "") + ". Its power: " + mk.n + ".", cat: "legend", big: true, line: c.name });
   const [btn, btn2, dh] = eyeButtons(cz, true);
-  eyeShow(c, { stage: "mk", lv: 3, mk: mk.id, k: cz.k, head: "SOMETHING BREAKS", title: "Mangekyo Sharingan", story, gains: [["Genjutsu", 12]], unlock: [mk.j], btn, btn2, dh });
+  eyeShow(c, { stage: "mk", lv: 3, mk: e.pattern || mk.id, k: cz.k, head: "SOMETHING BREAKS", title: "Mangekyo Sharingan", story, gains: [["Genjutsu", 12]], unlock: [mk.j], btn, btn2, dh });
   return true;
 }
 function eyeEdge(c, L, n) {
   const e = c.eye;
   if (!e || e.t !== "Sharingan" || e.mangekyo || e.rinnegan || (e.lv || 0) >= 3 || c.age < 6) return;
   e.edge = cl((e.edge || 0) + n);
-  if (e.edge >= 100) eyeAwaken(c, L, { k: "edge" });
+  if (e.edge >= 100 && !madaraHold(c, "brother1")) eyeAwaken(c, L, { k: "edge" });
 }
 /* what you do in the second after it opens */
 function eyeChoose(c, L, side) {
@@ -13112,9 +13131,9 @@ function eyeBattle(c, L, b, kills0) {
   const foe = b.e && b.e.name ? b.e.name : "them";
   if (b.win) {
     const hp = b.p && b.p.max ? b.p.hp / b.p.max : 1;
-    if (!e.mangekyo && !e.rinnegan && (e.lv || 0) < 3 && hp < 0.25 && roll(e.lv ? 55 : 85) && eyeAwaken(c, L, { k: "near", foe })) return;
-    if (!kills0 && (c.kills || 0) > 0 && !e.lv && eyeAwaken(c, L, { k: "kill", foe })) return;
-    if (e.mangekyo && !e.rinnegan && hp < 0.2 && power(c) >= 85 && roll(15) && rinneganOpen(c, L, "sage")) return;
+    if (!e.mangekyo && !e.rinnegan && (e.lv || 0) < 3 && hp < 0.25 && !madaraHold(c, "brother1") && roll(e.lv ? 55 : 85) && eyeAwaken(c, L, { k: "near", foe })) return;
+    if (!kills0 && (c.kills || 0) > 0 && !e.lv && !madaraHold(c, "brother1") && eyeAwaken(c, L, { k: "kill", foe })) return;
+    if (e.mangekyo && !e.rinnegan && hp < 0.2 && power(c) >= 85 && !madaraHold(c, "rings") && roll(15) && rinneganOpen(c, L, "sage")) return;
     eyeEdge(c, L, hp < 0.4 ? 14 : 5);
     if ((e.lv || 0) >= 1 && !c.copyNin && b.e && b.e.moves) {
       const tmax = e.mangekyo || e.rinnegan ? 6 : EYE_COPY_TIER[Math.min(3, e.lv)];
@@ -13158,13 +13177,13 @@ function eyeTick(c, L) {
   if ((c.kids || []).some((k) => !k.dead)) e.heart = cl(e.heart - 1, -100, 100);
   if (c.war && c.age >= 12) eyeEdge(c, L, 14);
   /* mastery: genjutsu work catches up with the blood */
-  if (!e.mangekyo && !e.rinnegan && e.lv < 3 && c.age >= (e.lv ? 6 : 8) && c.stats.gen >= EYE_GEN_AT[e.lv] && e.lastAt !== c.age && roll(e.lv ? 60 : 45)) eyeAwaken(c, L, { k: "mastery" });
+  if (!e.mangekyo && !e.rinnegan && e.lv < 3 && c.age >= (e.lv ? 6 : 8) && c.stats.gen >= EYE_GEN_AT[e.lv] && e.lastAt !== c.age && !madaraHold(c, "brother1") && roll(e.lv ? 60 : 45)) eyeAwaken(c, L, { k: "mastery" });
   /* the Mangekyo does not come from winning — and hatred brings it sooner */
-  if (e.lv >= 3 && !e.mangekyo && !e.rinnegan && (c.lostSomeone || 0) > 0 && e.lastAt !== c.age && roll(cl(22 + e.heart / 4, 10, 48))) mangekyoOpen(c, L, { k: "grief" });
+  if (e.lv >= 3 && !e.mangekyo && !e.rinnegan && (c.lostSomeone || 0) > 0 && e.lastAt !== c.age && !madaraHold(c, "mangekyo") && roll(cl(22 + e.heart / 4, 10, 48))) mangekyoOpen(c, L, { k: "grief" });
   /* cells that took and did nothing, until they did */
-  if (e.mangekyo && !e.rinnegan && c.senjuCells && c.age > c.senjuCells && !c.eyeAwake && roll(c.age >= 50 ? 30 : 8)) rinneganOpen(c, L, "late");
+  if (e.mangekyo && !e.rinnegan && c.senjuCells && c.age > c.senjuCells && !c.eyeAwake && !madaraHold(c, "rings") && roll(c.age >= 50 ? 30 : 8)) rinneganOpen(c, L, "late");
   /* the Sage's chakra finds an Uchiha strong enough to carry it */
-  if (e.mangekyo && !e.rinnegan && power(c) >= 85 && e.lastAt !== c.age && !c.eyeAwake && roll(3)) rinneganOpen(c, L, "sage");
+  if (e.mangekyo && !e.rinnegan && power(c) >= 85 && e.lastAt !== c.age && !c.eyeAwake && !madaraHold(c, "rings") && roll(3)) rinneganOpen(c, L, "sage");
   /* with both eyes open long enough, the giant stands up */
   if (e.mangekyo && !c.jutsu.includes("Susanoo") && e.mkAt !== c.age && !c.eyeAwake && c.stats.gen >= 55 && roll(14)) {
     c.jutsu.push("Susanoo");
@@ -13413,6 +13432,276 @@ function wayFinish(c, L, id, who) {
   powerShow(c, { stage: "way", way: id, head: W.tag, title: strongest ? "The Strongest Shinobi Alive" : "The Shadow Over the Five Villages", story, gains: [["to every stat", 3]], unlock: [strongest ? "Title: The Strongest Shinobi Alive" : "Title: The Shadow Over the Five Villages"], next: strongest ? "Stay there. Everybody who has ever held this has been challenged for it." : "There is no next. There is only who comes for you.", btn: strongest ? "STAY ON TOP" : "WALK OUT", btn2: null, dh: 0, k: "way" });
 }
 
+/* ============================ THE LIFE OF MADARA UCHIHA ============================
+   Play him from the riverbank to the moon. Every chapter the histories keep is on the
+   calendar as a scene you choose your way through: five brothers, a friend across the river,
+   a clan, a village, a tablet under a shrine, the Valley of the End, sixty years in a cave
+   beside a statue, and a death that does not take. When he dies the world runs on without
+   him until the Fourth Great Ninja War, and Kabuto Yakushi digs him back up. */
+const MADARA_JUTSU = [
+  { n: "Fire Style: Great Fire Destruction", t: 5, k: "nin", nat: "Fire", p: 124, c: 40, e: "burn" },
+  { n: "Uchiha Return", t: 4, k: "buff", p: 0, c: 14, e: "def", s: 0 },
+  { n: "Uchiha Flame Formation", t: 5, k: "nin", nat: "Fire", p: 110, c: 34, e: "burn" },
+  { n: "Summoning: Nine-Tails", t: 6, k: "nin", p: 166, c: 54, e: "burn", s: 0 },
+  { n: "Wood Style: Deep Forest Emergence", t: 5, k: "nin", nat: "Wood Release", p: 120, c: 38, e: "stun" },
+  { n: "Wood Style: Wood Dragon", t: 5, k: "nin", nat: "Wood Release", p: 126, c: 40, e: "stun" },
+  { n: "Wood Clone Jutsu", t: 4, k: "buff", p: 0, c: 18, e: "evade" },
+  { n: "Wood Style: Flower Tree World Descent", t: 6, k: "gen", p: 150, c: 50, e: "stun", s: 0 },
+  { n: "Summoning: Gedo Statue", t: 6, k: "nin", p: 158, c: 52, e: "stun", s: 0 },
+  { n: "Limbo: Border Jail", t: 6, k: "nin", p: 172, c: 50, e: null, s: 0 },
+  { n: "Heavenly Meteorite", t: 6, k: "nin", p: 188, c: 62, e: "burn", s: 0 },
+];
+MADARA_JUTSU.forEach((m) => { if (!MOVES[m.n]) MOVES[m.n] = { name: m.n, tier: m.t, kind: m.k, nature: m.nat || null, pow: m.p, cost: m.c, eff: m.e || null, ...(m.s === 0 ? { seals: 0 } : {}) }; });
+if (MOVES["Infinite Tsukuyomi"]) MOVES["Infinite Tsukuyomi"].seals = 0;
+function madaraLearn(c, list) {
+  const got = [];
+  list.forEach((j) => { if (MOVES[j] && !c.jutsu.includes(j)) { c.jutsu.push(j); got.push(j); } });
+  return got;
+}
+const madaraEyes = (c, lv) => {
+  if (!c.eye || c.eye.t !== "Sharingan") c.eye = { t: "Sharingan", lv: 0, mangekyo: false, eternal: false, rinnegan: false, blind: 0, heart: 0, edge: 0, hist: [] };
+  if ((c.eye.lv || 0) < lv) c.eye.lv = lv;
+  return c.eye;
+};
+function madaraBrother(c, L, who) {
+  c.madara.brothers = Math.max(0, (c.madara.brothers == null ? 4 : c.madara.brothers) - 1);
+  loss(c, L, who, { g: "m" });
+}
+/* the chapters. fights wait for you; everything else arrives on its year. */
+const MADARA_BEATS = [
+  /* ---- the first life ---- */
+  { id: "river", y: 865, part: 1, n: "The River", head: "THE RIVER", art: "river",
+    story: "A boy your age is skipping stones across the river and making a mess of it. He says his name is Hashirama. He does not say his clan, and you do not ask, which is how you both know. He wants a world where children do not have to be sent to the front. So do you.",
+    choices: [
+      { id: "name", t: "TELL HIM YOUR NAME", sub: "Madara. Just Madara.", fx: (c, L) => { c.madara.bond += 15; c.stats.con = cl(c.stats.con + 3); P(L, "You told him your first name and nothing else. He told you his. You met at the river every day that summer.", "g"); } },
+      { id: "stone", t: "Show him how to throw it", sub: "Five skips, all the way to the far bank.", fx: (c, L) => { c.madara.bond += 8; c.stats.spd = cl(c.stats.spd + 3); P(L, "Five skips to the far bank. He made it in four by the end of summer and would not stop talking about it.", "g"); } },
+    ] },
+  { id: "brother1", y: 866, part: 1, n: "The First Brother", head: "THE CLAN WARS", art: "graves",
+    story: "There were five of you. The clan brings the youngest home on a door they took off somebody's house. He was six. The Senju were paid by the same lord who paid the Uchiha the year before.",
+    choices: [{ id: "bury", t: "BURY HIM", fx: (c, L) => madaraBrother(c, L, "your youngest brother") }] },
+  { id: "stone", y: 867, part: 1, n: "The Stone", head: "THE FATHERS FIND OUT", art: "stone",
+    story: "Your father knows about the river. So does his. Tajima tells you to go tomorrow and find out which clan the boy belongs to, and kill him if he is Senju. You already know the answer. You scratch a word into a stone.",
+    choices: [
+      { id: "warn", t: "THROW THE WARNING", sub: "'Run.' Across the water, into his hand.", fx: (c, L) => { c.madara.bond += 15; P(L, "Hashirama caught the stone and read it, and the fathers came out of the trees on both banks. Nobody died at the river that day. Nobody went back to it either.", "n"); } },
+      { id: "father", t: "Stand with your father", sub: "Say nothing and let it happen.", fx: (c, L) => { c.madara.bond -= 15; if (c.eye) c.eye.heart = cl((c.eye.heart || 0) + 10, -100, 100); P(L, "You stood behind your father and said nothing. Hashirama looked at you across the water the whole time.", "b"); } },
+    ] },
+  { id: "brothers", y: 869, part: 1, n: "Two More", head: "FIVE BECOME TWO", art: "graves",
+    story: "Two more of your brothers come home on doors before the winter is out. There were five of you. There are two now, you and Izuna, and you have stopped letting him out of your sight.",
+    choices: [{ id: "izuna", t: "PROTECT IZUNA", fx: (c, L) => { madaraBrother(c, L, "your brother"); madaraBrother(c, L, "another brother"); c.stats.tai = cl(c.stats.tai + 4); } }] },
+  { id: "head", y: 876, part: 1, n: "Head of the Uchiha", head: "THE UCHIHA HAVE A HEAD", art: "crest",
+    story: "Tajima Uchiha does not come back from the field. The elders do not put it to a vote. At eighteen you are head of the Uchiha, and the first thing anybody hands you is the list of the dead. The second is your father's war fan.",
+    choices: [{ id: "fan", t: "TAKE THE GUNBAI", fx: (c, L) => {
+      if (NAMED.tajima && !(c.dead || []).includes("tajima")) killNamed(c, "tajima", L, "was killed in the field, and his son Madara took the clan");
+      c.clanRole = "Clan Head"; c.rank = Math.max(c.rank, 5); c.rankName = "Head of the Uchiha";
+      if (c.clanHeads) c.clanHeads.Uchiha = c.name;
+      addTitle(c, "Head of the Uchiha");
+      const got = madaraLearn(c, ["Fire Style: Great Fire Annihilation", "Gunbai Sweep", "Uchiha Return", "Uchiha Flame Formation"]);
+      c.stats.tai = cl(c.stats.tai + 6); c.stats.int = cl(c.stats.int + 4);
+      P(L, "You are head of the Uchiha. " + (got.length ? "You learned " + joinList(got) + "." : ""), "e");
+    } }] },
+  { id: "mangekyo", y: 878, part: 1, n: "The Pattern", head: "BOTH OF YOU, THE SAME NIGHT", art: "eye",
+    story: "All of it at once: the brothers, the doors, the list. One night you and Izuna both look up and the pattern in your eyes is not tomoe any more. Yours wants to stand up. Bones of chakra, then muscle, then armour, then a blade.",
+    choices: [{ id: "open", t: "LET IT STAND UP", fx: (c, L) => {
+      const e = madaraEyes(c, 3);
+      if (!e.mangekyo) mangekyoOpen(c, L, { k: "grief", power: "avatar" });
+      madaraLearn(c, ["Susanoo", "Fire Style: Great Fire Destruction"]);
+    } }] },
+  { id: "izuna", y: 880, part: 1, n: "Izuna", head: "YOUR LAST BROTHER", art: "eye2",
+    story: "Tobirama Senju's blade finds Izuna in the middle of a fight you were winning. He lasts the night. Near the end he asks you to take his eyes. ‘You are going blind, brother. Use mine. Protect the clan.’",
+    choices: [
+      { id: "take", t: "TAKE HIS EYES", sub: "The Eternal Mangekyo. It will never go dark.", fx: (c, L) => {
+        const e = madaraEyes(c, 3);
+        if (c.sibling) { c.sibling.alive = false; c.sibling.diedAt = c.age; }
+        if (NAMED.izuna && !(c.dead || []).includes("izuna")) killNamed(c, "izuna", L, "died of wounds from Tobirama Senju, and gave his brother his eyes");
+        c.lostSomeone = (c.lostSomeone || 0) + 1;
+        if (!e.mangekyo) mangekyoOpen(c, L, { k: "loss", who: "Izuna", g: "m", power: "avatar" });
+        e.eternal = true; e.blind = 0;
+        madaraLearn(c, ["Perfect Susanoo", "Susanoo: Yasaka Beads", "Fire Style: Majestic Destroyer Flame"]);
+        addTitle(c, "Eternal Mangekyo");
+        eyeShow(c, { stage: "emk", lv: 3, mk: e.power || "avatar", k: "eternal", head: "TWO PAIRS, ONE SIGHT", title: "Eternal Mangekyo Sharingan", story: "Izuna's eyes in yours. The patterns lock together and the dark that was closing in from the edges pulls back for good. Nobody alive will ever see as much as you do now.", gains: [], unlock: ["Perfect Susanoo", "Susanoo: Yasaka Beads", "Fire Style: Majestic Destroyer Flame"], btn: "PROTECT THE CLAN", btn2: null, dh: 0 });
+      } },
+      { id: "keep", t: "Keep your own", sub: "Let him go with his eyes, and go blind slowly.", fx: (c, L) => {
+        const e = madaraEyes(c, 3);
+        if (c.sibling) { c.sibling.alive = false; c.sibling.diedAt = c.age; }
+        if (NAMED.izuna && !(c.dead || []).includes("izuna")) killNamed(c, "izuna", L, "died of wounds from Tobirama Senju");
+        c.lostSomeone = (c.lostSomeone || 0) + 1;
+        if (!e.mangekyo) mangekyoOpen(c, L, { k: "loss", who: "Izuna", g: "m", power: "avatar" });
+        e.blind = cl((e.blind || 0) + 30); e.heart = cl((e.heart || 0) + 20, -100, 100);
+        P(L, "You buried him with his eyes. The dark at the edges came on faster after that, and you let it.", "b");
+      } },
+    ] },
+  { id: "truce", y: 889, part: 1, n: "The Truce", head: "HASHIRAMA OFFERS", art: "hands",
+    story: "Hashirama Senju walks out in front of the whole Uchiha line and offers you a choice: kill him, here, and the Senju stand down for good — or take his hand. He means it. He starts to do it himself.",
+    choices: [
+      { id: "stop", t: "STOP HIM", sub: "Catch his wrist.", fx: (c, L) => { c.madara.bond += 20; P(L, "You caught his wrist with the blade already against his own stomach. 'Enough. I have seen your guts.' The Warring States ended on that sentence.", "e"); } },
+      { id: "wait", t: "Let him try", sub: "See whether he means it.", fx: (c, L) => { c.madara.bond += 5; P(L, "He did mean it. You stopped him anyway, a second later than you should have, and he noticed.", "n"); } },
+    ] },
+  { id: "founding", y: 890, part: 1, n: "Konohagakure", head: "THE VILLAGE", art: "leaf",
+    story: "A village with no clan's name on it, where children are not sent to the front. Hashirama asks what to call it. You look at the forest around it and say: hidden in the leaves. Konohagakure.",
+    choices: [{ id: "name", t: "NAME IT", fx: (c, L) => { c.village = "konoha"; c.rank = Math.max(c.rank, 5); c.standing = cl(c.standing + 30); addTitle(c, "Co-Founder of Konohagakure"); P(L, "You named Konohagakure. The histories will mostly forget that you did.", "e"); chron(c, { txt: "Madara Uchiha named the new village Konohagakure.", cat: "legend", big: true, line: c.name }); } }] },
+  { id: "hokage", y: 892, part: 1, n: "The Hat", head: "THE FIRST HOKAGE", art: "hat",
+    story: "The daimyo's men, Tobirama, and a vote you were never going to win. Hashirama is Hokage. The Uchiha watch you to see what you will do about it, and Tobirama watches the Uchiha.",
+    choices: [
+      { id: "swallow", t: "SWALLOW IT", sub: "For him, and for the village.", fx: (c, L) => { c.madara.bond += 10; c.standing = cl(c.standing + 10); P(L, "You congratulated him in public. It cost you more than any fight ever has.", "n"); } },
+      { id: "speak", t: "Say what you think of Tobirama", sub: "Out loud, in the council.", fx: (c, L) => { c.madara.bond -= 5; if (c.eye) c.eye.heart = cl((c.eye.heart || 0) + 10, -100, 100); c.standing = cl(c.standing - 10); P(L, "You said it. Tobirama wrote it down.", "b"); } },
+    ] },
+  { id: "tablet", y: 900, part: 1, n: "The Tablet", head: "UNDER THE NAKA SHRINE", art: "tablet",
+    story: "The Uchiha stone tablet has more on it than the elders ever read. With the Mangekyo you can read further: the Sage of Six Paths, the moon, the tree, and a dream big enough to hold everybody in the world at once. There is a name for it. Infinite Tsukuyomi.",
+    choices: [{ id: "read", t: "READ ALL OF IT", fx: (c, L) => { c.madara.plan = true; c.stats.int = cl(c.stats.int + 6); c.stats.gen = cl(c.stats.gen + 4); addTitle(c, "Reader of the Stone Tablet"); P(L, "You read the tablet to the end. The Moon's Eye Plan started that night, in your head, and never stopped.", "e"); } }] },
+  { id: "leave", y: 902, part: 1, n: "Walking Out", head: "MADARA LEAVES THE VILLAGE", art: "road",
+    story: "The Uchiha will not follow you; they have houses now. You go alone. On the road you find the Nine-Tails and look it in the eye until it stops saying no.",
+    choices: [{ id: "go", t: "WALK OUT", fx: (c, L) => { c.war = null; c.rogue = true; c.rankName = "Missing-nin"; c.standing = 0; c.infamy = cl((c.infamy || 0) + 40); addTitle(c, "Left Konohagakure"); madaraLearn(c, ["Summoning: Nine-Tails"]); c.madara.kurama = true; P(L, "You walked out of the village you named. The Nine-Tails walks behind you now, because your eyes tell it to.", "e"); newsItem(c, "Madara Uchiha has left Konohagakure. The Uchiha did not go with him.", "THE VILLAGES", true); } }] },
+  { id: "valley", y: 910, part: 1, fight: { foe: "hashirama", title: "First Hokage, at the Valley of the End", opener: "You come back with the Nine-Tails at your shoulder. Hashirama is waiting at the river where it started, and the two of you cut a valley into the earth." },
+    n: "The Valley of the End", head: "THE VALLEY OF THE END", art: "valley",
+    story: "You come back with the Nine-Tails at your shoulder. Hashirama is waiting at the river where it all started, wider now, and he has not stopped being your friend. The maps will call what you do to that river the Valley of the End.",
+    choices: [{ id: "fight", t: "FIGHT HIM", fight: true }, { id: "later", t: "Not yet", later: true }],
+    after: (c, L, win) => {
+      if (win) P(L, "You beat him. He lay in the river and laughed at the sky, and you did not finish it. You walked away and let the world think the other thing.", "e");
+      else P(L, "His blade went in from behind, through a clone you should have seen. You were dead in the river for a few seconds. Izanagi decided you were not.", "b");
+      madaraCave(c, L, win);
+    } },
+  { id: "statue", y: 911, part: 1, n: "The Statue", head: "SIXTY YEARS IN A CAVE", art: "statue",
+    story: "In a cave under the mountains you summon the husk of the Ten-Tails, the Gedo statue, and grow bodies out of it to be your hands. One of them is black, and it talks. It says it is your will, made flesh. It is very helpful.",
+    choices: [
+      { id: "trust", t: "LET IT SERVE", fx: (c, L) => { P(L, "Black Zetsu took over the things you were too old to do yourself. It never once said no.", "n"); } },
+      { id: "wary", t: "Watch it closely", sub: "Nothing is that helpful.", fx: (c, L) => { c.madara.wary = true; c.stats.int = cl(c.stats.int + 4); P(L, "You never turned your back on it. It never gave you a reason to, which you noticed too.", "n"); } },
+    ] },
+  { id: "rings", y: 960, part: 1, n: "The Rings", head: "DECADES LATER", art: "eye3",
+    story: "Fifty years after the Valley, an old man in a cave wakes up and the red is gone from his eyes. Hashirama's cells did what you put them there to do. Rings, like a stone dropped into still water.",
+    choices: [{ id: "rings", t: "OPEN THEM", fx: (c, L) => { const e = madaraEyes(c, 3); if (!e.mangekyo) mangekyoOpen(c, L, { k: "grief", power: "avatar" }); if (!e.rinnegan) rinneganOpen(c, L, "late"); madaraLearn(c, ["Limbo: Border Jail", "Heavenly Meteorite", "Preta Path Absorption"]); } }] },
+  { id: "obito", y: 971, part: 1, n: "Obito", head: "A BOY UNDER A ROCK", art: "rock",
+    story: "Zetsu brings you a boy from Kannabi Bridge with half of him crushed under a boulder: Obito Uchiha. You put Hashirama's cells where the crushed half was. When the girl he loves dies on his best friend's hand, he comes back to the cave a different person.",
+    choices: [{ id: "wake", t: "WAKE HIM UP TO REALITY", fx: (c, L) => { c.madara.obito = true; P(L, "'Wake up to reality. Nothing ever goes as planned in this world.' He listened. They always do, at that age.", "e"); } }] },
+  { id: "end1", y: 972, part: 1, n: "The End of the First Life", head: "THE STATUE LETS YOU GO", art: "statue",
+    story: "You are an old man and the statue is all that has kept you breathing. You give Obito your name, your plan, and the Rinnegan to hide in somebody else's head until it is needed. Then you pull yourself free.",
+    choices: [{ id: "go", t: "LET GO", fx: (c, L) => { c.madara.done.end1 = c.year; madaraDie(c, L, "pulled himself free of the Gedo statue in a cave under the mountains, having handed his name and his plan to Obito Uchiha"); } }] },
+  /* ---- the second life ---- */
+  { id: "edo", y: 1000, part: 2, n: "Edo Tensei", head: "THE DEAD WALK", art: "edo",
+    story: "Kabuto Yakushi's coffin opens on a battlefield in the Fourth Great Ninja War. Ash, paper, and a body that will not stay broken. Kabuto's hold on you lasts about as long as it takes you to notice it is there.",
+    choices: [{ id: "field", t: "TAKE THE FIELD", fx: (c, L) => { P(L, "You are back, dead, and you cannot run out of chakra. The Allied Shinobi Forces have not been told yet.", "e"); } }] },
+  { id: "kage", y: 1000, part: 2, fight: { foe: "kage", name: "The Five Kage", title: "Tsunade, Gaara, A, Onoki and Mei, together", opener: "Five hats in front of you, and all five of them have read about you in a textbook. 'Which one of you is the Hokage? Let me see your strongest.'" },
+    n: "The Five Kage", head: "FIVE HATS", art: "kage",
+    story: "The five Kage come at you together: Tsunade, Gaara, the Raikage, Onoki and the Mizukage. They have an alliance, a plan and a hundred thousand shinobi behind them. You have a meteor.",
+    choices: [{ id: "fight", t: "FIGHT ALL FIVE", fight: true }, { id: "later", t: "Not yet", later: true }],
+    after: (c, L, win) => { madaraLearn(c, ["Wood Style: Flower Tree World Descent", "Heavenly Meteorite"]); P(L, win ? "All five Kage are on the ground in a crater you made. You left them breathing, which they will not understand for days." : "They held you for a night. It took all five of them, and you were dead already.", win ? "e" : "n"); } },
+  { id: "hashi2", y: 1000, part: 2, fight: { foe: "hashirama", title: "Reanimated, the First Hokage", opener: "Orochimaru brought the Hokage back too. Hashirama is standing in front of you again, a corpse like you, and he looks pleased to see you." },
+    n: "Hashirama, Again", head: "THE ONLY ONE WHO EVER BEAT YOU", art: "hands",
+    story: "Orochimaru has brought the Hokage back as well. Hashirama, dead like you, is on the field. You have waited for this for ninety years.",
+    choices: [{ id: "fight", t: "‘HASHIRAMA!’", fight: true }, { id: "later", t: "Not yet", later: true }],
+    after: (c, L, win) => { c.madara.bond += 5; P(L, win ? "You beat him this time. You both knew it was not the same fight." : "He held you, the way he always did. You laughed, which you had not done in ninety years.", win ? "e" : "n"); } },
+  { id: "revive", y: 1000, part: 2, n: "Rinne Rebirth", head: "ALIVE", art: "statue",
+    story: "Black Zetsu takes Obito's body and makes it say the words: Outer Path, Samsara of Heavenly Life. Your heart beats. You are alive, in your prime, and every one of the nine beasts in the statue is reaching for you.",
+    choices: [{ id: "breathe", t: "BREATHE", fx: (c, L) => { c.edo = false; c.madara.phase = "revived"; c.health = 100; c.rankName = "Madara Uchiha"; P(L, "Alive. Paper falls off you like snow. You have never felt this strong in your life, either of them.", "e"); } }] },
+  { id: "tentails", y: 1000, part: 2, n: "The Ten-Tails' Jinchuriki", head: "ALL NINE AT ONCE", art: "tentails",
+    story: "You open yourself and the Ten-Tails goes in, all of it. Nine beasts and the thing they were before they were nine. A third eye opens in your forehead and the black orbs start to circle you.",
+    choices: [{ id: "seal", t: "SEAL IT INTO YOURSELF", fx: (c, L) => { madaraEyes(c, 3); c.madara.phase = "jin"; c.tenTails = true; rinneOpen(c, L, true); madaraLearn(c, ["Limbo: Border Jail", "Truth-Seeking Orbs", "Six Paths Sage Mode", "Infinite Tsukuyomi"]); } }] },
+  { id: "guy", y: 1000, part: 2, fight: { foe: "guy", title: "Eighth Gate: Night Guy", opener: "Might Guy opens the Gate of Death in front of you. The air around him is burning red, and for the first time in two lives you think you might lose." },
+    n: "Night Guy", head: "THE EIGHTH GATE", art: "gate",
+    story: "A man with no ninjutsu and no genjutsu opens all eight gates in front of you. He is going to die doing it. He might take you with him.",
+    choices: [{ id: "fight", t: "FACE HIM", fight: true }, { id: "later", t: "Not yet", later: true }],
+    after: (c, L, win) => { c.health = cl(c.health - 20, 10, 100); P(L, win ? "You took everything he had and stood up. 'Might Guy. In my whole life, in both of them, nobody has given me a better fight.'" : "Night Guy broke half your body. The Ten-Tails' chakra put it back together, which is the only reason you are still in this war.", win ? "e" : "b"); } },
+  { id: "tsukuyomi", y: 1000, part: 2, n: "Infinite Tsukuyomi", head: "THE MOON'S EYE PLAN", art: "moon",
+    story: "The moon is full. Everything you have done in two lives was for the next minute. You turn the Rinne Sharingan up at it, and the moon looks back.",
+    choices: [{ id: "cast", t: "CAST IT", fx: (c, L) => { c.tsuku = { y: c.year }; c.madara.cast = c.year; addTitle(c, "Cast the Infinite Tsukuyomi"); newsItem(c, "Every person on the surface of the world looked up at the moon at the same moment. Nobody has woken up since.", "THE VILLAGES", true); chron(c, { txt: "Madara Uchiha cast the Infinite Tsukuyomi, and the whole world went to sleep.", cat: "legend", big: true, line: c.name }); } }] },
+  { id: "zetsu", y: 1000, part: 2, n: "The Hand at Your Back", head: "BLACK ZETSU", art: "zetsu",
+    story: "The world is asleep, and you are the only one awake to enjoy it. Then your will, made flesh, puts its hand through your chest from behind. ‘I am not your will, Madara. I never was. I am Kaguya's.’",
+    choices: [
+      { id: "canon", t: "LET IT HAPPEN", sub: "The way the histories have it.", fx: (c, L) => { c.madara.ending = "canon"; } },
+      { id: "dream", t: "YOU WERE WAITING FOR THIS", sub: "You never turned your back on it.", need: (c) => !!c.madara.wary, fx: (c, L) => { c.madara.ending = "dream"; } },
+    ] },
+  { id: "end", y: 1000, part: 2, n: "The End", head: "THE END OF MADARA UCHIHA", art: "end",
+    story: (c) => c.madara.ending === "dream"
+      ? "You tore the black thing off your back before it finished the sentence and burned it out of the world. Nobody is coming. Everyone on earth is asleep and dreaming the life they wanted, under a red moon, and you are the only one awake. You won. There is nobody to tell."
+      : "Kaguya came out of you and took the beasts with her. When it is over you are lying at the edge of the field with nothing left in you, and Hashirama sits down beside you, the way he did at the river. " + (c.madara.bond >= 40 ? "‘We were friends, weren't we?’ ‘Yes. We were.’" : "Neither of you says much. You don't need to."),
+    choices: [{ id: "close", t: "CLOSE YOUR EYES", fx: (c, L) => { c.madara.phase = "over"; madaraDie(c, L, c.madara.ending === "dream" ? "ruled a world asleep under the Infinite Tsukuyomi, the only one left awake in it" : "died beside Hashirama Senju at the end of the Fourth Great Ninja War, having been everything he set out to be except right"); } }] },
+];
+const madaraBeat = (id) => MADARA_BEATS.find((b) => b.id === id);
+const madaraNext = (c) => (c.madara ? MADARA_BEATS.find((b) => !c.madara.done[b.id]) || null : null);
+/* open the next chapter when its year has come, one at a time and never over another screen */
+function madaraTick(c, L) {
+  const M = c.madara;
+  if (!M || c.canonId !== "madara" || M.phase === "dead" || M.phase === "over") return;
+  /* ash and paper: a reanimated body is whole again by the next morning */
+  if (M.phase === "edo" && c.health < 100) c.health = 100;
+  if (c.scene || c.eyeAwake || c.tsuku) return;
+  const b = madaraNext(c);
+  if (!b || c.year < b.y) return;
+  if (b.part === 2 && M.phase !== "edo" && M.phase !== "revived" && M.phase !== "jin") return;
+  c.scene = { beat: b.id, y: c.year };
+}
+function madaraCave(c, L, win) {
+  const M = c.madara;
+  M.done.valley = c.year; M.phase = "cave"; M.valleyWon = !!win;
+  c.war = null;
+  if (win && NAMED.hashirama) M.spared = true;
+  c.senjuCells = c.senjuCells || c.age;
+  ["Earth", "Water"].forEach((n) => { if (!c.natures.includes(n)) c.natures.push(n); });
+  if (!c.natures.includes("Wood Release")) c.natures.push("Wood Release");
+  madaraLearn(c, ["Izanagi", "Wood Style: Deep Forest Emergence", "Wood Style: Wood Dragon", "Wood Clone Jutsu", "Summoning: Gedo Statue"]);
+  c.rankName = "Dead, officially"; c.rogue = true;
+  addTitle(c, "The Valley of the End");
+  newsItem(c, "Madara Uchiha is dead at the Valley of the End, killed by the First Hokage. His body has not been recovered.", "OBITUARIES", true);
+  chron(c, { txt: "Madara Uchiha fought Hashirama Senju at the Valley of the End, and the world believed he died there.", cat: "legend", big: true, line: c.name });
+}
+/* the world goes on without you. used for the long sleep in the cave and for the years you are dead. */
+function madaraSkipTo(c, L, to) {
+  const was = !!c.watching;
+  c.watching = true; c.dilemma = null;
+  const junk = [];
+  let n = 0;
+  while ((c.birthYear || 0) + c.age < to && n < 200) {
+    n += 1;
+    c.age += 1; c.year = (c.birthYear || 0) + c.age;
+    const nowEra = eraAtYear(c.year);
+    if (nowEra !== c.era) {
+      const to2 = ERAS.find((e) => e.id === nowEra);
+      c.era = nowEra;
+      if (to2) c.roster = (to2.roster || []).filter((id) => !(c.dead || []).includes(id) && !(NAMED[id] && NAMED[id].name === c.name));
+    }
+    [advanceLines, (cc) => HISTORIC.filter((h) => h.y === cc.year).forEach((h) => newsItem(cc, h.t, h.c, h.big)), worldTick, greatWarTick].forEach((fn) => safeTick(fn, c, junk));
+    c.dilemma = null;
+  }
+  c.watching = was;
+  c.war = null; c.actions = 4;
+  return n;
+}
+/* Madara does not get to stay dead the first time */
+function madaraDie(c, L, cause) {
+  const M = c.madara;
+  if (M && (M.phase === "life" || M.phase === "cave")) {
+    M.died = { y: c.year, age: c.age, cause };
+    M.phase = "dead";
+    c.health = 0;
+    P(L, c.name + " " + cause + " at " + c.age + ".", "b");
+    chron(c, { txt: "Madara Uchiha died in " + c.year + " AH. He was not finished.", cat: "deaths", big: true, line: c.name });
+    c.scene = { beat: "death", y: c.year };
+    return true;
+  }
+  c.alive = false; c.cause = cause;
+  P(L, c.name + " " + cause + " at " + c.age + ".", "b");
+  return false;
+}
+/* the coffin opens: Kabuto, the Fourth War, and a body made of ash and paper */
+function madaraResurrect(c, L) {
+  const M = c.madara;
+  const from = c.year;
+  const n = madaraSkipTo(c, L, 1000);
+  /* every chapter of the first life that never came is closed, unlived */
+  MADARA_BEATS.filter((b) => b.part === 1).forEach((b) => { if (!M.done[b.id]) M.done[b.id] = -1; });
+  M.phase = "edo"; c.edo = true;
+  c.health = 100; c.rogue = true; c.rankName = "Reanimated"; c.alive = true;
+  const e = madaraEyes(c, 3);
+  e.mangekyo = true; e.eternal = true; e.blind = 0;
+  if (!e.power) { e.power = "avatar"; e.powerName = "Susanoo"; }
+  if (!e.rinnegan) { e.rinnegan = true; e.paths = e.paths && e.paths.length ? e.paths : ["deva"]; natureAll(c, L); }
+  madaraLearn(c, ["Susanoo", "Perfect Susanoo", "Susanoo: Yasaka Beads", "Almighty Push", "Universal Pull", "Chibaku Tensei", "Limbo: Border Jail", "Heavenly Meteorite", "Wood Style: Deep Forest Emergence", "Wood Style: Wood Dragon", "Fire Style: Majestic Destroyer Flame", "Gunbai Sweep", "Uchiha Return"]);
+  P(L, "The world went on for " + n + " years without you, from " + from + " to " + c.year + " AH.", "n");
+  newsItem(c, "Madara Uchiha has been seen on the battlefield of the Fourth Great Ninja War. He has been dead for " + n + " years.", "WAR", true);
+  chron(c, { txt: "Kabuto Yakushi reanimated Madara Uchiha with Edo Tensei in the Fourth Great Ninja War.", cat: "war", big: true, line: c.name });
+  c.scene = null;
+  madaraTick(c, L);
+}
+
 /* ============================ THE OTHER THREE DISCIPLINES ============================ */
 /* the file was almost entirely ninjutsu. this is everything else a shinobi actually trains. */
 const EXTRA_ARTS = [
@@ -13625,6 +13914,7 @@ const BINGO_TIERS = [
 ];
 function bingoTick(c, L) {
   if (!c.rogue && c.infamy < 30) return;
+  if (c.madara && c.madara.phase === "cave") return;   /* the Bingo Book does not update the page of a dead man */
   const tier = BINGO_TIERS.filter((t) => c.infamy >= t.at).pop();
   if (!tier) return;
   if (c.bingo === tier.r) return;
@@ -14266,7 +14556,7 @@ const CANON_NAMED_ID = {
   /* the new playable women, so the game knows you cannot hunt, raise or be
      out-ranked by a second copy of yourself walking around the world */
   hinata: "hinata", ino: "ino", temari: "temari", saradaS: "sarada",
-  hashirama: "hashirama", tobirama: "tobirama", hiruzen: "hiruzen", minatoK: "minato",
+  hashirama: "hashirama", tobirama: "tobirama", hiruzen: "hiruzen", minatoK: "minato", madara: "madara",
   tsunadeK: "tsunade", kakashiK: "kakashi", narutoK: "narutoAdult",
 };
 const playerNamedId = (c) => (c && c.canonId ? CANON_NAMED_ID[c.canonId] || null : null);
@@ -15515,6 +15805,218 @@ function PowerEmblem({ stage, nat, way, size = 280, intro = false }) {
     </div>
   );
 }
+/* ---- Madara's chapters, drawn ---- */
+const MADARA_DEATH = { id: "death", head: "MADARA UCHIHA IS DEAD", art: "graves", n: "Dead",
+  story: (c) => "Madara Uchiha " + ((c.madara && c.madara.died && c.madara.died.cause) || "is dead") + ". The world goes on without him. Somewhere a boy who will grow up to be Kabuto Yakushi is learning to read, and in the Fourth Great Ninja War he is going to open a coffin with your name on it.",
+  choices: [{ id: "wait", t: "WAIT FOR THE WAR", sub: "The years pass. The world keeps going.", resurrect: true }] };
+const madaraScene = (id) => (id === "death" ? MADARA_DEATH : madaraBeat(id));
+function SceneArt({ art, size }) {
+  const box = { width: size, height: "auto", aspectRatio: "3 / 2", display: "block" };
+  const k = "#0a0507";
+  if (art === "eye") return <SharinganEye lv={3} mk="chain" stage="mk" size={"min(250px, 58vw)"} intro />;
+  if (art === "eye2") return <SharinganEye lv={3} mk="chain" stage="emk" size={"min(250px, 58vw)"} intro />;
+  if (art === "eye3") return <SharinganEye lv={3} stage="rin" uchiha size={"min(250px, 58vw)"} intro />;
+  if (art === "tentails") return <SharinganEye lv={3} stage="rinne" size={"min(250px, 58vw)"} intro />;
+  const svg = (children, bg) => (
+    <div className="md-art" style={{ position: "relative", width: size, aspectRatio: "3 / 2", borderRadius: 14, boxShadow: "0 18px 50px rgba(0,0,0,.6)" }}>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <svg viewBox="0 0 300 200" style={box} aria-hidden>
+          <defs><linearGradient id={"sa-" + art} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={bg[0]} /><stop offset="1" stopColor={bg[1]} /></linearGradient></defs>
+          <rect x="0" y="0" width="300" height="200" rx="14" fill={"url(#sa-" + art + ")"} />
+          {children}
+        </svg>
+      </div>
+    </div>
+  );
+  if (art === "river") return svg(<>
+    <rect x="0" y="112" width="300" height="56" fill="#1d3a5c" />
+    {[124, 138, 152].map((y) => <path key={y} d={"M0 " + y + " Q75 " + (y - 5) + " 150 " + y + " T300 " + y} stroke="#4f7fa8" strokeWidth="1.4" fill="none" opacity=".7" />)}
+    <path d="M52 108 Q100 70 150 112 Q190 84 222 112 Q246 96 262 110" stroke="#e8e0cf" strokeWidth="1.6" strokeDasharray="3 5" fill="none" className="sa-arc" />
+    {[150, 222].map((x) => <ellipse key={x} cx={x} cy="114" rx="9" ry="2.6" fill="none" stroke="#bcd4ea" strokeWidth="1.2" />)}
+    <g fill={k}><circle cx="40" cy="92" r="7" /><rect x="35" y="99" width="10" height="16" rx="3" /><circle cx="272" cy="92" r="7" /><rect x="267" y="99" width="10" height="16" rx="3" /></g>
+    <rect x="0" y="168" width="300" height="32" fill="#22301c" />
+  </>, ["#f2b37a", "#7a4a5e"]);
+  if (art === "graves") return svg(<>
+    <rect x="0" y="150" width="300" height="50" fill="#1a1414" />
+    {[70, 120, 170, 220].map((x, i) => <g key={x}><rect x={x - 4} y={96 + i * 3} width="8" height={58 - i * 3} fill="#5a4334" /><rect x={x - 14} y={108 + i * 3} width="28" height="6" fill="#5a4334" /></g>)}
+    <circle cx="250" cy="44" r="16" fill="#d9d2c4" opacity=".85" />
+  </>, ["#2a2f45", "#120c14"]);
+  if (art === "stone") return svg(<>
+    <rect x="0" y="130" width="300" height="70" fill="#1d3a5c" />
+    <ellipse cx="150" cy="104" rx="56" ry="38" fill="#6f6a66" stroke="#2a2725" strokeWidth="3" />
+    <path d="M118 100 L134 96 M140 108 L168 100 M172 96 L184 104" stroke="#1d1a18" strokeWidth="3" strokeLinecap="round" />
+  </>, ["#3a4256", "#141822"]);
+  if (art === "crest") return svg(<>
+    <circle cx="150" cy="86" r="52" fill="#c3121c" />
+    <path d="M98 86 A52 52 0 0 0 202 86 Z" fill="#efe9dc" />
+    <rect x="144" y="136" width="12" height="44" rx="4" fill="#efe9dc" />
+  </>, ["#1a1416", "#060406"]);
+  if (art === "hands") return svg(<>
+    <g transform="translate(150 104) rotate(-18)"><rect x="-24" y="-56" width="14" height="70" rx="7" fill="#e8c4a0" stroke="#5a3b28" strokeWidth="2" /><rect x="-9" y="-62" width="14" height="76" rx="7" fill="#e8c4a0" stroke="#5a3b28" strokeWidth="2" /></g>
+    <g transform="translate(150 104) rotate(162)"><rect x="-24" y="-56" width="14" height="70" rx="7" fill="#d9ad86" stroke="#5a3b28" strokeWidth="2" /><rect x="-9" y="-62" width="14" height="76" rx="7" fill="#d9ad86" stroke="#5a3b28" strokeWidth="2" /></g>
+    <circle cx="150" cy="104" r="62" fill="none" stroke="#e2b553" strokeWidth="1.5" opacity=".6" />
+  </>, ["#24301e", "#0c100a"]);
+  if (art === "leaf") return svg(<>
+    <path d="M150 34 C206 52 214 128 150 168 C86 128 94 52 150 34 Z" fill="#5f9a4a" stroke="#203a18" strokeWidth="3" />
+    <path d="M150 168 L150 186" stroke="#203a18" strokeWidth="4" />
+    <path d="M150 74 C178 76 178 112 150 112 C130 112 130 90 146 90" fill="none" stroke="#203a18" strokeWidth="5" strokeLinecap="round" />
+  </>, ["#2f4a26", "#0d150a"]);
+  if (art === "hat") return svg(<>
+    <path d="M70 140 Q150 20 230 140 Z" fill="#efe9dc" stroke="#7a1414" strokeWidth="3" />
+    <path d="M60 140 L240 140" stroke="#7a1414" strokeWidth="6" strokeLinecap="round" />
+    <text x="150" y="122" textAnchor="middle" fontSize="40" fill="#b3121b" fontWeight="700">{"火"}</text>
+  </>, ["#3a2a1e", "#110b07"]);
+  if (art === "tablet") return svg(<>
+    <rect x="96" y="30" width="108" height="150" rx="6" fill="#55504a" stroke="#1f1c19" strokeWidth="3" />
+    <circle cx="150" cy="70" r="20" fill="none" stroke="#c3121c" strokeWidth="3" />
+    {[106, 118, 130, 142, 154, 166].map((y) => <line key={y} x1="112" x2="188" y1={y} y2={y} stroke="#2a2622" strokeWidth="3" strokeDasharray={y % 24 ? "10 4" : "6 6"} />)}
+  </>, ["#20160f", "#070504"]);
+  if (art === "road") return svg(<>
+    <path d="M120 200 L146 110 L154 110 L180 200 Z" fill="#6d5a42" />
+    <g fill="#e07a2c" opacity=".92">
+      <ellipse cx="150" cy="80" rx="34" ry="26" />
+      {Array.from({ length: 9 }, (_, i) => <path key={i} d={"M150 80 Q" + (60 + i * 22) + " 20 " + (40 + i * 27) + " " + (14 + (i % 2) * 10)} stroke="#e07a2c" strokeWidth="9" fill="none" strokeLinecap="round" />)}
+    </g>
+    <circle cx="140" cy="76" r="3" fill="#c3121c" /><circle cx="160" cy="76" r="3" fill="#c3121c" />
+  </>, ["#2a1406", "#0b0502"]);
+  if (art === "valley") return svg(<>
+    <rect x="132" y="40" width="36" height="140" fill="#9fc4de" opacity=".8" />
+    <rect x="0" y="170" width="300" height="30" fill="#2c4b66" />
+    <path d="M40 180 L40 70 Q60 40 84 70 L84 180 Z" fill="#4c4a46" /><path d="M216 180 L216 70 Q240 40 262 70 L262 180 Z" fill="#4c4a46" />
+    <circle cx="62" cy="60" r="12" fill="#4c4a46" /><circle cx="239" cy="60" r="12" fill="#4c4a46" />
+  </>, ["#4a5568", "#161b24"]);
+  if (art === "statue") return svg(<>
+    <path d="M70 190 Q60 90 110 60 Q150 36 190 60 Q240 90 230 190 Z" fill="#6d6670" stroke="#2c2830" strokeWidth="3" />
+    {Array.from({ length: 9 }, (_, i) => <ellipse key={i} cx={98 + i * 13} cy={84 + Math.abs(4 - i) * 3} rx="4.5" ry="2" fill="#2c2830" />)}
+    <path d="M110 150 Q150 136 190 150" stroke="#2c2830" strokeWidth="4" fill="none" />
+  </>, ["#1e1622", "#07050a"]);
+  if (art === "rock") return svg(<>
+    <path d="M60 170 Q70 70 170 80 Q250 90 250 170 Z" fill="#5f5850" stroke="#221f1c" strokeWidth="3" />
+    <path d="M60 170 L40 170 L40 150 Q52 146 62 152" fill="#e8c4a0" stroke="#5a3b28" strokeWidth="2" />
+    <circle cx="72" cy="140" r="9" fill="#c3121c" /><circle cx="72" cy="140" r="3" fill={k} />
+  </>, ["#3a3226", "#100d0a"]);
+  if (art === "edo") return svg(<>
+    <ellipse cx="150" cy="100" rx="52" ry="64" fill="#d9cfc0" />
+    <path d="M118 66 L136 92 L128 118 M182 60 L166 96 L178 130 M150 140 L144 160" stroke="#3b2e26" strokeWidth="2.4" fill="none" />
+    <ellipse cx="130" cy="96" rx="8" ry="5" fill="#11080a" /><ellipse cx="170" cy="96" rx="8" ry="5" fill="#11080a" />
+    {[[60, 50], [240, 70], [220, 160], [80, 150], [250, 120]].map(([x, y], i) => <rect key={i} x={x} y={y} width="10" height="6" fill="#d9cfc0" opacity=".6" transform={"rotate(" + i * 30 + " " + x + " " + y + ")"} />)}
+  </>, ["#3a2e2a", "#0d0a09"]);
+  if (art === "kage") return svg(<>
+    {["火", "風", "雷", "土", "水"].map((ch, i) => (
+      <g key={ch} transform={"translate(" + (38 + i * 56) + " 0)"}>
+        <path d="M-22 128 Q0 64 22 128 Z" fill="#efe9dc" stroke="#2a2a2a" strokeWidth="2" />
+        <text x="0" y="118" textAnchor="middle" fontSize="18" fill="#7a1414" fontWeight="700">{ch}</text>
+      </g>
+    ))}
+    <rect x="0" y="146" width="300" height="54" fill="#2a2016" />
+  </>, ["#55402a", "#120d08"]);
+  if (art === "gate") return svg(<>
+    {[80, 62, 44, 28].map((r, i) => <circle key={r} cx="150" cy="104" r={r} fill="none" stroke={i % 2 ? "#ff5a3c" : "#c3121c"} strokeWidth={6 - i} opacity={0.4 + i * 0.15} />)}
+    <text x="150" y="118" textAnchor="middle" fontSize="40" fill="#ffd9c8" fontWeight="800">{"死"}</text>
+  </>, ["#3a0a08", "#0a0202"]);
+  if (art === "moon") return svg(<>
+    <circle cx="150" cy="96" r="62" fill="#e9e3d2" />
+    {[16, 30, 44, 58].map((r) => <circle key={r} cx="150" cy="96" r={r} fill="none" stroke="#b3121b" strokeWidth="2.2" opacity=".85" />)}
+    <circle cx="150" cy="96" r="5" fill="#b3121b" />
+    <rect x="0" y="170" width="300" height="30" fill="#0c0a10" />
+  </>, ["#120a1e", "#030207"]);
+  if (art === "zetsu") return svg(<>
+    <path d="M90 200 Q100 120 150 110 Q200 120 210 200 Z" fill="#0c0b0b" />
+    <path d="M150 110 Q140 70 150 40 Q156 72 160 40 Q170 70 160 110" fill="#0c0b0b" />
+    <circle cx="150" cy="140" r="6" fill="#f5d34a" /><circle cx="150" cy="140" r="2" fill="#0c0b0b" />
+  </>, ["#2a1f33", "#09060c"]);
+  /* end */
+  return svg(<>
+    <circle cx="230" cy="120" r="30" fill="#f2a65a" opacity=".85" />
+    <rect x="0" y="140" width="300" height="60" fill="#2b1d16" />
+    <g fill={k}><circle cx="122" cy="118" r="8" /><path d="M110 152 Q112 126 122 126 Q132 126 134 152 Z" /><circle cx="160" cy="120" r="8" /><path d="M148 152 Q150 128 160 128 Q170 128 172 152 Z" /></g>
+  </>, ["#8a4a3a", "#1e0f12"]);
+}
+function MadaraScene({ s, c, onChoose }) {
+  const [skip, setSkip] = useState(false);
+  const b = madaraScene(s.beat);
+  if (!b) return null;
+  const story = typeof b.story === "function" ? b.story(c) : b.story;
+  const choices = (b.choices || []).filter((x) => !x.need || x.need(c));
+  const d = (t) => ({ animationDelay: t + "s" });
+  return (
+    <div className={"fixed inset-0 z-50 eye-aw md-scene" + (skip ? " eye-skip" : "")} role="dialog" aria-modal="true" aria-label={b.n} data-beat={b.id}
+      onClick={(ev) => { if (!ev.target.closest || !ev.target.closest("button")) setSkip(true); }}
+      style={{ zIndex: 92, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "max(26px, env(safe-area-inset-top)) 16px 28px",
+        background: "radial-gradient(ellipse at 50% 30%, #1c0306 0%, #050102 55%, #000 100%)" }}>
+      <div style={{ margin: "auto 0", width: "100%", maxWidth: 560, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="eye-t" style={{ color: "#e0313a", fontSize: 10.5, letterSpacing: ".4em", fontWeight: 800, ...d(0.1) }}>{b.part === 2 ? "MADARA UCHIHA · THE SECOND LIFE" : b.id === "death" ? "MADARA UCHIHA" : "MADARA UCHIHA · " + AH(s.y)}</div>
+        <div className="eye-t" style={{ color: "#8f837a", fontSize: 10, letterSpacing: ".3em", fontWeight: 700, marginTop: 4, ...d(0.2) }}>{b.head}</div>
+        <div style={{ margin: "18px 0 14px" }}><SceneArt art={b.art} size="min(320px, 80vw)" /></div>
+        <div className="eye-t" style={{ fontFamily: SERIF, fontSize: "clamp(26px, 6vw, 38px)", lineHeight: 1.1, fontWeight: 700, color: "#f4ede6", ...d(0.9) }}>{b.n}</div>
+        <div className="eye-t" style={{ color: "#cbc1b8", fontFamily: SERIF, fontSize: 15.5, lineHeight: 1.6, marginTop: 12, ...d(1.3) }}>{story}</div>
+        <div className="eye-t" style={{ marginTop: 24, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, width: "100%", ...d(1.9) }}>
+          {choices.map((ch, i) => (
+            <button key={ch.id} onClick={() => onChoose(ch.id)} className={i === 0 ? "eye-btn md-choice" : "md-choice md-choice2"} data-choice={ch.id}
+              style={i === 0
+                ? { background: "linear-gradient(180deg,#e3343d,#a3111b)", color: "#fff", border: "1px solid #ff6a6a", borderRadius: 10, padding: "12px 34px", fontWeight: 800, fontSize: 14.5, letterSpacing: ".08em", boxShadow: "0 10px 34px rgba(224,49,58,.35)", maxWidth: "100%" }
+                : { color: "#d4c8bd", fontSize: 13.5, padding: "8px 16px", border: "1px solid rgba(255,255,255,.14)", borderRadius: 10, background: "rgba(255,255,255,.03)", maxWidth: "100%" }}>
+              {ch.t}{ch.sub ? <span style={{ display: "block", fontSize: 11, fontWeight: 500, letterSpacing: 0, opacity: 0.8, marginTop: 2 }}>{ch.sub}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+/* the moon, the eye, and everybody looking up */
+function TsukuyomiScene({ full, onDone }) {
+  const [skip, setSkip] = useState(false);
+  const rings = [18, 34, 50, 66];
+  const people = Array.from({ length: 22 }, (_, i) => 30 + i * 44 + ((i * 37) % 13));
+  return (
+    <div className={"fixed inset-0 tsk" + (full ? " z-50 tsk-full" : " tsk-short") + (skip ? " tsk-skip" : "")} role={full ? "dialog" : undefined} aria-label="Infinite Tsukuyomi"
+      onClick={(ev) => { if (full && (!ev.target.closest || !ev.target.closest("button"))) setSkip(true); }}
+      style={{ zIndex: 96, overflow: "hidden", pointerEvents: full ? "auto" : "none", background: "#02030a" }}>
+      <div className="tsk-red" aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 26%, #5a0610 0%, #24020a 45%, #050106 100%)" }} />
+      <svg aria-hidden viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid slice" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+        {Array.from({ length: 40 }, (_, i) => <circle key={i} cx={(i * 97) % 1000} cy={(i * 53) % 330} r={i % 5 === 0 ? 1.6 : 0.9} fill="#e8e6f0" opacity=".55" className="tsk-star" />)}
+      </svg>
+      <div className="tsk-moon" style={{ position: "absolute", left: "50%", top: full ? "7%" : "16%", width: "min(44vw, 320px)", aspectRatio: "1 / 1", transform: "translateX(-50%)" }}>
+        <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+          <defs><radialGradient id="tskm" cx="-20" cy="-20" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#fbf6e6" /><stop offset="1" stopColor="#c9c0a8" /></radialGradient></defs>
+          <circle r="92" fill="url(#tskm)" />
+          {[[-30, -20, 14], [24, 30, 10], [40, -36, 8], [-44, 40, 9]].map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill="#b8ae94" opacity=".55" />)}
+          <g className="tsk-eye">
+            <circle r="92" fill="#c3121c" opacity=".88" />
+            {rings.map((r) => <circle key={r} r={r} fill="none" stroke="#3a0408" strokeWidth="3" />)}
+            <circle r="7" fill="#1a0204" />
+            {eyeTomoeRing(3, 34, 0.55, 0, "a")}{eyeTomoeRing(3, 50, 0.6, 40, "b")}{eyeTomoeRing(3, 66, 0.66, 80, "c")}
+          </g>
+        </svg>
+      </div>
+      <div className="tsk-flash" aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 22%, rgba(255,70,70,.85), rgba(255,0,0,.25) 40%, transparent 70%)" }} />
+      <svg aria-hidden viewBox="0 0 1000 260" preserveAspectRatio="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: "34%" }}>
+        <path d="M0 120 Q200 70 420 110 T1000 90 L1000 260 L0 260 Z" fill="#090408" />
+        {people.map((x, i) => (
+          <g key={i} className="tsk-person" style={{ animationDelay: (3.2 + (i % 7) * 0.12) + "s" }}>
+            <circle cx={x} cy={150 + (i % 3) * 14} r="7" fill="#1b0d12" />
+            <rect x={x - 6} y={157 + (i % 3) * 14} width="12" height="24" rx="5" fill="#1b0d12" />
+            <ellipse className="tsk-cocoon" cx={x} cy={166 + (i % 3) * 14} rx="11" ry="22" fill="#efe7d6" style={{ animationDelay: (5 + (i % 5) * 0.2) + "s" }} />
+          </g>
+        ))}
+        {[120, 330, 560, 780, 930].map((x, i) => <path key={i} className="tsk-root" d={"M" + x + " 260 Q" + (x - 40) + " 200 " + (x + 20) + " 150 T" + (x - 10) + " 60"} stroke="#d8cdb6" strokeWidth="9" fill="none" strokeLinecap="round" />)}
+      </svg>
+      {full ? (
+        <div style={{ position: "absolute", left: 0, right: 0, top: "44%", padding: "0 18px", textAlign: "center" }}>
+          {["The moon catches the light of the eye.", "Everyone on the surface of the world looks up at the same moment.", "Every one of them is asleep now, and dreaming the life they wanted.", "The God Tree comes up through the roads and takes them, one by one."].map((t, i) => (
+            <div key={i} className="tsk-line" style={{ color: "#f1e6dc", fontFamily: SERIF, fontSize: "clamp(14px, 3.6vw, 18px)", marginTop: 6, textShadow: "0 2px 12px #000", animationDelay: (1.2 + i * 1.6) + "s" }}>{t}</div>
+          ))}
+          <div className="tsk-line" style={{ color: "#ff5a5a", fontSize: 11, letterSpacing: ".46em", fontWeight: 800, marginTop: 18, animationDelay: "7.6s" }}>THE MOON'S EYE PLAN</div>
+          <div className="tsk-line" style={{ color: "#fff", fontFamily: SERIF, fontWeight: 700, fontSize: "clamp(30px, 7vw, 48px)", textShadow: "0 0 40px #e0313a", animationDelay: "7.9s" }}>Infinite Tsukuyomi</div>
+          <button onClick={onDone} className="tsk-line eye-btn tsk-btn" style={{ marginTop: 18, animationDelay: "8.6s", background: "linear-gradient(180deg,#e3343d,#a3111b)", color: "#fff", border: "1px solid #ff6a6a", borderRadius: 10, padding: "12px 34px", fontWeight: 800, letterSpacing: ".08em" }}>LOOK AT WHAT YOU MADE</button>
+        </div>
+      ) : (
+        <div className="tsk-line" style={{ position: "absolute", left: 0, right: 0, top: "62%", textAlign: "center", color: "#fff", fontFamily: SERIF, fontWeight: 700, fontSize: "clamp(26px, 6vw, 40px)", textShadow: "0 0 40px #e0313a", animationDelay: "1.4s" }}>Infinite Tsukuyomi</div>
+      )}
+    </div>
+  );
+}
 function EyeAwakening({ a, onChoose }) {
   const [skip, setSkip] = useState(false);
   const rin = a.stage === "rin";
@@ -15742,6 +16244,7 @@ export default function ShinobiLife() {
   const [histVid, setHistVid] = useState(null);
   const [yearFlash, setYearFlash] = useState(null);
   const [eyeReplay, setEyeReplay] = useState(null);
+  const [tsukuFx, setTsukuFx] = useState(null);
   const [arrival, setArrival] = useState(null);
   const [arrivalLeaving, setArrivalLeaving] = useState(false);
   function dismissArrival() {
@@ -16087,6 +16590,14 @@ export default function ShinobiLife() {
       if (CS.natures) { ch.natures = []; CS.natures.forEach((n) => { if (!ch.natures.includes(n)) ch.natures.push(n); }); }
       Object.keys(CS.stats || {}).forEach((k) => { if (ch.stats[k] !== undefined) ch.stats[k] = CS.stats[k]; });
       (CS.jutsu || []).forEach((j) => { if (!ch.jutsu.includes(j)) ch.jutsu.push(j); });
+      if (CS.id === "madara") {
+        /* born on the year the histories have him, with the brother they have, and his whole life ahead on the calendar */
+        ch.birthYear = 858; ch.year = 858; ch.era = eraAtYear(858);
+        ch.roster = ((ERAS.find((e) => e.id === ch.era) || {}).roster || []).slice();
+        ch.sibling = { name: "Izuna Uchiha", g: "m", alive: true, canon: true };
+        ch.madara = { done: {}, picks: {}, phase: "life", bond: 0, brothers: 4 };
+        if (!ch.eye || ch.eye.t !== "Sharingan") ch.eye = { t: "Sharingan", lv: 0, mangekyo: false, eternal: false, rinnegan: false, blind: 0, heart: 0, edge: 0, hist: [] };
+      }
       if (CS.role === "kage" && CS.seat) {
         /* work out which year that village's line hands over to you, strip your name out of
            the line so the world never runs an NPC copy, and be born the right age for it.
@@ -16169,6 +16680,7 @@ export default function ShinobiLife() {
 
   /* ---------- age up ---------- */
   function ageUp() {
+    if (c.madara && (c.madara.phase === "dead" || c.scene)) return;
     if (c.myClan) registerClanKG(c);
     setYearFlash((c.birthYear || 0) + c.age + 1);
     setTimeout(() => setYearFlash(null), 1230);
@@ -16318,6 +16830,7 @@ export default function ShinobiLife() {
       rollTick(c, L);
       eyeTick(c, L);
       wayTick(c, L);
+      madaraTick(c, L);
       checkEpithet(c, L);
       bingoTick(c, L);
       if (!c.kg && !c.myClan && c.age >= 6 && c.age <= 20 && roll(3)) {
@@ -16438,11 +16951,11 @@ export default function ShinobiLife() {
         }
       } else if (c.age >= 12 && roll(ERA.warChance / 3.5)) beginWar(c, L);
 
-      if (c.rogue && c.infamy >= 45 && c.age >= 14 && roll(11)) {
+      if (c.rogue && !(c.madara && c.madara.phase === "cave") && c.infamy >= 45 && c.age >= 14 && roll(11)) {
         const r = c.roster.filter((x) => NAMED[x] && !c.dead.includes(x) && NAMED[x].lvl <= 60 + c.infamy * 0.5 && namedVillage(x) === c.village);
         if (r.length) { c.pendingAmbush = pick(r); P(L, "Someone has taken your page out of the Bingo Book personally.", "b"); }
       }
-      if (c.rogue && !c.akatsuki && c.infamy >= 55 && roll(30)) {
+      if (c.rogue && !c.akatsuki && !(c.madara && c.madara.phase === "cave") && c.infamy >= 55 && roll(30)) {
         /* they come to you — through the same ring system the panel uses, not a bare flag */
         const freeR = AKATSUKI_RINGS.filter((r) => !r.who || isDead(c, r.who) || !NAMED[r.who]);
         const ringR = freeR.length ? pick(freeR) : pick(AKATSUKI_RINGS);
@@ -16452,7 +16965,7 @@ export default function ShinobiLife() {
         addTitle(c, "Wore the ring " + ringR.ring);
         P(L, "A ring and a black cloak arrived with no messenger. The ring is " + ringR.ring + " and your partner is " + c.akatsuki.partner + ".", "e");
       }
-      if (c.rogue && roll(16 + c.infamy / 5)) {
+      if (c.rogue && !(c.madara && c.madara.phase === "cave") && roll(16 + c.infamy / 5)) {
         if (roll(cl(50 + (power(c) - (30 + c.infamy / 2)) * 2, 10, 95))) { c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin found your camp. You left four bodies and no trail.", "g"); c.kills += rr(2, 5); c.infamy = cl(c.infamy + 6); }
         else { const d = rr(12, 30); c.health = cl(c.health - d); c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin ambushed you. You escaped, barely. -" + d + " health.", "b"); }
       }
@@ -16462,7 +16975,7 @@ export default function ShinobiLife() {
       if (c.parents.f.alive && c.age > 26 && roll(4)) { c.parents.f.alive = false; P(L, "Your father died. The funeral was small.", "b"); loss(c, L, "your father", { g: "m", how: "natural" }); }
       if (c.parents.m.alive && c.age > 29 && roll(4)) { c.parents.m.alive = false; P(L, "Your mother died in her sleep.", "b"); loss(c, L, "your mother", { g: "f", how: "natural" }); }
       /* a brother or sister in the same trade does not always come home */
-      if (c.sibling && c.sibling.alive && c.age >= 9 && c.age <= 60 && roll(c.war ? 3 : 0.6)) {
+      if (c.sibling && c.sibling.alive && !c.sibling.canon && c.age >= 9 && c.age <= 60 && roll(c.war ? 3 : 0.6)) {
         const sb = c.sibling; if (!sb.g) sb.g = roll(50) ? "m" : "f";
         const sw = sb.g === "f" ? "sister" : "brother";
         sb.alive = false; sb.diedAt = c.age;
@@ -16478,7 +16991,8 @@ export default function ShinobiLife() {
          because age was tested first, being old made a frail character *less*
          likely to die than a young one in the same state — 7% against 8%.
          Age and frailty are separate risks now, and whichever is worse wins. */
-      const ageRisk = c.age > 85 ? 45 : c.age > 70 ? 18 : c.age > 58 ? 7 : 0;
+      /* the statue keeps Madara breathing in the cave, and the dead do not age */
+      const ageRisk = c.madara && c.madara.phase !== "life" ? 0 : c.age > 85 ? 45 : c.age > 70 ? 18 : c.age > 58 ? 7 : 0;
       const frailRisk = c.health > 0 && c.health < 25 ? 8 : 0;
       let dc = 0, cause = "died of old age";
       if (c.cheats.god) dc = 0;
@@ -16494,7 +17008,16 @@ export default function ShinobiLife() {
       if (roll(dc)) die(c, L, cause);
     });
   }
-  function die(c, L, cause) { c.alive = false; c.cause = cause; P(L, c.name + " " + cause + " at " + c.age + ".", "b"); setTimeout(() => setScreen("dead"), 500); }
+  function die(c, L, cause) {
+    if (c.canonId === "madara" && c.madara) {
+      /* a body made of ash and paper does not stay down; the first death is not the last */
+      if (c.madara.phase === "edo") { c.health = 100; P(L, "Ash and paper. Your body comes back together, because it is not really a body any more.", "e"); return; }
+      if (madaraDie(c, L, cause)) return;
+      setTimeout(() => setScreen("dead"), 500);
+      return;
+    }
+    c.alive = false; c.cause = cause; P(L, c.name + " " + cause + " at " + c.age + ".", "b"); setTimeout(() => setScreen("dead"), 500);
+  }
 
   /* ---------- training ---------- */
   function doTrain(reg) {
@@ -20047,6 +20570,19 @@ export default function ShinobiLife() {
   function act(move, itemId, qteAcc) {
     if (!bt || bt.over) return;
     const b = clone(bt); const lg = b.log; const p = b.p, e = b.e;
+    /* the moon, in the middle of a fight: anyone short of a legend is simply asleep */
+    if (move && move.name === "Infinite Tsukuyomi" && p.ck >= (move.cost || 0)) {
+      setTsukuFx(Date.now());
+      setTimeout(() => setTsukuFx(null), 4300);
+      if ((e.lvl || 0) < 100) {
+        p.ck -= move.cost || 0;
+        lg.push({ t: "The moon turns red. " + e.name + " looks up at it like everybody else in the world, and does not look down again.", k: "e" });
+        e.hp = 0; b.over = true; b.win = true;
+        lg.push({ t: e.name + " is dreaming the life they wanted. The fight is over.", k: "e" });
+        setBt(b); return;
+      }
+      lg.push({ t: e.name + " is strong enough to feel the dream and refuse it. It still costs them.", k: "e" });
+    }
 
     const endTurn = () => {
       allyTurn(b);
@@ -20389,6 +20925,18 @@ export default function ShinobiLife() {
         }
         if (c.broadcast) c.broadcast = null;
       }
+      /* Madara's fights: the Valley, the Five Kage, Hashirama again, the Eighth Gate */
+      if (ctx.type === "madara") {
+        spend(c);
+        const mb = madaraBeat(ctx.beat);
+        if (mb && c.madara && !c.madara.done[mb.id]) {
+          c.madara.done[mb.id] = c.year; c.madara.picks[mb.id] = b.win ? "won" : "lost";
+          if (b.win) c.wins += 1;
+          if (mb.after) mb.after(c, L, b.win);
+        }
+        if (c.health <= 0 && c.madara && c.madara.phase !== "edo") c.health = 8;
+        madaraTick(c, L);
+      }
       /* the top of a Way: one fight nobody can do for you */
       if (ctx.type === "waytop" || ctx.type === "waykage") {
         spend(c);
@@ -20419,6 +20967,7 @@ export default function ShinobiLife() {
       /* the Sharingan is fed in fights: the near-deaths, the first kill, the ones you lose and live */
       eyeBattle(c, L, b, kills0);
       wayTick(c, L);
+      madaraTick(c, L);
       /* the Copy Ninja takes techniques off whoever shows him one */
       if (c.copyNin && b.win && b.e && b.e.moves) {
         const seen = b.e.moves.map((m) => m[0]).filter((n2) => MOVES[n2] && !c.jutsu.includes(n2) && (MOVES[n2].tier || 2) <= (c.eye && c.eye.mangekyo ? 6 : 5));
@@ -21240,6 +21789,39 @@ export default function ShinobiLife() {
         ? "The " + tailsWord(b.tails) + " is in " + vn + ", sealed inside " + w.host + ". Your partner takes the left. The town below does not know yet."
         : "The " + tailsWord(b.tails) + " has no host. " + b.name + " is loose near " + vn + ", and it saw you first.",
       w.k === "host" ? { name: w.host, title: tailsWord(b.tails) + " jinchuriki of " + vn } : { name: b.name, title: tailsWord(b.tails) + ", loose near " + vn });
+    setModal(null);
+  }
+  /* Madara's chapters: a choice, a fight, or the long wait for the war */
+  function madaraChoose(choiceId) {
+    const s0 = c.scene;
+    const b0 = s0 && madaraScene(s0.beat);
+    if (!b0) return;
+    const ch = (b0.choices || []).find((x) => x.id === choiceId);
+    if (!ch) return;
+    if (ch.later) { commit((c2) => { c2.scene = null; }); return; }
+    if (ch.fight && b0.fight) {
+      const F = b0.fight;
+      commit((c2) => { c2.scene = null; });
+      setTimeout(() => startBattle(F.foe, { type: "madara", beat: b0.id }, 0, F.opener, { name: F.name || (NAMED[F.foe] ? NAMED[F.foe].name : F.foe), title: F.title }), 140);
+      return;
+    }
+    commit((c2, L) => {
+      c2.scene = null;
+      if (ch.resurrect) { madaraResurrect(c2, L); return; }
+      if (b0.id !== "death") { c2.madara.done[b0.id] = c2.year; c2.madara.picks[b0.id] = ch.id; }
+      if (ch.fx) ch.fx(c2, L);
+      madaraTick(c2, L);
+    });
+    setTimeout(() => { if (cRef.current && cRef.current.alive === false) setScreen("dead"); }, 700);
+  }
+  function madaraSleep() {
+    commit((c2, L) => {
+      const nb = madaraNext(c2);
+      if (!nb || !c2.madara || c2.madara.phase !== "cave" || nb.y <= c2.year) return;
+      const n = madaraSkipTo(c2, L, nb.y);
+      P(L, "You slept beside the statue for " + n + " years. The world above did what it does.", "n");
+      madaraTick(c2, L);
+    });
     setModal(null);
   }
   /* the top of a Way */
@@ -22166,6 +22748,45 @@ export default function ShinobiLife() {
       .sl-eye { animation: slEye 1.1s ease-out both; }
       .sl-slide { animation: slSlideUp .34s cubic-bezier(.2,.8,.3,1) both; }
       .sl-lowhp { animation: slBarPulse 1.1s ease-in-out infinite; }
+      /* ---------- Infinite Tsukuyomi ---------- */
+      @keyframes tskRise { from { transform: translate(-50%, 40%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+      @keyframes tskEye { 0% { opacity: 0; transform: scale(.4) rotate(-90deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
+      @keyframes tskSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes tskFlash { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes tskRed { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes tskRoot { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
+      @keyframes tskCocoon { from { opacity: 0; transform: scaleY(.2); } to { opacity: .95; transform: scaleY(1); } }
+      @keyframes tskLook { from { transform: translateY(0); } to { transform: translateY(-4px); } }
+      @keyframes tskLine { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      @keyframes tskOut { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+      .tsk-moon { animation: tskRise 1.6s cubic-bezier(.2,.7,.3,1) both; }
+      .tsk-eye { transform-box: fill-box; transform-origin: center; animation: tskEye 1.3s cubic-bezier(.2,.8,.3,1) 1.4s both, tskSpin 40s linear 2.7s infinite; }
+      .tsk-flash { opacity: 0; animation: tskFlash 1.6s ease-out 2.6s both; }
+      .tsk-red { animation: tskRed 2.4s ease-in 2.8s both; }
+      .tsk-root { stroke-dasharray: 400; animation: tskRoot 2.6s ease-out 4.4s both; }
+      .tsk-cocoon { transform-box: fill-box; transform-origin: bottom; animation: tskCocoon .9s ease-out both; }
+      .tsk-person { animation: tskLook .8s ease-out both; }
+      .tsk-line { animation: tskLine .8s ease-out both; }
+      .tsk-short { animation: tskOut 4.2s linear both; }
+      .tsk-short .tsk-moon { animation-duration: .9s; }
+      .tsk-short .tsk-eye { animation-delay: .5s, 1.8s; }
+      .tsk-short .tsk-flash { animation-delay: 1.2s; }
+      .tsk-short .tsk-red { animation-delay: 1.1s; animation-duration: 1s; }
+      .tsk-short .tsk-root, .tsk-short .tsk-cocoon { display: none; }
+      .tsk-skip .tsk-moon, .tsk-skip .tsk-eye, .tsk-skip .tsk-red, .tsk-skip .tsk-root, .tsk-skip .tsk-cocoon, .tsk-skip .tsk-person, .tsk-skip .tsk-line { animation: none !important; }
+      .tsk-skip .tsk-flash { display: none; }
+      @keyframes mdArt { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+      @keyframes mdArc { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
+      .md-art { animation: mdArt 1s ease-out .2s both; }
+      .sa-arc { animation: mdArc 2.2s linear infinite; }
+      body.sl-motion-off .md-art, body.sl-motion-off .sa-arc { animation: none !important; }
+      .md-choice2:hover { background: rgba(255,255,255,.08) !important; }
+      body.sl-motion-off .tsk *, body.sl-motion-off .tsk { animation: none !important; }
+      body.sl-motion-off .tsk-flash, body.sl-motion-off .tsk-short { display: none !important; }
+      @media (prefers-reduced-motion: reduce) {
+        .tsk *, .tsk { animation: none !important; }
+        .tsk-flash, .tsk-short { display: none !important; }
+      }
       /* ---------- the eye opening ---------- */
       @keyframes eyeOpen { 0% { clip-path: ellipse(52% 0.6% at 50% 50%); } 100% { clip-path: ellipse(52% 52% at 50% 50%); } }
       @keyframes eyeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -22780,6 +23401,9 @@ export default function ShinobiLife() {
       sub: beastStageName(c) + " \u00b7 bond " + (c.beast.rel || 0),
       onClick: () => setModal("beast"), disabled: c.actions < 1,
       badge: (c.beast.rel || 0) <= 15 ? "!" : null },
+    c.madara && c.canonId === "madara" && c.madara.phase !== "over" && { id: "madara", grp: "do", icon: "powers", tone: T.blood,
+      label: "The Moon's Eye Plan", sub: (madaraNext(c) ? madaraNext(c).n + (madaraNext(c).y > c.year && c.madara.phase !== "dead" ? " \u00b7 " + AH(madaraNext(c).y) : "") : "Done"),
+      onClick: () => setModal("madara"), badge: madaraNext(c) && madaraNext(c).fight && madaraNext(c).y <= c.year ? "!" : null },
     (c.rogue || c.akatsuki) && { id: "akatsuki", grp: "do", icon: "bingo", tone: T.blood,
       label: c.akatsuki ? "The Ring " + c.akatsuki.ring : "The Organisation",
       sub: c.akatsuki ? "Partnered with " + c.akatsuki.partner : canJoinAkatsuki(c) ? "They are looking at you" : "Ten rings, ten fingers",
@@ -22885,9 +23509,12 @@ export default function ShinobiLife() {
           </div>
         </div>
       )}
+      {c.scene && c.scene.beat && <MadaraScene key={c.scene.beat + c.scene.y} s={c.scene} c={c} onChoose={madaraChoose} />}
+      {c.tsuku && <TsukuyomiScene full onDone={() => commit((c2, L) => { c2.tsuku = null; P(L, "Everyone in the world is asleep under a red moon. You are awake, and so is the thing at your back.", "e"); madaraTick(c2, L); })} />}
+      {tsukuFx && !c.tsuku && <TsukuyomiScene key={tsukuFx} />}
       {(c.eyeAwake || eyeReplay) && (
         <EyeAwakening key={(c.eyeAwake || eyeReplay).stage + "-" + (c.eyeAwake || eyeReplay).y + (eyeReplay && !c.eyeAwake ? "r" : "")} a={c.eyeAwake || eyeReplay}
-          onChoose={(side) => { if (!c.eyeAwake) { setEyeReplay(null); return; } commit((c2, L) => eyeChoose(c2, L, side)); }} />
+          onChoose={(side) => { if (!c.eyeAwake) { setEyeReplay(null); return; } commit((c2, L) => { eyeChoose(c2, L, side); madaraTick(c2, L); }); }} />
       )}
       {c.moment && !c.killFlash && !bt && (() => {
         const col = c.moment.tone === "blood" ? T.blood : c.moment.tone === "good" ? T.good : T.gold;
@@ -24180,7 +24807,7 @@ export default function ShinobiLife() {
                 <div className="flex gap-3 items-center">
                   <button onClick={() => hist.length && replay(hist[hist.length - 1])} aria-label="Look into your eyes" title={hist.length ? "Look into your eyes" : undefined}
                     style={{ flexShrink: 0, cursor: hist.length ? "pointer" : "default", borderRadius: "50%" }} className="sl-eyebtn">
-                    <SharinganEye lv={lv} mk={e.rinnegan ? null : e.mangekyo ? e.power || "black" : null} stage={st} uchiha size={76} />
+                    <SharinganEye lv={lv} mk={e.rinnegan ? null : e.mangekyo ? e.pattern || e.power || "black" : null} stage={st} uchiha size={76} />
                   </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
@@ -24339,6 +24966,37 @@ export default function ShinobiLife() {
             const held = w.k === "yours", gone = w.k === "statue";
             return <Row key={b.id} label={tailsWord(b.tails) + " \u00b7 " + b.name} sub={held ? "Already yours" : gone ? "Sealed into the Akatsuki's statue. Nobody is getting this one back." : w.t + " \u2014 " + b.t} right={held ? "Held" : gone ? "Taken" : "Hunt"} onClick={() => huntBeast(b.id)} disabled={held || gone} />;
           })}
+        </Modal>
+      )}
+
+      {modal === "madara" && c.madara && (
+        <Modal title="THE MOON'S EYE PLAN" accent={T.blood} onClose={() => setModal(null)}>
+          <p style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">The life of Madara Uchiha, chapter by chapter. Each one opens on its year; the fights wait for you.</p>
+          {(() => {
+            const nb = madaraNext(c);
+            return (
+              <>
+                {nb && nb.fight && nb.y <= c.year && <Row label={nb.n} sub={typeof nb.story === "function" ? nb.story(c) : nb.story} right="Fight" onClick={() => { setModal(null); commit((c2) => { c2.scene = { beat: nb.id, y: c2.year }; }); }} disabled={!!bt} tone={T.blood} />}
+                {nb && c.madara.phase === "cave" && nb.y > c.year && <Row label="Sleep beside the statue" sub={"Let the years go by in the cave until " + AH(nb.y) + ": " + nb.n + ". The world above goes on without you."} right={"\u2192 " + AH(nb.y)} onClick={madaraSleep} tone={T.epic} />}
+                {[1, 2].map((part) => (
+                  <div key={part} className="mt-3">
+                    <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="font-bold mb-1">{part === 1 ? "THE FIRST LIFE" : "THE SECOND LIFE"}</div>
+                    {MADARA_BEATS.filter((x) => x.part === part).map((x) => {
+                      const dn = c.madara.done[x.id];
+                      const cur = nb && nb.id === x.id;
+                      return (
+                        <div key={x.id} className="flex justify-between gap-2 py-1 md-row" data-done={dn ? "1" : "0"} style={{ borderTop: "1px solid " + T.line, fontSize: 12, opacity: dn || cur ? 1 : 0.55 }}>
+                          <span style={{ color: cur ? T.blood : T.text }} className={cur ? "font-bold" : ""}>{dn > 0 ? "\u2713 " : dn === -1 ? "\u2013 " : cur ? "\u25B8 " : ""}{x.n}</span>
+                          <span style={{ color: T.dim }}>{dn > 0 ? AH(dn) + (c.madara.picks[x.id] === "won" ? " \u00b7 won" : c.madara.picks[x.id] === "lost" ? " \u00b7 lost" : "") : dn === -1 ? "never came" : AH(x.y)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                {c.madara.died && <div style={{ color: T.dim, fontSize: 11 }} className="mt-3">Died in {AH(c.madara.died.y)} at {c.madara.died.age}: {c.madara.died.cause}.</div>}
+              </>
+            );
+          })()}
         </Modal>
       )}
 
@@ -24808,7 +25466,7 @@ export default function ShinobiLife() {
         const me = playerNamedId(c);
         /* one entry per name, nobody dead, nobody from an age that has not arrived,
            nobody you have already put down, and never you */
-        const ok = (id) => NAMED[id] && id !== me && !c.dead.includes(id)
+        const ok = (id) => NAMED[id] && id !== me && !c.dead.includes(id) && !(me === "madara" && id === "madaraRe")
           && !(c.defeated || []).includes(NAMED[id].name)
           && (NAMED_ERA[id] === undefined || NAMED_ERA[id] <= eraIndex(c));
         const list = (c.roster || []).concat(ERA.bosses || [])
