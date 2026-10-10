@@ -11111,6 +11111,19 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.0.4", n: "Your Blood Remembers", items: [
+    "The Sharingan now opens on screen. Each stage gets its own full-screen moment: the eye opens like an eyelid, the new tomoe burns in with a red flash, and the ring spins up and keeps turning. The screen says what woke it, what your body gained, what it unlocked, and what the next stage will take",
+    "The tomoe come from how you live. Three ways in. Genjutsu mastery: an Uchiha eye opens at Genjutsu 30, the second tomoe comes at 45, the third at 62. Danger: near-deaths, losing fights and living, years at war and missions that go wrong all fill a Danger meter that forces the next tomoe. Loss: when someone close dies (a parent, a teammate, your child, your brother or sister) a dormant eye always opens from age six on, and a later tomoe often does",
+    "Every awakening that comes from pain asks you what to do with it. AVENGE HIM or Bury him first, FINISH IT or Get up for the ones behind you, KEEP FIGHTING or Go home for a while. The choice moves the eye toward Hatred or Resolve, and so does your life: going rogue or joining the Akatsuki pushes toward hatred, a spouse and children pull toward resolve",
+    "The heart shapes the Mangekyo. Hatred brings it sooner, leans it toward Amaterasu, Tsukuyomi and Izanami, and takes your sight faster. Resolve leans it toward Susanoo, Kamui, Kotoamatsukami and Izanagi, and the eyes last longer. A loss that used to hand out Amaterasu, Tsukuyomi and Susanoo all at once now rolls one power, the same way the yearly Mangekyo already did",
+    "Each Mangekyo power has its own pattern, drawn on screen as the three tomoe spin, stretch and fuse into it. Susanoo now manifests on its own a few years after a Mangekyo opens. The Eternal Mangekyo and the Rinnegan get their own screens too",
+    "What each tomoe unlocks: the first gives Copy Wheel Eye and Hell Viewing Illusion; the second gives a new technique, Genjutsu: Sharingan (no seals, it stuns); the third gives Mirror Heaven Illusion. From the first tomoe on, your Sharingan can copy techniques the enemy used in a fight you win. Higher tomoe copy higher tiers, and a Mangekyo can copy up to the top tier",
+    "The Powers panel draws your eye as it is now, turning slowly. It shows Genjutsu and Danger progress toward the next tomoe, a Hatred/Resolve meter, and a list of every awakening with the age and what you chose. Tap the eye, or any row, to watch that awakening again",
+    "Sharingan drills on the training ground: Clan Eye Drills while the eye is dormant, Read the Spin from one tomoe, Cast Through the Eye from two",
+    "Siblings now have a gender, and a brother or sister in the trade can be killed, rarely in peacetime and more often in a war. Each awakening is written into your Chronicle. A Sharingan child who inherits the eye starts dormant, with none of the parent's Mangekyo power",
+    "A 'Sharingan: next stage' button in the cheat panel walks one eye through every stage, to see each screen",
+    "Reduced motion and the motion toggle show every screen fully drawn with nothing moving. Tap anywhere on an awakening to skip its animation",
+  ] },
   { v: "12.0.3", n: "The Hands", items: [
     "Hand seals are hands now. All twelve seals are drawn as two hands making the sign: the fist closed around two raised fingers, the Tiger's raised fingers and crossed thumb, the Horse's triangle, the Bird's spread wings, the Dog's flat hand on a fist. The animal names are gone from the panel; each seal keeps its zodiac character",
     "No clock. Picking a technique that needs seals opens the panel, and you form its seals one at a time from the twelve, as slowly as you like. A wrong seal shows as wrong and the technique still fires, weaker",
@@ -12154,7 +12167,7 @@ function newChar(name, gender, vid, clanName, eraId, otsuEye) {
     dutyLog: {}, scouted: 0, summit: null, summitOpen: null, bench: null, booked: [],
     rogue: false, bingo: null, akatsuki: false, partner: null,
     team: null, sensei: null, rival: null, crush: null, spouse: null, kids: [],
-    sibling: roll(55) ? { name: bornName(roll(50) ? "m" : "f", clan.n), alive: true } : null,
+    sibling: roll(55) ? (() => { const sg = roll(50) ? "m" : "f"; return { name: bornName(sg, clan.n), g: sg, alive: true }; })() : null,
     parents: { f: { name: bornName("m", clan.n), alive: true }, m: { name: givenName("f") + " " + (clan.n !== "Civilian-born" ? clan.n : pick(SURNAMES)), alive: true } },
     actions: 4, examCooldown: 0, chuninYears: 0, joninYears: 0, warYears: 0,
     gear: { weapon: null, armor: null }, perks: [], items: {}, guardBattles: 0,
@@ -12230,12 +12243,15 @@ function makeTeam(c, L) {
   P(L, TT(c, "squad") + " assignment: you, " + t[0].name + " (" + t[0].per + ") and " + t[1].name + " (" + t[1].per + ").", "g");
   P(L, "Your " + TT(c, "sensei") + " is " + c.sensei.name + ", " + c.sensei.per + " and unimpressed so far.", "g");
 }
-function loss(c, L, who) {
+function loss(c, L, who, info) {
   c.lostSomeone = (c.lostSomeone || 0) + 1;
-  if (c.eye && c.eye.t === "Sharingan" && c.eye.lv >= 3 && !c.eye.mangekyo) {
-    c.eye.mangekyo = true;
-    ["Amaterasu", "Tsukuyomi", "Susanoo"].forEach((j) => learn(c, L, j));
-    P(L, "Watching " + who + " die broke something behind your eyes. The Mangekyo Sharingan awakened.", "e");
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.rinnegan || c.age < 6 || c.alive === false) return;
+  /* a death this close always answers. the eye decides how. */
+  const cz = { k: "loss", who, g: info && info.g, how: (info && info.how) || "killed" };
+  if ((e.lv || 0) >= 3 && !e.mangekyo) { mangekyoOpen(c, L, cz); return; }
+  if (!e.mangekyo && (e.lv || 0) < 3) {
+    if (!(roll(!e.lv ? 100 : cz.how === "natural" ? 45 : 75) && eyeAwaken(c, L, cz))) eyeEdge(c, L, 40);
   }
 }
 
@@ -12932,35 +12948,218 @@ const RINNEGAN_PATHS = [
  ...RINNEGAN_PATHS.map((r) => ({ n: r.j, t: 6, k: "nin", p: 138, c: 48, e: null }))].forEach((m) => {
   if (!MOVES[m.n]) MOVES[m.n] = { name: m.n, tier: m.t, kind: m.k, nature: null, pow: m.p, cost: m.c, eff: m.e || null };
 });
+/* ---- the eye opens. every tomoe is a day you could name afterwards. ----
+   Three ways in, and the eye remembers which one it was: years of genjutsu work catching
+   up with the blood (mastery), a run of fights you should not have walked out of (the
+   edge), or somebody you could not save. What you do in the second after it opens — aim
+   it, or carry it — tips the heart, and the heart decides what the Mangekyo becomes, how
+   soon it comes, and how fast it takes your sight. */
+const EYE_GEN_AT = [30, 45, 62];
+const EYE_COPY_TIER = [0, 2, 3, 5];
+const EYE_STAT_WORD = { gen: "Genjutsu", con: "Control", spd: "Speed", nin: "Ninjutsu", cha: "Chakra", int: "Intellect", tai: "Taijutsu", str: "Strength" };
+const EYE_STAGE = {
+  1: { title: "Sharingan (1-tomoe)", head: "YOUR BLOOD REMEMBERS", gains: { gen: 4, con: 2 }, unlock: ["Sharingan: Copy", "Copy Wheel Eye", "Hell Viewing Illusion"] },
+  2: { title: "Sharingan (2-tomoe)", head: "THE EYE SHARPENS", gains: { gen: 7, spd: 3 }, unlock: ["Genjutsu: Sharingan", "Sharingan: Copy (up to tier 3)"] },
+  3: { title: "Sharingan (3-tomoe)", head: "FULLY MATURED", gains: { gen: 10, spd: 3, con: 2 }, unlock: ["Mirror Heaven Illusion", "Sharingan: Copy (up to tier 5)"] },
+};
+if (!MOVES["Genjutsu: Sharingan"]) MOVES["Genjutsu: Sharingan"] = { name: "Genjutsu: Sharingan", tier: 3, kind: "gen", nature: null, pow: 56, cost: 16, eff: "stun", seals: 0 };
+if (MOVES["Copy Wheel Eye"]) MOVES["Copy Wheel Eye"] = { ...MOVES["Copy Wheel Eye"], kind: "buff", eff: "acc", pow: 0, cost: 8, seals: 0 };
+/* the eye can be trained like a muscle, and genjutsu is what feeds it when nothing is going wrong */
+const EYE_DRILLS = [
+  { id: "eyewatch", n: "Clan Eye Drills", d: "The clan makes its children watch: falling leaves, thrown kunai, the elders' hands. Nothing happens. It is not supposed to, yet.", s: { gen: 3, int: 2 }, min: 1, eye: 0 },
+  { id: "eyeread", n: "Read the Spin", d: "Your sensei throws and you call the spin before it lands. Then two at once. Then ten, in the dark.", s: { gen: 5, spd: 2 }, min: 1, eye: 1 },
+  { id: "eyecast", n: "Cast Through the Eye", d: "Put a genjutsu on a clan elder by eye contact alone, then take the one they put back on you.", s: { gen: 7, int: 3, con: 2 }, min: 2, eye: 2 },
+];
+const eyeHeartWord = (h) => (h >= 25 ? "Hatred" : h <= -25 ? "Resolve" : "Torn");
+const eyeUp = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+function eyeNext(c) {
+  const e = c.eye;
+  if (!e) return "";
+  if (e.rinnegan) return (e.paths || []).length + " of the seven paths are open. Each one after this is harder to reach.";
+  if (e.eternal) return "The dark is not coming back. Past this there is only Senju cells, if you can get them and survive them.";
+  if (e.mangekyo) return "Every use costs sight — " + (e.blind || 0) + "% gone so far. Only a sibling's eyes stop it.";
+  if ((e.lv || 0) >= 3) return "Training has nothing more to give it. The next change comes from losing someone.";
+  const at = EYE_GEN_AT[e.lv || 0];
+  if (c.stats.gen >= at) return "Your Genjutsu (" + c.stats.gen + ") is past the mark of " + at + " — the " + (e.lv ? "next tomoe" : "eye") + " can open on its own any year now, or sooner through danger and loss.";
+  if (!e.lv) return "Dormant. Wakes with Genjutsu mastery (at " + at + ", now " + c.stats.gen + ") — or the first time your life, or someone you love, is on the line.";
+  return "Trains with Genjutsu mastery (next tomoe at " + at + ", now " + c.stats.gen + ") — or awakens early through danger and loss.";
+}
+function eyeStory(lv, cz) {
+  const who = cz.who || "someone you love", Who = eyeUp(who), foe = cz.foe || "them", nat = cz.how === "natural";
+  const T3 = { loss: nat
+      ? [Who + " is gone. At the graveside the world narrows to a single point of red. One tomoe burns into each eye — grief made visible.",
+         "You sat with " + who + " at the end and the eye kept every second of it, whether you wanted it or not. A second tomoe joins the first.",
+         Who + " is gone. The third tomoe locks into place and the eye is finished — it has learned all it can from watching people leave."]
+      : [Who + " falls and the world narrows to a single point of red. One tomoe burns into each eye — grief made visible.",
+         "You watch " + who + " go down, and this time you see every frame of it. A second tomoe joins the first. You will never be able to stop seeing it.",
+         Who + " is gone. The third tomoe locks into place and the eye is finished — it has learned everything it can from watching people die."],
+    near: [eyeUp(foe) + "'s blow should have ended it. In the half-second before it lands you see it coming — slowly, in red. One tomoe burns into each eye.",
+         "Bleeding out against " + foe + ", you read the next move before they make it. A second tomoe spins up out of the dark.",
+         "You were dead against " + foe + " and refused it. The third tomoe locks in while you are still on your knees."],
+    kill: [eyeUp(foe) + " stops moving and you are the reason. You watch the light leave their eyes, and your own catch it. One tomoe.",
+         "Another one down, and the eye keeps all of it. A second tomoe.", "The third tomoe comes with the blood still on your hands."],
+    edge: ["Fight after fight you should not have walked away from. One morning the world is too sharp to look at. One tomoe burns into each eye.",
+         "Too many close calls, too many blows read a beat late. The eye stops waiting for you to catch up. A second tomoe.",
+         "Years of living one mistake away from death. The third tomoe arrives without ceremony, in the middle of a fight, and stays."],
+    mastery: ["Years of genjutsu work, and then one quiet evening the blood catches up with it. One tomoe turns over in each eye. Nobody had to die for this one.",
+         "The illusions you cast have started to feel like rooms you live in. A second tomoe settles in — earned, not torn out of you.",
+         "The last of it comes from practice alone, which the clan elders say is not possible. Three tomoe. Fully matured."] };
+  return (T3[cz.k] || T3.edge)[lv - 1];
+}
+function eyeButtons(cz, mk) {
+  const pr = cz.g === "m" ? "HIM" : cz.g === "f" ? "HER" : "THEM", pl = pr.toLowerCase();
+  if (cz.k === "loss") return cz.how === "natural" ? (mk ? ["NEVER FORGIVE IT", "Carry it", 22] : ["HOLD ON TO IT", "Let " + pl + " rest", 12])
+    : mk ? ["MAKE THEM PAY", "Carry it", 22] : ["AVENGE " + pr, "Bury " + pl + " first", 16];
+  if (cz.k === "grief") return ["LET IT BURN", "Carry it", 20];
+  if (cz.k === "near") return ["FINISH IT", "Get up for the ones behind you", 12];
+  if (cz.k === "kill") return ["DON'T LOOK AWAY", "Close your eyes", 10];
+  if (cz.k === "edge") return ["KEEP FIGHTING", "Go home for a while", 8];
+  return ["OPEN YOUR EYES", null, 0];
+}
+function eyeShow(c, a) {
+  const e = c.eye;
+  a.y = c.year; a.age = c.age; a.next = eyeNext(c);
+  c.eyeAwake = a;
+  if (!e.hist) e.hist = [];
+  e.hist.push({ stage: a.stage, lv: a.lv, mk: a.mk || null, title: a.title, head: a.head, story: a.story, gains: a.gains, unlock: a.unlock, y: a.y, age: a.age, k: a.k, choice: null });
+  if (e.hist.length > 10) e.hist.splice(0, e.hist.length - 10);
+}
+function eyeAwaken(c, L, cz) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.mangekyo || e.rinnegan || c.alive === false) return false;
+  if (e.lv === undefined) e.lv = 0;
+  if (e.lv >= 3 || c.age < 6 || e.lastAt === c.age) return false;
+  e.lv += 1; e.lastAt = c.age; e.edge = 0;
+  const st = EYE_STAGE[e.lv];
+  const gains = Object.entries(st.gains).map(([k, n]) => { c.stats[k] = cl(c.stats[k] + n); return [EYE_STAT_WORD[k] || k, n]; });
+  st.unlock.forEach((j) => { if (MOVES[j] && !c.jutsu.includes(j)) c.jutsu.push(j); });
+  const story = eyeStory(e.lv, cz);
+  const [btn, btn2, dh] = eyeButtons(cz, false);
+  P(L, story + " " + gains.map(([w, n]) => "+" + n + " " + w).join(", ") + ".", "e");
+  if (e.lv === 3) addTitle(c, "Three tomoe");
+  chron(c, { txt: c.name + "'s Sharingan " + (e.lv === 1 ? "awakened" : "matured to " + e.lv + " tomoe") + (cz.k === "loss" ? " the year " + cz.who + " died" : cz.k === "mastery" ? " through genjutsu alone" : " in the field") + ".", cat: "legend", line: c.name });
+  eyeShow(c, { stage: "t" + e.lv, lv: e.lv, k: cz.k, head: st.head, title: st.title, story, gains, unlock: st.unlock.slice(), btn, btn2, dh });
+  return true;
+}
+function mangekyoOpen(c, L, cz) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.mangekyo || (e.lv || 0) < 3 || c.alive === false) return false;
+  e.mangekyo = true; e.mkAt = c.age; e.lastAt = c.age;
+  const h = e.heart || 0;
+  const hot = ["black", "dream", "loop"], cold = ["avatar", "warp", "bind", "chain"];
+  const pool = MANGEKYO_POWERS.filter((m) => (h >= 25 ? hot.includes(m.id) : h <= -25 ? cold.includes(m.id) : true));
+  const mk = pick(pool.length ? pool : MANGEKYO_POWERS);
+  e.power = mk.id; e.powerName = mk.n;
+  if (!c.jutsu.includes(mk.j)) c.jutsu.push(mk.j);
+  c.stats.gen = cl(c.stats.gen + 12);
+  addTitle(c, "Mangekyo: " + mk.n);
+  const who = cz.who || "someone you love", Who = eyeUp(who);
+  const open = cz.k === "loss" ? (cz.how === "natural" ? Who + " is gone and the grief has nowhere left to go but the eyes." : Who + " dies in front of you, and something behind your eyes breaks along a line that was always there.")
+    : "Everyone you have lost catches up with you at once.";
+  const story = open + " The three tomoe spin, stretch and fuse into a pattern nobody in the clan records has seen. " + mk.n + " — " + mk.d;
+  P(L, story, "e");
+  newsItem(c, c.name + " has been seen with a pattern in the eyes that nobody in the clan records recognises.", "BINGO BOOK", true);
+  chron(c, { txt: c.name + " awakened the Mangekyo Sharingan" + (cz.k === "loss" ? " when " + who + " died" : "") + ". Its power: " + mk.n + ".", cat: "legend", big: true, line: c.name });
+  const [btn, btn2, dh] = eyeButtons(cz, true);
+  eyeShow(c, { stage: "mk", lv: 3, mk: mk.id, k: cz.k, head: "SOMETHING BREAKS", title: "Mangekyo Sharingan", story, gains: [["Genjutsu", 12]], unlock: [mk.j], btn, btn2, dh });
+  return true;
+}
+function eyeEdge(c, L, n) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || e.mangekyo || e.rinnegan || (e.lv || 0) >= 3 || c.age < 6) return;
+  e.edge = cl((e.edge || 0) + n);
+  if (e.edge >= 100) eyeAwaken(c, L, { k: "edge" });
+}
+/* what you do in the second after it opens */
+function eyeChoose(c, L, side) {
+  const a = c.eyeAwake;
+  c.eyeAwake = null;
+  const e = c.eye;
+  if (!a || !e || a.replay) return;
+  const h = (e.hist || [])[(e.hist || []).length - 1];
+  if (!a.btn2 || !a.dh) { if (h) h.choice = a.btn; return; }
+  const hate = side !== "calm";
+  e.heart = cl((e.heart || 0) + (hate ? a.dh : -a.dh), -100, 100);
+  if (h) h.choice = hate ? a.btn : a.btn2;
+  if (hate) {
+    c.stats.gen = cl(c.stats.gen + 1);
+    P(L, "You chose the anger. It sits behind the eyes now and it makes them sharper. " + eyeHeartWord(e.heart) + " (" + e.heart + ").", "b");
+  } else {
+    (c.team || []).forEach((t) => { if (t.alive) t.rel = cl(t.rel + 5); });
+    if (a.k === "edge") c.health = cl(c.health + 8);
+    P(L, "You chose to carry it rather than aim it. The eyes are no weaker for it. " + eyeHeartWord(e.heart) + " (" + e.heart + ").", "g");
+  }
+}
+/* a fight is where the eye is fed */
+function eyeBattle(c, L, b, kills0) {
+  const e = c.eye;
+  if (!e || e.t !== "Sharingan" || !b || c.alive === false) return;
+  const foe = b.e && b.e.name ? b.e.name : "them";
+  if (b.win) {
+    const hp = b.p && b.p.max ? b.p.hp / b.p.max : 1;
+    if (!e.mangekyo && !e.rinnegan && (e.lv || 0) < 3 && hp < 0.25 && roll(e.lv ? 55 : 85) && eyeAwaken(c, L, { k: "near", foe })) return;
+    if (!kills0 && (c.kills || 0) > 0 && !e.lv && eyeAwaken(c, L, { k: "kill", foe })) return;
+    eyeEdge(c, L, hp < 0.4 ? 14 : 5);
+    if ((e.lv || 0) >= 1 && !c.copyNin && b.e && b.e.moves) {
+      const tmax = e.mangekyo || e.rinnegan ? 6 : EYE_COPY_TIER[Math.min(3, e.lv)];
+      const seen = b.e.moves.map((m) => m[0]).filter((n) => MOVES[n] && !MOVES[n].forbidden && !c.jutsu.includes(n) && (MOVES[n].tier || 2) <= tmax);
+      if (seen.length && roll(e.mangekyo ? 40 : 10 + e.lv * 8)) {
+        const got = pick(seen);
+        c.jutsu.push(got); c.copied = (c.copied || 0) + 1;
+        P(L, "Your Sharingan took " + got + " off " + foe + " while they were still using it.", "e");
+      }
+    }
+  } else if (!b.fled) eyeEdge(c, L, 16);
+}
+/* the cheat panel's way through every stage, one press at a time */
+function eyeCheatNext(c, L) {
+  if (!c.eye || c.eye.t !== "Sharingan") { c.kg = "Sharingan"; c.eye = { t: "Sharingan", lv: 0, mangekyo: false, eternal: false, rinnegan: false, blind: 0, heart: 0, edge: 0, hist: [] }; }
+  const e = c.eye;
+  if (c.age < 6) { P(L, "Too young. The eye does not open before six.", "n"); return; }
+  e.lastAt = null;
+  const cz = { k: "loss", who: "your brother", g: "m" };
+  if ((e.lv || 0) < 3) { eyeAwaken(c, L, cz); return; }
+  if (!e.mangekyo) { mangekyoOpen(c, L, cz); return; }
+  if (!e.eternal) {
+    e.eternal = true; e.blind = 0; if (!c.jutsu.includes("Perfect Susanoo")) c.jutsu.push("Perfect Susanoo"); addTitle(c, "Eternal Mangekyo");
+    eyeShow(c, { stage: "emk", lv: 3, mk: e.power || null, k: "eternal", head: "TWO PAIRS, ONE SIGHT", title: "Eternal Mangekyo Sharingan", story: "Your brother's eyes, and yours. The patterns lock together and the dark that was closing in from the edges pulls back for good.", gains: [], unlock: ["Perfect Susanoo"], btn: "SEE WITH BOTH", btn2: null, dh: 0 });
+    return;
+  }
+  if (!e.rinnegan) {
+    e.rinnegan = true; e.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => { if (!c.jutsu.includes(j)) c.jutsu.push(j); }); addTitle(c, "Rinnegan");
+    eyeShow(c, { stage: "rin", lv: 3, mk: null, k: "rinnegan", head: "THE EYE OF THE SAGE", title: "Rinnegan", story: "The red drains out of your eyes and rings spread through them like a stone dropped into still water. Four people in history have looked out through these.", gains: [], unlock: ["Almighty Push", "Universal Pull", "Chibaku Tensei"], btn: "STAND UP", btn2: null, dh: 0 });
+    return;
+  }
+  P(L, "There is nothing further for these eyes to become.", "n");
+}
 /* the eye grows on its own when the life is hard enough */
 function eyeTick(c, L) {
   if (!c.eye || c.eye.t !== "Sharingan") return;
   const e = c.eye;
   if (e.lv === undefined) e.lv = 1;
   if (e.blind === undefined) e.blind = 0;
-  /* tomoe come from being in real danger, not from training */
-  if (e.lv < 3 && (c.wins || 0) >= e.lv * 6 && roll(30)) {
-    e.lv += 1;
-    const t = TOMOE[e.lv - 1];
-    c.stats.gen = cl(c.stats.gen + t.gen);
-    P(L, "A second thing happened behind your eyes this year. " + t.n + ". " + t.d, "e");
+  if (e.heart === undefined) e.heart = 0;
+  /* the life you are living leans on the heart a little every year */
+  if (c.rogue || c.akatsuki) e.heart = cl(e.heart + (c.akatsuki ? 3 : 2), -100, 100);
+  if (c.spouse) e.heart = cl(e.heart - 1, -100, 100);
+  if ((c.kids || []).some((k) => !k.dead)) e.heart = cl(e.heart - 1, -100, 100);
+  if (c.war && c.age >= 12) eyeEdge(c, L, 14);
+  /* mastery: genjutsu work catches up with the blood */
+  if (!e.mangekyo && !e.rinnegan && e.lv < 3 && c.age >= (e.lv ? 6 : 8) && c.stats.gen >= EYE_GEN_AT[e.lv] && e.lastAt !== c.age && roll(e.lv ? 60 : 45)) eyeAwaken(c, L, { k: "mastery" });
+  /* the Mangekyo does not come from winning — and hatred brings it sooner */
+  if (e.lv >= 3 && !e.mangekyo && !e.rinnegan && (c.lostSomeone || 0) > 0 && e.lastAt !== c.age && roll(cl(22 + e.heart / 4, 10, 48))) mangekyoOpen(c, L, { k: "grief" });
+  /* with both eyes open long enough, the giant stands up */
+  if (e.mangekyo && !c.jutsu.includes("Susanoo") && e.mkAt !== c.age && !c.eyeAwake && c.stats.gen >= 55 && roll(14)) {
+    c.jutsu.push("Susanoo");
+    c.stats.con = cl(c.stats.con + 4);
+    const story = "Both eyes open at once and something enormous stands up around you — ribs of chakra, then muscle, then armour. It moves when you move, and it is the colour of what you feel.";
+    P(L, story, "e");
+    eyeShow(c, { stage: "sus", lv: 3, mk: e.power || null, k: "sus", head: "THE GIANT WAKES", title: "Susanoo", story, gains: [["Control", 4]], unlock: ["Susanoo"], btn: "STAND INSIDE IT", btn2: null, dh: 0 });
   }
-  /* the Mangekyo does not come from winning */
-  if (e.lv >= 3 && !e.mangekyo && (c.lostSomeone || 0) > 0 && roll(22)) {
-    e.mangekyo = true;
-    const mk = pick(MANGEKYO_POWERS);
-    e.power = mk.id; e.powerName = mk.n;
-    learn(c, L, mk.j, "The pattern in your eyes changed the day it happened. " + mk.n + " — " + mk.d);
-    c.stats.gen = cl(c.stats.gen + 12);
-    addTitle(c, "Mangekyo: " + mk.n);
-    P(L, "Something in you broke and the eye answered it. No two of these are the same and this one is yours.", "e");
-    c.eyeFlash = mk.n;
-    newsItem(c, c.name + " has been seen with a pattern in the eyes that nobody in the clan records recognises.", "BINGO BOOK", true);
-  }
-  /* and it takes your sight for using it */
+  /* and it takes your sight for using it — faster when it is fed on hatred */
   if (e.mangekyo && !e.eternal && !e.rinnegan) {
     if (roll(40)) {
-      e.blind = cl((e.blind || 0) + rr(2, 6));
+      e.blind = cl((e.blind || 0) + (e.heart >= 25 ? rr(3, 7) : e.heart <= -25 ? rr(1, 5) : rr(2, 6)));
       if (e.blind >= 40 && e.blind < 70 && roll(40)) P(L, "The edges of things have gone soft. You have started turning your head to see what you used to see straight on.", "b");
       if (e.blind >= 70) { c.stats.gen = cl(c.stats.gen - 2); if (roll(30)) P(L, "You are going blind. Everyone who has ever had these eyes went blind and you knew that when you started.", "b"); }
       if (e.blind >= 100 && !e.blindDone) { e.blindDone = true; c.stats.gen = cl(c.stats.gen - 20); addTitle(c, "Went blind"); P(L, "It is dark now. You can still fight — you have been fighting by sound for two years — but the eyes are finished.", "b"); }
@@ -14909,6 +15108,120 @@ function Chip({ children, col }) {
    scroll; once you have cast it cleanly twice you can form it from memory, and a clean
    sequence from memory hits harder. a wrong seal still costs the cast some strength. */
 const SEAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+/* ============================ THE EYE, DRAWN ============================
+   One eye, every stage: dormant, one to three tomoe that burn in and spin up, the seven
+   Mangekyo patterns, the Eternal (two patterns locked together) and the Rinnegan. The
+   awakening screen opens it like an eyelid; everywhere else it just turns, slowly. */
+const EYE_TOMOE_PATH = "M0 -9.5 A9.5 9.5 0 1 1 -7.6 5.7 Q-17 7.5 -28 7 Q-18 -9.5 0 -9.5 Z";
+const EYE_GOLD = "#e2b553";
+function eyeTomoeNodes(n, burn) {
+  const angs = n === 1 ? [0] : n === 2 ? [0, 180] : [0, 120, 240];
+  return angs.map((a, i) => (
+    <g key={i} transform={"rotate(" + a + ") translate(0 -58)"}>
+      {i === burn && <circle r="17" fill="#ff5a48" className="eye-burnglow" opacity="0" />}
+      <g className={i === burn ? "eye-burn" : undefined}><path d={EYE_TOMOE_PATH} fill="#0a0203" /></g>
+    </g>
+  ));
+}
+function eyePatternNodes(id) {
+  const k = "#080103";
+  const rot = (n, fn) => Array.from({ length: n }, (_, i) => <g key={i} transform={"rotate(" + (i * 360) / n + ")"}>{fn(i)}</g>);
+  if (id === "avatar") return (<g>{rot(3, () => <ellipse rx="15" ry="82" fill={k} />)}<circle r="24" fill="#c3121c" /><circle r="11" fill={k} /></g>);
+  if (id === "warp") return (<g>{rot(3, () => <path d="M10 -24 C34 -30 58 -46 64 -76 C50 -60 30 -52 2 -50 C-4 -40 0 -30 10 -24 Z" fill={k} />)}<circle r="33" fill="none" stroke={k} strokeWidth="9" /><circle r="13" fill={k} /></g>);
+  if (id === "bind") return (<g>{rot(4, () => <path d="M0 -6 C28 -14 40 -52 18 -88 C8 -56 -12 -36 0 -6 Z" fill={k} />)}<circle r="15" fill={k} /></g>);
+  if (id === "chain") return (<g><circle r="36" fill="none" stroke={k} strokeWidth="8" />{rot(3, () => <path d="M-11 -32 L0 -90 L11 -32 Z" fill={k} />)}<circle r="13" fill={k} /></g>);
+  if (id === "loop") return (<g><circle r="64" fill="none" stroke={k} strokeWidth="3" />{rot(3, () => <ellipse cy="-44" rx="15" ry="32" fill={k} />)}<circle r="16" fill={k} /></g>);
+  if (id === "dream") return (<g><circle r="84" fill="none" stroke={k} strokeWidth="4" />{rot(3, () => <path d="M0 -15 C20 -26 26 -54 6 -82 C40 -64 44 -28 13 -6 Z" fill={k} />)}<circle r="19" fill={k} /></g>);
+  /* black / Amaterasu, and the default for an eye whose power was never recorded */
+  return (<g>{rot(3, () => <path d="M0 -14 C24 -30 32 -58 14 -86 C48 -64 50 -26 12 -5 Z" fill={k} />)}<circle r="19" fill={k} /></g>);
+}
+function SharinganEye({ lv = 1, mk = null, stage = "", size = 280, intro = false }) {
+  const uid = useRef("se" + Math.random().toString(36).slice(2, 8)).current;
+  const rin = stage === "rin";
+  const dormant = !rin && !mk && !lv && stage !== "mk" && stage !== "emk";
+  const isMk = !rin && (stage === "mk" || stage === "emk" || stage === "sus" || !!mk);
+  const fresh = intro && /^t[123]$/.test(stage);
+  const burn = fresh ? lv - 1 : -1;
+  const iris = rin ? ["#e9e1fb", "#b4a3dd", "#7a69a8", "#3e3260"] : dormant ? ["#4a2a22", "#2a1712", "#170b08", "#0b0504"] : ["#ff4b3e", "#d3141d", "#7b070d", "#3c0306"];
+  const tomoeN = isMk ? (intro && stage === "mk" ? 3 : 0) : rin || dormant ? 0 : Math.min(3, lv);
+  return (
+    <div className={"eye-root" + (intro ? " eye-intro" : "")} style={{ position: "relative", width: size, height: size }} data-stage={stage || "t" + lv}>
+      <div className="eye-glow" aria-hidden style={{ position: "absolute", inset: "-22%", borderRadius: "50%", background: "radial-gradient(circle, " + (rin ? "rgba(167,139,250,.5)" : dormant ? "rgba(120,40,30,.22)" : "rgba(225,25,35,.5)") + " 0%, " + (rin ? "rgba(120,90,200,.18)" : "rgba(150,8,18,.2)") + " 40%, transparent 68%)" }} />
+      <div className="eye-lids" style={{ position: "absolute", inset: 0 }}>
+        <svg viewBox="-100 -100 200 200" width="100%" height="100%" style={{ position: "absolute", inset: 0 }} aria-hidden>
+          <defs>
+            <radialGradient id={uid} cx="0" cy="0" r="88" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor={iris[0]} /><stop offset=".55" stopColor={iris[1]} /><stop offset=".9" stopColor={iris[2]} /><stop offset="1" stopColor={iris[3]} />
+            </radialGradient>
+          </defs>
+          <circle r="97" fill="#0b0203" stroke={rin ? "#2b2140" : "#2a0507"} strokeWidth="3" />
+          <circle r="88" fill={"url(#" + uid + ")"} />
+          {rin ? [16, 31, 46, 61, 76].map((r) => <circle key={r} r={r} fill="none" stroke="#2b2140" strokeWidth="2.4" />)
+            : !isMk && <circle r="58" fill="none" stroke={dormant ? "rgba(0,0,0,.35)" : "rgba(25,0,2,.55)"} strokeWidth="1.6" />}
+          <circle r={rin ? 7 : 17} fill="#060203" />
+          <ellipse cx="-34" cy="-40" rx="17" ry="8" fill="rgba(255,255,255,.16)" transform="rotate(-32 -34 -40)" />
+        </svg>
+        {tomoeN > 0 && (
+          <div className={"eye-ring " + (stage === "mk" && intro ? "eye-merge" : intro ? "eye-spinin" : "eye-spin")} style={{ position: "absolute", inset: 0 }}>
+            <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>{eyeTomoeNodes(tomoeN, burn)}</svg>
+          </div>
+        )}
+        {isMk && (
+          <div className={"eye-ring " + (intro ? (stage === "mk" ? "eye-bloom" : "eye-bloom eye-bloom-now") : "eye-spin-slow")} style={{ position: "absolute", inset: 0 }}>
+            <svg viewBox="-100 -100 200 200" width="100%" height="100%" aria-hidden>
+              {stage === "emk" && <g opacity=".55" transform="rotate(60) scale(.86)">{eyePatternNodes(mk === "avatar" ? "black" : "avatar")}</g>}
+              {eyePatternNodes(mk || "black")}
+            </svg>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function EyeAwakening({ a, onChoose }) {
+  const [skip, setSkip] = useState(false);
+  const rin = a.stage === "rin";
+  const col = rin ? "#b49bff" : "#e0313a";
+  const gains = (a.gains || []).map(([w, n]) => "+" + n + " " + w).join(", ");
+  const d = (s) => ({ animationDelay: s + "s" });
+  return (
+    <div className={"fixed inset-0 z-50 eye-aw" + (skip ? " eye-skip" : "")} role="dialog" aria-modal="true" aria-label={a.title} data-stage={a.stage}
+      onClick={(ev) => { if (!ev.target.closest || !ev.target.closest("button")) setSkip(true); }}
+      style={{ zIndex: 90, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "max(28px, env(safe-area-inset-top)) 16px 30px",
+        background: "radial-gradient(ellipse at 50% 34%, " + (rin ? "#120b22" : "#1c0306") + " 0%, #050102 52%, #000 100%)" }}>
+      <div className="eye-flash" aria-hidden style={{ background: "radial-gradient(circle at 50% 36%, " + (rin ? "rgba(170,140,255,.45)" : "rgba(255,40,40,.5)") + ", transparent 62%)" }} />
+      <div style={{ margin: "auto 0", width: "100%", maxWidth: 540, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+        <div className="eye-t" style={{ color: col, fontSize: 11, letterSpacing: ".42em", fontWeight: 800, ...d(0.1) }}>{a.head}</div>
+        <div style={{ margin: "22px 0 18px" }}>
+          <SharinganEye lv={a.lv} mk={a.mk} stage={a.stage} size="min(300px, 66vw)" intro />
+        </div>
+        <div className="eye-t eye-title" style={{ fontFamily: SERIF, fontSize: "clamp(27px, 6.4vw, 40px)", lineHeight: 1.1, fontWeight: 700, color: "#f4ede6", textShadow: "0 0 34px " + col + "66", ...d(1.7) }}>{a.title}</div>
+        <div className="eye-t" style={{ color: "#cbc1b8", fontFamily: SERIF, fontSize: 15.5, lineHeight: 1.6, marginTop: 12, ...d(2.05) }}>
+          {a.story}{gains ? " Your body answers: " + gains + "." : ""}
+        </div>
+        {a.unlock && a.unlock.length > 0 && (
+          <div className="eye-t eye-unlock" style={{ color: EYE_GOLD, marginTop: 18, fontSize: 13.5, lineHeight: 1.5, ...d(2.45) }}>
+            <b style={{ letterSpacing: ".1em" }}>UNLOCKED:</b>{" "}{a.unlock.join("  ·  ")}
+          </div>
+        )}
+        {a.next && <div className="eye-t" style={{ color: EYE_GOLD, opacity: .88, marginTop: 8, fontSize: 13, lineHeight: 1.5, ...d(2.75) }}><b style={{ letterSpacing: ".1em" }}>NEXT:</b>{" "}{a.next}</div>}
+        {a.replay && a.choice && <div className="eye-t" style={{ color: "#8f837a", marginTop: 8, fontSize: 12, ...d(2.9) }}>Age {a.age}. You chose: {a.choice}.</div>}
+        <div className="eye-t" style={{ marginTop: 26, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, ...d(3.05) }}>
+          <button onClick={() => onChoose("main")} className="eye-btn"
+            style={{ background: rin ? "linear-gradient(180deg,#8b6fe0,#5b43a8)" : "linear-gradient(180deg,#e3343d,#a3111b)", color: "#fff", border: "1px solid " + (rin ? "#c4b1ff" : "#ff6a6a"), borderRadius: 10, padding: "13px 38px", fontWeight: 800, fontSize: 14.5, letterSpacing: ".08em", boxShadow: "0 10px 34px " + col + "55" }}>
+            {a.replay ? "CLOSE" : a.btn}
+          </button>
+          {!a.replay && a.btn2 && (
+            <>
+              <button onClick={() => onChoose("calm")} className="eye-btn2" style={{ color: "#c2b6ab", fontSize: 13.5, padding: "4px 10px", textDecoration: "underline", textUnderlineOffset: 3 }}>{a.btn2}</button>
+              <div style={{ color: "#7c7068", fontSize: 11 }}>What you choose here tips the eye toward hatred or resolve.</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function SealQTEPanel({ qte, answer, cancel, peek, accent }) {
   const { move, sequence, index, hits, results, picks, memory, mastery } = qte;
   const total = sequence.length;
@@ -15087,6 +15400,7 @@ export default function ShinobiLife() {
   const [openFile, setOpenFile] = useState(null);
   const [histVid, setHistVid] = useState(null);
   const [yearFlash, setYearFlash] = useState(null);
+  const [eyeReplay, setEyeReplay] = useState(null);
   const [arrival, setArrival] = useState(null);
   const [arrivalLeaving, setArrivalLeaving] = useState(false);
   function dismissArrival() {
@@ -15593,7 +15907,7 @@ export default function ShinobiLife() {
           k.dead = true; k.diedAt = k.age;
           P(L, k.name + " died at " + k.age + ". You outlived your own child, which is the one thing nobody prepares you for.", "b");
           newsItem(c, k.name + ", " + (c.clan && c.clan !== "Civilian-born" ? "of the " + c.clan : "of " + (villageExists(c, c.village) ? vName2(c.village) : "the " + c.land)) + ", has died at " + k.age + ".", "OBITUARIES");
-          loss(c, L, k.name);
+          loss(c, L, k.name, { g: k.gender, how: "natural" });
         }
       });
 
@@ -15777,7 +16091,7 @@ export default function ShinobiLife() {
               P(L, a.name + " has pulled their people out. They took losses they cannot explain at home.", "b");
             }
           });
-          if (c.team && roll(13)) { const al = c.team.filter((t) => t.alive); if (al.length) { const d = pick(al); d.alive = false; P(L, d.name + " was killed by " + w.enemyArmy + " at " + w.front + ". There was no body to send back.", "b"); loss(c, L, d.name); } }
+          if (c.team && roll(13)) { const al = c.team.filter((t) => t.alive); if (al.length) { const d = pick(al); d.alive = false; P(L, d.name + " was killed by " + w.enemyArmy + " at " + w.front + ". There was no body to send back.", "b"); loss(c, L, d.name, { g: d.gender }); } }
           if (w.years <= 0 || w.momentum <= 0) endWar(c, L);
         }
       } else if (c.age >= 12 && roll(ERA.warChance / 3.5)) beginWar(c, L);
@@ -15803,8 +16117,16 @@ export default function ShinobiLife() {
 
       for (let i = 0; i < (c.age < 6 ? 1 : rr(1, 2)); i++) { const p2 = EVENTS.filter((e) => e.c(c)); if (p2.length) pick(p2).f(c, L); }
       if (c.team) c.team.forEach((t) => { if (t.alive) t.rel = cl(t.rel + rr(-3, 4)); });
-      if (c.parents.f.alive && c.age > 26 && roll(4)) { c.parents.f.alive = false; P(L, "Your father died. The funeral was small.", "b"); loss(c, L, "your father"); }
-      if (c.parents.m.alive && c.age > 29 && roll(4)) { c.parents.m.alive = false; P(L, "Your mother died in her sleep.", "b"); loss(c, L, "your mother"); }
+      if (c.parents.f.alive && c.age > 26 && roll(4)) { c.parents.f.alive = false; P(L, "Your father died. The funeral was small.", "b"); loss(c, L, "your father", { g: "m", how: "natural" }); }
+      if (c.parents.m.alive && c.age > 29 && roll(4)) { c.parents.m.alive = false; P(L, "Your mother died in her sleep.", "b"); loss(c, L, "your mother", { g: "f", how: "natural" }); }
+      /* a brother or sister in the same trade does not always come home */
+      if (c.sibling && c.sibling.alive && c.age >= 9 && c.age <= 60 && roll(c.war ? 3 : 0.6)) {
+        const sb = c.sibling; if (!sb.g) sb.g = roll(50) ? "m" : "f";
+        const sw = sb.g === "f" ? "sister" : "brother";
+        sb.alive = false; sb.diedAt = c.age;
+        P(L, c.war ? "Your " + sw + ", " + sb.name + ", was killed at the front. They sent back the forehead protector and nothing else." : "Your " + sw + ", " + sb.name + ", did not come back from a mission. The body came home a week later.", "b");
+        loss(c, L, "your " + sw, { g: sb.g });
+      }
 
       if (!c.cheats) c.cheats = { god: false, infActions: false, oneShot: false };
       if (c.cheats.god) c.health = 100;
@@ -16004,7 +16326,7 @@ export default function ShinobiLife() {
     { c: (x) => x.rank >= 2 && !x.rogue, f: (c, L) => { P(L, "They praised your last mission report at " + TT(c, "body") + ".", "g"); c.standing = cl(c.standing + rr(4, 10)); } },
     { c: (x) => x.age >= 16 && !x.spouse && !x.crush, f: (c, L) => { const n = randName(roll(50) ? "m" : "f"); c.crush = { name: n, rel: rr(35, 60) }; P(L, "You met " + n + " at the market and have not stopped thinking about it.", "g"); } },
     { c: (x) => x.rank >= 3 && x.age >= 16 && !x.summon, f: (c, L) => { c.summon = pick(SUMMONS); learn(c, L, "Summoning: Combat Beast", "You stumbled into the " + c.summon + " and signed the contract in blood."); } },
-    { c: (x) => x.eye && x.eye.t === "Sharingan" && x.eye.lv < 3 && x.rank >= 2, f: (c, L) => { c.eye.lv += 1; c.stats.gen = cl(c.stats.gen + 8); c.stats.spd = cl(c.stats.spd + 4); if (c.eye.lv === 1) learn(c, L, "Copy Wheel Eye"); P(L, "Under real pressure your eyes changed. " + c.eye.lv + " tomoe.", "e"); } },
+    { c: (x) => x.eye && x.eye.t === "Sharingan" && x.eye.lv < 3 && x.rank >= 2, f: (c, L) => { P(L, "A mission went wrong in a way that should have killed you. Your eyes burned for a week afterwards.", "b"); eyeEdge(c, L, 35); } },
     { c: (x) => x.eye && x.eye.t === "Byakugan" && x.rank >= 2 && !x.jutsu.includes("Gentle Fist"), f: (c, L) => { learn(c, L, "Gentle Fist", "Your clan finally taught you the Gentle Fist."); c.stats.tai = cl(c.stats.tai + 6); } },
     { c: (x) => x.rank >= 2, f: (c, L) => { P(L, "You spent the off-season reading every scroll in the archive."); c.stats.int = cl(c.stats.int + rr(2, 5)); } },
     { c: (x) => x.rogue, f: (c, L) => { c.infamy = cl(c.infamy + rr(4, 10)); P(L, "Your page in the Bingo Book was updated. The bounty went up.", "b"); } },
@@ -16106,7 +16428,7 @@ export default function ShinobiLife() {
           const lost = rr(2, 5);
           P(L, "You sent them and " + lost + " did not come back. " + joinList(who) + " were gone before the squad reached the treeline.", "b");
           newsItem(c, "A squad sent after " + joinList(who) + " was cut apart short of " + b2.targetName + ". " + lost + " dead, no contact made.", "OBITUARIES", true);
-          if (c.team) { const al = c.team.filter((t) => t.alive); if (al.length && roll(40)) { const d = pick(al); d.alive = false; P(L, d.name + " was one of them.", "b"); loss(c, L, d.name); } }
+          if (c.team) { const al = c.team.filter((t) => t.alive); if (al.length && roll(40)) { const d = pick(al); d.alive = false; P(L, d.name + " was one of them.", "b"); loss(c, L, d.name, { g: d.gender }); } }
         }
       } else {
         if (b2.mine) { c.standing = cl(c.standing + 4); P(L, "You stayed where people could see you and said the things that needed saying. It held the district together.", "n"); }
@@ -16701,7 +17023,7 @@ export default function ShinobiLife() {
       nc.rank = 3; nc.rankName = rankLabel(nc, 3);
       const raised = kid && kid.trained ? kid.trained * 2 : 0;
       STAT_KEYS.forEach(([k]) => { nc.stats[k] = cl(Math.round(nc.stats[k] + old.stats[k] * 0.22) + rr(4, 12) + raised); });
-      if (kid && old.kg && roll(60)) { nc.kg = old.kg; if (old.eye) nc.eye = { ...clone(old.eye), mangekyo: false, eternal: false, rinnegan: false, blind: 0, lv: 0 }; }
+      if (kid && old.kg && roll(60)) { nc.kg = old.kg; if (old.eye) nc.eye = { ...clone(old.eye), mangekyo: false, eternal: false, rinnegan: false, blind: 0, lv: 0, power: null, powerName: null, blindDone: false, heart: 0, edge: 0, hist: [], lastAt: null, mkAt: null }; }
       nc.natures = old.natures.slice(0, 1);
       /* THE SEAT IS NOT INHERITED. a village names the strongest hand available, not the dead Kage's teenager. */
       nc.founded = old.founded ? clone(old.founded) : null;
@@ -19567,6 +19889,7 @@ export default function ShinobiLife() {
   function finishBattle() {
     const b = bt; const ctx = b.ctx;
     commit((c, L) => {
+      const kills0 = c.kills || 0;
       if (c.guardBattles > 0) c.guardBattles -= 1;
       if (ctx.type === "mission" || ctx.type === "crime") {
         spend(c);
@@ -19601,7 +19924,7 @@ export default function ShinobiLife() {
           P(L, ctx.beastId
             ? ctx.story.t + " \u2014 failed. " + b.e.name + " broke the array, put you through a ridgeline and went on its way. It is still loose. −" + d + " health."
             : ctx.story.t + " \u2014 failed. " + b.e.name + " left you bleeding in the dirt and walked away. −" + d + " health. The report will not be kind.", "b");
-          if (c.team && roll(18)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come home. You carried the body.", "b"); loss(c, L, dd.name); } }
+          if (c.team && roll(18)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come home. You carried the body.", "b"); loss(c, L, dd.name, { g: dd.gender }); } }
           if (ctx.type === "mission" && ctx.story && ctx.story.stake) missionStake(c, L, ctx.story, false);
           if (d >= 32 && roll(22)) injure(c, L, "It happened on " + ctx.story.t + ".");
           if (c.health <= 0) die(c, L, "was killed in the field");
@@ -19729,6 +20052,8 @@ export default function ShinobiLife() {
         }
         if (c.broadcast) c.broadcast = null;
       }
+      /* the Sharingan is fed in fights: the near-deaths, the first kill, the ones you lose and live */
+      eyeBattle(c, L, b, kills0);
       /* the Copy Ninja takes techniques off whoever shows him one */
       if (c.copyNin && b.win && b.e && b.e.moves) {
         const seen = b.e.moves.map((m) => m[0]).filter((n2) => MOVES[n2] && !c.jutsu.includes(n2) && (MOVES[n2].tier || 2) <= (c.eye && c.eye.mangekyo ? 6 : 5));
@@ -19777,7 +20102,7 @@ export default function ShinobiLife() {
           const d = rr(20, 45); c.health = cl(c.health - d); c.standing = cl(c.standing - 6);
           c.canonRun = null;
           P(L, m.t + " — you were pulled out of it. " + b.e.name + " is still standing and the mission is still open. -" + d + " health.", "b");
-          if (c.team && roll(20)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come back from it.", "b"); loss(c, L, dd.name); } }
+          if (c.team && roll(20)) { const al = c.team.filter((t) => t.alive); if (al.length) { const dd = pick(al); dd.alive = false; P(L, dd.name + " did not come back from it.", "b"); loss(c, L, dd.name, { g: dd.gender }); } }
           if (c.health <= 0) die(c, L, "was killed during " + m.t);
         }
       }
@@ -20562,7 +20887,8 @@ export default function ShinobiLife() {
   function eyeAction(kind) {
     commit((c, L) => {
       spend(c);
-      if (kind === "eternal") { c.eye.eternal = true; c.eye.blind = 0; c.sibling.alive = false; learn(c, L, "Perfect Susanoo"); addTitle(c, "Eternal Mangekyo"); P(L, c.sibling.name + " gave you their eyes, and their name. The blindness stopped. The weight did not.", "e"); }
+      if (kind === "eternal") { c.eye.eternal = true; c.eye.blind = 0; c.sibling.alive = false; learn(c, L, "Perfect Susanoo"); addTitle(c, "Eternal Mangekyo"); P(L, c.sibling.name + " gave you their eyes, and their name. The blindness stopped. The weight did not.", "e");
+        eyeShow(c, { stage: "emk", lv: 3, mk: c.eye.power || null, k: "eternal", head: "TWO PAIRS, ONE SIGHT", title: "Eternal Mangekyo Sharingan", story: c.sibling.name + " gave you their eyes. The patterns lock together \u2014 yours and theirs \u2014 and the dark that was closing in from the edges pulls back for good.", gains: [], unlock: ["Perfect Susanoo"], btn: "SEE WITH BOTH", btn2: null, dh: 0 }); }
       if (kind === "path") {
         if (!c.eye || !c.eye.rinnegan) return;
         const have = c.eye.paths || [];
@@ -20579,7 +20905,8 @@ export default function ShinobiLife() {
         } else { c.health = cl(c.health - rr(8, 20)); P(L, "You reached for a path that did not open. It took something out of you instead.", "b"); }
         return;
       }
-      if (kind === "rinnegan") { if (roll(cl(20 + (power(c) - 80) * 2, 3, 60))) { c.eye.rinnegan = true; addTitle(c, "Rinnegan"); c.eye.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => learn(c, L, j)); c.eye.blind = 0; P(L, "Senju cells took to your Uchiha eyes. Ripples spread across both irises.", "e"); } else { c.health = cl(c.health - rr(15, 30)); P(L, "Your body rejected the transplant. You spent a year in the dark.", "b"); } }
+      if (kind === "rinnegan") { if (roll(cl(20 + (power(c) - 80) * 2, 3, 60))) { c.eye.rinnegan = true; addTitle(c, "Rinnegan"); c.eye.paths = ["deva"]; ["Almighty Push", "Universal Pull", "Chibaku Tensei"].forEach((j) => learn(c, L, j)); c.eye.blind = 0; P(L, "Senju cells took to your Uchiha eyes. Ripples spread across both irises.", "e");
+        if (c.eye.t === "Sharingan") eyeShow(c, { stage: "rin", lv: 3, mk: null, k: "rinnegan", head: "THE EYE OF THE SAGE", title: "Rinnegan", story: "The Senju cells take. The red drains out of your eyes and rings spread through them like a stone dropped into still water. Four people in history have looked out through these.", gains: [], unlock: ["Almighty Push", "Universal Pull", "Chibaku Tensei"], btn: "STAND UP", btn2: null, dh: 0 }); } else { c.health = cl(c.health - rr(15, 30)); P(L, "Your body rejected the transplant. You spent a year in the dark.", "b"); } }
       if (kind === "tenseigan") { if (roll(cl(15 + (power(c) - 80) * 2, 2, 50))) { c.eye.tenseigan = true; addTitle(c, "Tenseigan"); ["Tenseigan Chakra Mode", "Truth-Seeking Orbs"].forEach((j) => learn(c, L, j)); P(L, "Your Byakugan turned. Pale blue, ringed, older than your clan.", "e"); } else P(L, "Nothing happened. Your eyes are still just very good eyes.", "b"); }
       if (kind === "curse2") { if (roll(cl(35 + c.stats.con * 0.4, 10, 80))) { c.curse = 2; c.stats.nin = cl(c.stats.nin + 10); c.stats.str = cl(c.stats.str + 8); learn(c, L, "Curse Mark: Second State"); P(L, "You let the mark spread across your whole body. Your skin changed colour. So did your voice.", "e"); } else { c.health = cl(c.health - rr(15, 30)); P(L, "The mark spread and nearly ate you. You clawed it back.", "b"); } }
     });
@@ -21445,6 +21772,41 @@ export default function ShinobiLife() {
       .sl-eye { animation: slEye 1.1s ease-out both; }
       .sl-slide { animation: slSlideUp .34s cubic-bezier(.2,.8,.3,1) both; }
       .sl-lowhp { animation: slBarPulse 1.1s ease-in-out infinite; }
+      /* ---------- the eye opening ---------- */
+      @keyframes eyeOpen { 0% { clip-path: ellipse(52% 0.6% at 50% 50%); } 100% { clip-path: ellipse(52% 52% at 50% 50%); } }
+      @keyframes eyeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes eyeSpinIn { 0% { transform: rotate(-200deg); } 100% { transform: rotate(520deg); } }
+      @keyframes eyeBurn { 0% { transform: scale(2.8); opacity: 0; } 55% { transform: scale(.82); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+      @keyframes eyeBurnGlow { 0% { opacity: 0; transform: scale(.4); } 30% { opacity: .9; } 100% { opacity: 0; transform: scale(1.9); } }
+      @keyframes eyePulse { 0%, 100% { opacity: .55; transform: scale(.95); } 50% { opacity: 1; transform: scale(1.06); } }
+      @keyframes eyeFuse { 0% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes eyeBloom { 0% { opacity: 0; transform: scale(1.6) rotate(-120deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
+      @keyframes eyeRed { 0% { opacity: 0; } 16% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes eyeTxt { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+      .eye-glow { animation: eyePulse 2.8s ease-in-out infinite; }
+      .eye-intro .eye-lids { animation: eyeOpen 1.05s cubic-bezier(.3,.6,.2,1) .25s both; }
+      .eye-spin { animation: eyeSpin 16s linear infinite; }
+      .eye-spin-slow { animation: eyeSpin 40s linear infinite; }
+      .eye-spinin { animation: eyeSpinIn 1.9s cubic-bezier(.12,.7,.22,1) .9s both, eyeSpin 16s linear 2.8s infinite; }
+      .eye-merge { animation: eyeSpinIn 1.5s cubic-bezier(.55,0,.85,.5) .7s both, eyeFuse .45s ease-in 1.85s both; }
+      .eye-bloom { animation: eyeBloom 1.2s cubic-bezier(.2,.8,.3,1) 1.95s both, eyeSpin 40s linear 3.15s infinite; }
+      .eye-bloom.eye-bloom-now { animation-delay: .9s, 2.1s; }
+      .eye-burn { transform-box: fill-box; transform-origin: center; animation: eyeBurn .95s cubic-bezier(.2,.8,.3,1) 1.15s both; }
+      .eye-burnglow { transform-box: fill-box; transform-origin: center; animation: eyeBurnGlow 1.1s ease-out 1.15s both; }
+      .eye-flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; animation: eyeRed 1.3s ease-out 1.15s both; }
+      .eye-aw .eye-t { animation: eyeTxt .7s ease-out both; }
+      .eye-btn { transition: transform .15s, filter .15s; }
+      .eye-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+      .eye-skip .eye-t, .eye-skip .eye-lids, .eye-skip .eye-burn { animation: none !important; }
+      .eye-skip .eye-burnglow, .eye-skip .eye-flash, .eye-skip .eye-merge { display: none !important; }
+      .eye-skip .eye-spinin { animation: eyeSpin 16s linear infinite !important; }
+      .eye-skip .eye-bloom { animation: eyeSpin 40s linear infinite !important; }
+      body.sl-motion-off .eye-root *, body.sl-motion-off .eye-aw .eye-t { animation: none !important; }
+      body.sl-motion-off .eye-burnglow, body.sl-motion-off .eye-flash, body.sl-motion-off .eye-merge { display: none !important; }
+      @media (prefers-reduced-motion: reduce) {
+        .eye-root *, .eye-aw .eye-t { animation: none !important; }
+        .eye-burnglow, .eye-flash, .eye-merge { display: none !important; }
+      }
       /* ---------- combat: elemental impact burst ---------- */
       @keyframes hitRay { 0% { transform: translate(-50%,-50%) rotate(var(--ang)) translateX(2px) scaleX(.3); opacity: 1; } 65% { opacity: .85; } 100% { transform: translate(-50%,-50%) rotate(var(--ang)) translateX(42px) scaleX(1); opacity: 0; } }
       @keyframes hitCore { 0% { transform: translate(-50%,-50%) scale(.15); opacity: .95; } 100% { transform: translate(-50%,-50%) scale(2.6); opacity: 0; } }
@@ -22129,6 +22491,10 @@ export default function ShinobiLife() {
           </div>
         </div>
       )}
+      {(c.eyeAwake || eyeReplay) && (
+        <EyeAwakening key={(c.eyeAwake || eyeReplay).stage + "-" + (c.eyeAwake || eyeReplay).y + (eyeReplay && !c.eyeAwake ? "r" : "")} a={c.eyeAwake || eyeReplay}
+          onChoose={(side) => { if (!c.eyeAwake) { setEyeReplay(null); return; } commit((c2, L) => eyeChoose(c2, L, side)); }} />
+      )}
       {c.moment && !c.killFlash && !bt && (() => {
         const col = c.moment.tone === "blood" ? T.blood : c.moment.tone === "good" ? T.good : T.gold;
         return (
@@ -22491,7 +22857,7 @@ export default function ShinobiLife() {
             {c.akatsuki && <div><span style={{ color: T.blood }}>Akatsuki </span>ring {c.akatsuki.ring} · with {c.akatsuki.partner}</div>}
             {c.transmigrant && <div><span style={{ color: T.epic }}>Transmigrant </span>{TRANSMIGRANTS[c.transmigrant].n}{c.transMet ? <span style={{ color: T.dim }}> · met {c.transMet}</span> : null}</div>}
             {c.myClan && <div><span style={{ color: T.gold }}>Founded the {c.myClan.name} </span><span style={{ color: T.dim }}>in {AH(c.myClan.founded)}</span></div>}
-            {c.eye && <div><span style={{ color: T.dim }}>Eyes </span><span style={{ color: T.blood }}>{c.eye.rinnegan ? "Rinnegan" : c.eye.tenseigan ? "Tenseigan" : c.eye.eternal ? "Eternal Mangekyo" : c.eye.mangekyo ? "Mangekyo" : c.eye.t + (c.eye.t === "Sharingan" ? " " + c.eye.lv + " tomoe" : "")}</span></div>}
+            {c.eye && <div><span style={{ color: T.dim }}>Eyes </span><span style={{ color: T.blood }}>{c.eye.rinnegan ? "Rinnegan" : c.eye.tenseigan ? "Tenseigan" : c.eye.eternal ? "Eternal Mangekyo" : c.eye.mangekyo ? "Mangekyo" : c.eye.t + (c.eye.t === "Sharingan" ? (c.eye.lv ? " " + c.eye.lv + " tomoe" : " (dormant)") : "")}</span></div>}
             <div className="flex flex-wrap gap-1 pt-1">{c.natures.map((n) => <Chip key={n} col={NC[n]}>{n}</Chip>)}</div>
             {c.specialty && <div><span style={{ color: T.dim }}>Path </span>{SPECIALTIES.find((s) => s.id === c.specialty).n}</div>}
             {c.summon && <div><span style={{ color: T.dim }}>Contract </span>{c.summon}</div>}
@@ -23180,6 +23546,17 @@ export default function ShinobiLife() {
                 {mine.map((r) => <Row key={r.id} label={r.n} sub={r.d} right={line(r)} onClick={() => doTrain(r)} tone={accent} />)}
               </>
             )}
+            {c.eye && c.eye.t === "Sharingan" && !c.eye.blindDone && (() => {
+              const dr = EYE_DRILLS.filter((r) => c.rank >= r.min && (r.eye === 0 ? !c.eye.lv : (c.eye.lv || 0) >= r.eye));
+              if (!dr.length) return null;
+              return (
+                <div className="sl-eyedrills">
+                  <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-1 mb-1 font-bold">YOUR EYES {"\u00b7"} SHARINGAN</div>
+                  <div style={{ color: T.dim }} className="text-xs mb-2">{eyeNext(c)}</div>
+                  {dr.map((r) => <Row key={r.id} label={r.n} sub={r.d} right={line(r)} onClick={() => doTrain(r)} tone={T.blood} />)}
+                </div>
+              );
+            })()}
             {!c.specialty && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">You have not chosen a specialty yet. Pass {TT(c, "grad")} and you will be asked.</div>}
             <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-2 font-bold">CORE TRAINING</div>
             {core.map((r) => <Row key={r.id} label={r.n} sub={r.d} right={line(r)} onClick={() => doTrain(r)} />)}
@@ -23380,35 +23757,84 @@ export default function ShinobiLife() {
           {(c.specialty === "tai" || c.gates > 0) && <Row label={c.gates >= 8 ? "All eight gates opened" : "Open the " + GATES[c.gates]} sub={c.gates === 7 ? "The Eighth Gate will kill you. It will also make you unbeatable for a moment." : c.gates + " of 8 open · needs Taijutsu " + (30 + c.gates * 6)} onClick={openGate} disabled={c.gates >= 8 || c.stats.tai < 30 + c.gates * 6} />}
           {c.eye && c.eye.t === "Sharingan" && (() => {
             const e = c.eye;
+            const lv = e.lv || 0;
             const mk = e.power ? MANGEKYO_POWERS.find((x) => x.id === e.power) : null;
             const paths = e.paths || [];
+            const h = e.heart || 0;
+            const hist = e.hist || [];
+            const st = e.rinnegan ? "rin" : e.eternal ? "emk" : e.mangekyo ? "mk" : "t" + lv;
+            const at = EYE_GEN_AT[Math.min(lv, 2)];
+            const replay = (x) => setEyeReplay({ ...x, replay: true, next: x === hist[hist.length - 1] ? eyeNext(c) : null });
+            const bar = (pct, colr) => (
+              <div style={{ height: 5, background: "rgba(0,0,0,.5)", borderRadius: 99, overflow: "hidden", marginTop: 3 }}>
+                <div className="sl-fill" style={{ width: cl(pct) + "%", height: "100%", background: "linear-gradient(90deg," + colr + "88," + colr + ")", borderRadius: 99 }} />
+              </div>
+            );
             return (
-              <div style={{ ...glass(T.blood) }} className="p-3.5 mb-3">
-                <div className="flex items-baseline justify-between mb-1">
-                  <div style={{ color: T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold">
-                    {e.rinnegan ? "RINNEGAN" : e.eternal ? "ETERNAL MANGEKYO" : e.mangekyo ? "MANGEKYO SHARINGAN" : "SHARINGAN"}
+              <div style={{ ...glass(T.blood) }} className="p-3.5 mb-3 sl-eyepanel">
+                <div className="flex gap-3 items-center">
+                  <button onClick={() => hist.length && replay(hist[hist.length - 1])} aria-label="Look into your eyes" title={hist.length ? "Look into your eyes" : undefined}
+                    style={{ flexShrink: 0, cursor: hist.length ? "pointer" : "default", borderRadius: "50%" }} className="sl-eyebtn">
+                    <SharinganEye lv={lv} mk={e.rinnegan ? null : e.mangekyo ? e.power || "black" : null} stage={st} size={76} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div style={{ color: e.rinnegan ? T.epic : T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold">
+                        {e.rinnegan ? "RINNEGAN" : e.eternal ? "ETERNAL MANGEKYO" : e.mangekyo ? "MANGEKYO SHARINGAN" : lv ? "SHARINGAN" : "SHARINGAN · DORMANT"}
+                      </div>
+                      <div style={{ color: T.dim, fontSize: 10 }}>{e.rinnegan ? paths.length + " of 7 paths" : e.mangekyo ? "blindness " + (e.blind || 0) + "%" : lv ? TOMOE[Math.min(lv, 3) - 1].n : "not yet open"}</div>
+                    </div>
+                    <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs mt-1">
+                      {e.mangekyo || e.rinnegan ? (mk ? <><b style={{ color: T.blood }}>{mk.n}</b> {"—"} {mk.d}</> : "The pattern is yours and nobody else's.")
+                        : lv ? TOMOE[Math.min(lv, 3) - 1].d + (lv >= 3 ? " The next thing that happens to these eyes will not be training." : "")
+                        : "Your blood carries it. It has not opened yet."}
+                    </div>
+                    {hist.length > 0 && <div style={{ color: T.dim, fontSize: 10 }} className="mt-1">Tap the eye to look into it again.</div>}
                   </div>
-                  <div style={{ color: T.dim, fontSize: 10 }}>{e.rinnegan ? paths.length + " of 7 paths" : e.mangekyo ? "blindness " + (e.blind || 0) + "%" : (TOMOE[Math.min(e.lv, 3) - 1] || TOMOE[0]).n}</div>
                 </div>
-                {!e.mangekyo && (
+                {!e.mangekyo && !e.rinnegan && (
                   <>
-                    <div className="flex gap-1.5 mb-2">
+                    <div className="flex gap-1.5 mt-3 mb-2">
                       {TOMOE.map((t, i) => (
                         <div key={t.n} style={{ flex: 1, textAlign: "center", padding: "4px 2px", borderRadius: 7, fontSize: 9.5, fontWeight: 700,
-                          background: i < e.lv ? T.blood + "22" : "rgba(255,255,255,.03)",
-                          border: "1px solid " + (i === e.lv - 1 ? T.blood : i < e.lv ? T.blood + "44" : "rgba(255,255,255,.07)"),
-                          color: i < e.lv ? T.text : T.dim }}>{t.n}</div>
+                          background: i < lv ? T.blood + "22" : "rgba(255,255,255,.03)",
+                          border: "1px solid " + (i === lv - 1 ? T.blood : i < lv ? T.blood + "44" : "rgba(255,255,255,.07)"),
+                          color: i < lv ? T.text : T.dim }}>{t.n}</div>
                       ))}
                     </div>
-                    <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs">{(TOMOE[Math.min(e.lv, 3) - 1] || TOMOE[0]).d} {e.lv >= 3 ? "The next thing that happens to these eyes will not be training." : "They mature in real danger, not on a practice field."}</div>
+                    {lv < 3 && (
+                      <div className="grid gap-2 sm:grid-cols-2 sl-eyeprog">
+                        <div style={{ fontSize: 10.5, color: T.soft }}>
+                          <div className="flex justify-between"><span>Genjutsu mastery</span><span style={{ color: T.dim }}>{c.stats.gen} / {at}</span></div>
+                          {bar((c.stats.gen / at) * 100, T.gold)}
+                          <div style={{ color: T.dim, fontSize: 10 }} className="mt-0.5">Train genjutsu and the {lv ? "next tomoe" : "eye"} comes on its own.</div>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: T.soft }}>
+                          <div className="flex justify-between"><span>Danger</span><span style={{ color: T.dim }}>{e.edge || 0} / 100</span></div>
+                          {bar(e.edge || 0, T.blood)}
+                          <div style={{ color: T.dim, fontSize: 10 }} className="mt-0.5">Fights you nearly lose, wars, and losing people force it early.</div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
-                {mk && <div style={{ color: T.soft, fontFamily: SERIF }} className="text-xs mt-1"><b style={{ color: T.blood }}>{mk.n}</b> — {mk.d}</div>}
-                {e.mangekyo && !e.eternal && !e.rinnegan && (
-                  <div style={{ height: 5, background: "rgba(0,0,0,.5)", borderRadius: 99, overflow: "hidden", marginTop: 8 }}>
-                    <div className="sl-fill" style={{ width: cl(e.blind || 0) + "%", height: "100%", background: "linear-gradient(90deg," + T.blood + "88," + T.blood + ")", borderRadius: 99 }} />
+                {(lv > 0 || e.mangekyo) && !e.rinnegan && (
+                  <div className="mt-3 sl-eyeheart">
+                    <div className="flex justify-between" style={{ fontSize: 10, color: T.dim }}>
+                      <span style={{ color: h <= -25 ? T.good : T.dim, fontWeight: h <= -25 ? 700 : 400 }}>RESOLVE</span>
+                      <span style={{ color: T.soft, fontWeight: 700 }}>{eyeHeartWord(h)}{h ? " (" + (h > 0 ? "+" : "") + h + ")" : ""}</span>
+                      <span style={{ color: h >= 25 ? T.blood : T.dim, fontWeight: h >= 25 ? 700 : 400 }}>HATRED</span>
+                    </div>
+                    <div style={{ position: "relative", height: 6, borderRadius: 99, marginTop: 3, background: "linear-gradient(90deg," + T.good + "55, rgba(255,255,255,.06) 50%," + T.blood + "66)" }}>
+                      <div style={{ position: "absolute", top: -3, left: "calc(" + (h + 100) / 2 + "% - 6px)", width: 12, height: 12, borderRadius: 99, background: T.text, border: "2px solid " + (h >= 25 ? T.blood : h <= -25 ? T.good : T.line) }} />
+                    </div>
+                    <div style={{ color: T.dim, fontSize: 10 }} className="mt-1">
+                      {e.mangekyo ? (h >= 25 ? "Hatred is eating the sight faster." : h <= -25 ? "Resolve is slowing the dark down." : "Neither one has the eye yet.")
+                        : "Hatred brings the Mangekyo sooner and leans it toward Amaterasu and Tsukuyomi, but it takes the sight faster. Resolve leans it toward Susanoo, Kamui and Kotoamatsukami, and the eyes last."}
+                    </div>
                   </div>
                 )}
+                {e.mangekyo && !e.eternal && !e.rinnegan && bar(e.blind || 0, T.blood)}
                 {e.rinnegan && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {RINNEGAN_PATHS.map((r) => (
@@ -23416,6 +23842,19 @@ export default function ShinobiLife() {
                         background: paths.includes(r.id) ? T.epic + "26" : "rgba(255,255,255,.04)",
                         border: "1px solid " + (paths.includes(r.id) ? T.epic : "rgba(255,255,255,.08)"),
                         color: paths.includes(r.id) ? T.text : T.dim }}>{r.n}</span>
+                    ))}
+                  </div>
+                )}
+                {hist.length > 0 && (
+                  <div className="mt-3 sl-eyehist">
+                    <div style={{ color: T.dim, fontSize: 9, letterSpacing: ".2em" }} className="font-bold mb-1">WHAT OPENED THEM</div>
+                    {hist.slice().reverse().map((x, i) => (
+                      <button key={i} onClick={() => replay(x)} className="w-full text-left flex gap-2 items-baseline py-1"
+                        style={{ borderTop: i ? "1px solid " + T.line : "none", fontSize: 11 }}>
+                        <span style={{ color: T.dim, flexShrink: 0, width: 46 }}>Age {x.age}</span>
+                        <span style={{ color: T.text, flexShrink: 0 }} className="font-semibold">{x.title.replace(/^Sharingan \((.+)\)$/, "$1")}</span>
+                        <span style={{ color: T.dim }} className="truncate">{x.choice ? "— " + x.choice : ""}</span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -23747,6 +24186,7 @@ export default function ShinobiLife() {
             <Btn onClick={() => cheat((c, L) => { c.sage = true; c.sixPaths = true; c.sageType = "Six Paths Sage Mode"; ["Six Paths Sage Mode", "Truth-Seeking Orbs"].forEach((j) => learn(c, L, j)); addTitle(c, "Six Paths"); P(L, "Six Paths Sage Mode unlocked.", "e"); })}>Six Paths Sage Mode</Btn>
             <Btn onClick={() => cheat((c, L) => { ["Baryon Mode", "Baryon Mode: Adamantine Fist"].forEach((j) => learn(c, L, j)); addTitle(c, "Baryon Mode"); P(L, "Baryon Mode. Burning your own life as fuel.", "e"); })}>Baryon Mode</Btn>
             <Btn onClick={() => cheat((c, L) => { ["Tailed Beast Mode", "Tailed Beast Bomb", "Kurama Chakra Mode", "Chakra Mode", "Chakra Arms"].forEach((j) => learn(c, L, j)); P(L, "Full Tailed Beast Mode unlocked.", "e"); })}>Tailed Beast Mode</Btn>
+            <Btn onClick={() => cheat((c, L) => eyeCheatNext(c, L))}>Sharingan: next stage</Btn>
             <Btn onClick={() => cheat((c, L) => { c.kg = "Sharingan"; c.eye = { t: "Sharingan", lv: 3, mangekyo: true, eternal: true, rinnegan: true, blind: 0 }; ["Copy Wheel Eye", "Amaterasu", "Tsukuyomi", "Susanoo", "Perfect Susanoo", "Susanoo: Yasaka Beads", "Almighty Push", "Universal Pull", "Chibaku Tensei", "Preta Path Absorption", "Outer Path: Rinne Rebirth"].forEach((j) => learn(c, L, j)); addTitle(c, "Rinnegan"); P(L, "Sharingan to Eternal Mangekyo to Rinnegan, all at once.", "e"); })}>Rinnegan (full line)</Btn>
             <Btn onClick={() => cheat((c, L) => { c.kg = "Byakugan"; c.eye = { t: "Byakugan", lv: 1, mangekyo: false, eternal: false, tenseigan: true, blind: 0 }; ["Gentle Fist", "Eight Trigrams Palm Rotation", "Eight Trigrams Sixty-Four Palms", "Eight Trigrams Vacuum Palm", "Tenseigan Chakra Mode", "Truth-Seeking Orbs"].forEach((j) => learn(c, L, j)); addTitle(c, "Tenseigan"); P(L, "Byakugan awakened and turned. Tenseigan.", "e"); })}>Byakugan → Tenseigan</Btn>
             <Btn onClick={() => cheat((c, L) => { c.gates = 8; GATES.forEach((g) => learn(c, L, g)); ["Evening Elephant", "Night Guy", "Morning Peacock"].forEach((j) => learn(c, L, j)); addTitle(c, "Opened the Eighth Gate"); P(L, "All eight gates, open, with no cost.", "e"); })}>All Eight Gates</Btn>
