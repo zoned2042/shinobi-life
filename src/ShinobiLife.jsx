@@ -5101,7 +5101,7 @@ function clearName(c, L, how) {
   w.tries += 1;
   const odds = how === "won" ? 100 : how === "scales" ? cl(40 + (c.standing || 0) / 3 + (c.iron && c.iron.npcArbiter ? 10 : 0), 20, 85) : how === "trial" ? 55 : cl(50 + (power(c) - 60) * 2, 15, 90);
   if (roll(odds)) {
-    c.wrongful = null; c.bingo = c.rogue ? c.bingo : null; c.bounty = c.rogue ? c.bounty : 0; c.standing = cl(c.standing + 12);
+    c.wrongful = null; c.bingo = c.rogue ? c.bingo : null; c.bounty = c.rogue ? c.bounty : 0; if (!c.rogue) c.bountyLog = null; c.standing = cl(c.standing + 12);
     const x = chronById(c, w.entry); if (x) x.revealed = c.year;
     bookName(c, { name: w.real, rank: "Missing-nin", tier: "B", why: w.why, by: "the Iron Scales", pw: rr(55, 72) });
     chron(c, { cat: "courts", cause: w.entry, line: c.name, big: true, txt: c.name + "'s name is cleared. The real culprit, " + w.real + ", is listed in their place." });
@@ -11111,6 +11111,14 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.2.2", n: "A Price That Only Goes Up", items: [
+    "Your bounty keeps climbing for as long as you are wanted. It used to be set once, when your Bingo Book rank went up, from a formula that stopped growing at 100 infamy, so an S-rank page sat near 1.2 million however many people you killed",
+    "Every kill adds to it at your rank's rate: 20,000 at C, 45,000 at B, 90,000 at A, 180,000 at S. A named kill adds what that name was worth, and twice that for anyone who ever held a Kage's hat. New infamy and every tailed beast you bring in for the Akatsuki add more",
+    "Every year you stay free it goes up again: a flat amount for your rank plus 6% of what it already is. There is no ceiling",
+    "An existing page catches up once from your record (kills, named kills, beasts) the first time it updates, so a bounty stuck at 1.2 million jumps to what you have actually done",
+    "The papers report it when it passes 1, 2.5, 5, 10, 25, 50 and 100 million and beyond, and from 10 million you carry the title. A bigger price brings hunter-nin more often. Your Bingo Book entry shows the bounty and how much it rose this year, and the Akatsuki panel shows it under your infamy",
+    "A pardon clears the bounty and its record",
+  ] },
   { v: "12.2.1", n: "The Scroll Broker", items: [
     "Jutsu Scrolls in the shop now let you choose. The broker lists every technique you can learn at your rank in tabs: Your natures (your elemental ninjutsu, and the tab it opens on), Ninjutsu, Taijutsu, Genjutsu, Support and All. Every row shows the technique's real type, nature, tier, power, chakra cost and seals",
     "Pay for exactly the one you want, 20,000 to 140,000 depending on tier. Or press 'Surprise me' for 30,000, which only ever draws from the tab you are looking at",
@@ -13954,9 +13962,63 @@ function bingoTick(c, L) {
   const rising = !c.bingo || BINGO_TIERS.findIndex((t) => t.r === tier.r) > BINGO_TIERS.findIndex((t) => t.r === c.bingo);
   c.bingo = tier.r;
   if (!rising) return;
-  c.bounty = Math.round((30000 + c.infamy * 9000 + power(c) * 4000) / 1000) * 1000;
+  c.bounty = Math.max(c.bounty || 0, Math.round((30000 + c.infamy * 9000 + power(c) * 4000) / 1000) * 1000);
   P(L, "Your page in the Bingo Book has been updated to " + tier.r + "-rank. The standing order on you now reads: " + tier.d + ".", "b");
   newsItem(c, c.name + (c.epithet ? " " + c.epithet : "") + " has been raised to " + tier.r + "-rank in the Bingo Book. The bounty stands at " + money(c.bounty) + " and the entry reads: " + tier.d + ".", "BINGO BOOK", tier.r === "S" || tier.r === "A");
+}
+
+/* ---- the price on your head: it only goes one way ----
+   Every kill adds to it at your current rank's rate, a named kill adds what that name was
+   worth (twice over for a Kage), new infamy and every tailed beast you take add more, and
+   every year you stay free the stations raise it again. There is no ceiling. */
+const BOUNTY_PER_KILL = { C: 20000, B: 45000, A: 90000, S: 180000 };
+const BOUNTY_YEARLY = { C: 10000, B: 30000, A: 80000, S: 200000 };
+const BOUNTY_MARKS = [1e6, 2.5e6, 5e6, 10e6, 25e6, 50e6, 100e6, 250e6, 500e6, 1e9];
+const bountyWanted = (c) => !!(c.rogue || c.wrongful) && !(c.madara && c.madara.phase === "cave");
+/* anyone who ever held a village's hat, by the lines the histories keep, or whose title says so */
+const isKageId = (id) => Object.values(KAGE_LINE).some((arr) => (arr || []).some((e) => e.id === id)) || /Hokage|Kazekage|Raikage|Tsuchikage|Mizukage|Kage\b/.test((NAMED[id] && NAMED[id].title) || "");
+const bountyNamed = (id) => { const n = NAMED[id]; return n ? Math.round(n.lvl * n.lvl * 70 * (isKageId(id) ? 2 : 1)) : 0; };
+/* what the record alone is worth, used once to bring an existing page up to date */
+function bountyRecord(c) {
+  const tier = c.bingo || "C";
+  return Math.round((30000 + (c.infamy || 0) * 9000 + power(c) * 4000 + (c.kills || 0) * BOUNTY_PER_KILL[tier]
+    + (c.legendaryKills || []).reduce((a, id) => a + bountyNamed(id), 0) + (((c.akatsuki && c.akatsuki.taken) || []).length) * 1500000) / 1000) * 1000;
+}
+function bountyTick(c, L, yearly) {
+  if (!bountyWanted(c)) return;
+  const beastsNow = ((c.akatsuki && c.akatsuki.taken) || []).length;
+  if (!c.bountyLog) {
+    c.bountyLog = { kills: c.kills || 0, named: (c.legendaryKills || []).length, infamy: c.infamy || 0, beasts: beastsNow, mark: 0, year: c.year, gain: 0 };
+    const rec = bountyRecord(c);
+    if (rec > (c.bounty || 0)) c.bounty = rec;
+    c.bountyLog.mark = BOUNTY_MARKS.filter((m) => (c.bounty || 0) >= m).pop() || 0;
+    return;
+  }
+  const B = c.bountyLog;
+  const tier = c.bingo || "C";
+  let add = 0;
+  const why = [];
+  const kills = Math.max(0, (c.kills || 0) - B.kills);
+  if (kills) { add += kills * BOUNTY_PER_KILL[tier]; why.push(kills + " kill" + (kills === 1 ? "" : "s")); }
+  (c.legendaryKills || []).slice(B.named).forEach((id) => { const v = bountyNamed(id); if (v) { add += v; why.push(NAMED[id].name); } });
+  const inf = Math.max(0, (c.infamy || 0) - B.infamy);
+  if (inf) add += inf * 12000;
+  const beasts = Math.max(0, beastsNow - B.beasts);
+  if (beasts) { add += beasts * 1500000; why.push(beasts + " tailed beast" + (beasts === 1 ? "" : "s")); }
+  if (yearly) { add += BOUNTY_YEARLY[tier] + Math.round((c.bounty || 0) * 0.06); if (!why.length) why.push("another year at large"); }
+  B.kills = c.kills || 0; B.named = (c.legendaryKills || []).length; B.infamy = c.infamy || 0; B.beasts = beastsNow;
+  if (add <= 0) return;
+  add = Math.round(add / 1000) * 1000;
+  c.bounty = (c.bounty || 0) + add;
+  if (B.year !== c.year) { B.year = c.year; B.gain = 0; }
+  B.gain += add;
+  if (add >= 100000) P(L, "The price on your head went up by " + money(add) + " (" + joinList(why) + "). It stands at " + money(c.bounty) + ".", "b");
+  const mark = BOUNTY_MARKS.filter((m) => c.bounty >= m).pop();
+  if (mark && mark > (B.mark || 0)) {
+    B.mark = mark;
+    newsItem(c, "The bounty on " + c.name + (c.epithet ? ", " + c.epithet + "," : "") + " has passed " + money(mark) + ". Every bounty station in five countries has the page pinned behind the counter.", "BINGO BOOK", mark >= 10e6);
+    if (mark >= 10e6) addTitle(c, "Worth " + money(mark));
+  }
 }
 
 /* ============================ THE ORGANISATION ============================ */
@@ -16579,6 +16641,7 @@ export default function ShinobiLife() {
     const nc = clone(base);
     const L = [];
     fn(nc, L);
+    if (nc.alive !== false) bountyTick(nc, L, false);
     cRef.current = nc;
     setC(nc);
     push(L, nc.age);
@@ -16867,6 +16930,7 @@ export default function ShinobiLife() {
       madaraTick(c, L);
       checkEpithet(c, L);
       bingoTick(c, L);
+      bountyTick(c, L, true);
       if (!c.kg && !c.myClan && c.age >= 6 && c.age <= 20 && roll(3)) {
         const k = rollExtraKG(c);
         if (k) {
@@ -16999,7 +17063,7 @@ export default function ShinobiLife() {
         addTitle(c, "Wore the ring " + ringR.ring);
         P(L, "A ring and a black cloak arrived with no messenger. The ring is " + ringR.ring + " and your partner is " + c.akatsuki.partner + ".", "e");
       }
-      if (c.rogue && !(c.madara && c.madara.phase === "cave") && roll(16 + c.infamy / 5)) {
+      if (c.rogue && !(c.madara && c.madara.phase === "cave") && roll(16 + c.infamy / 5 + Math.min(20, (c.bounty || 0) / 2000000))) {
         if (roll(cl(50 + (power(c) - (30 + c.infamy / 2)) * 2, 10, 95))) { c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin found your camp. You left four bodies and no trail.", "g"); c.kills += rr(2, 5); c.infamy = cl(c.infamy + 6); }
         else { const d = rr(12, 30); c.health = cl(c.health - d); c.huntersBeaten = (c.huntersBeaten || 0) + 1; P(L, "Hunter-nin ambushed you. You escaped, barely. -" + d + " health.", "b"); }
       }
@@ -21780,7 +21844,7 @@ export default function ShinobiLife() {
     setModal(null);
   }
   function seekPardon() {
-    commit((c, L) => { spend(c); if (roll(cl(25 - c.infamy * 0.35 + c.stats.int * 0.2, 2, 55))) { c.rogue = false; c.infamy = cl(c.infamy - 40); c.bingo = null; c.rank = 2; c.rankName = rankLabel(c, 2); c.standing = 20; P(L, "Someone in the tower vouched for you. Probation, a new headband, a lot of eyes on your back.", "e"); } else P(L, "Your envoy came back in pieces. The village said no.", "b"); });
+    commit((c, L) => { spend(c); if (roll(cl(25 - c.infamy * 0.35 + c.stats.int * 0.2, 2, 55))) { c.rogue = false; c.infamy = cl(c.infamy - 40); c.bingo = null; c.bounty = 0; c.bountyLog = null; c.rank = 2; c.rankName = rankLabel(c, 2); c.standing = 20; P(L, "Someone in the tower vouched for you. Probation, a new headband, a lot of eyes on your back.", "e"); } else P(L, "Your envoy came back in pieces. The village said no.", "b"); });
     setModal(null);
   }
   function recruitClan() {
@@ -25573,7 +25637,7 @@ export default function ShinobiLife() {
                     <div className="text-sm font-bold">{c.name}{c.epithet ? " — " + c.epithet : ""}</div>
                     <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-0.5">
                       {(BINGO_TIERS.find((t) => t.r === (c.bingo || "C")) || {}).d || "a nuisance with a name"}.
-                      {c.bounty ? " Bounty " + money(c.bounty) + "." : ""}
+                      {c.bounty ? " Bounty " + money(c.bounty) + (c.bountyLog && c.bountyLog.year === c.year && c.bountyLog.gain ? " (up " + money(c.bountyLog.gain) + " this year)" : "") + "." : ""}
                     </div>
                   </div>
                   <div style={{ color: T.blood, fontSize: 11, whiteSpace: "nowrap" }} className="font-bold">Lvl {pw}</div>
@@ -28718,6 +28782,7 @@ export default function ShinobiLife() {
                 <div className="text-right">
                   <div style={{ color: T.blood, fontSize: 10, letterSpacing: ".2em", fontWeight: 800 }}>BINGO {c.bingo || "B"}</div>
                   <div style={{ color: T.dim, fontSize: 11 }}>infamy {c.infamy}</div>
+                  {c.bounty ? <div style={{ color: T.gold, fontSize: 11 }} className="font-bold sl-bounty">bounty {money(c.bounty)}</div> : null}
                 </div>
               </div>
               <div style={{ borderTop: "1px solid rgba(255,255,255,.08)", marginTop: 10, paddingTop: 10 }}>
