@@ -11111,6 +11111,9 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.2.4", n: "Some Things Cannot Be Copied", items: [
+    "Fixed: the Sharingan (and the Copy Ninja) could copy things no eye can take, like the Eight Gates off Might Guy or a Tailed Beast Bomb off a jinchuriki. Copying now only takes hand-seal techniques: no taijutsu or gates, nothing that needs a tailed beast, Sage Mode or a dojutsu, no bloodline releases, no clan or summoning techniques",
+  ] },
   { v: "12.2.3", n: "Fire First", items: [
     "Fixed: Madara was born with no chakra nature at all, so at eight the game rolled him a random one and he could grow up with Water or Earth and no fire. He is born with Fire now, and Fireball",
     "He picks up more fire as his life goes on: Phoenix Flower after the first brother dies (8), Dragon Flame Bomb with Izuna (11), Great Fire Annihilation as clan head (18), Great Fire Destruction with the Mangekyo (20), and Majestic Destroyer Flame when Izuna dies, whether or not he takes the eyes",
@@ -13006,6 +13009,9 @@ const RINNEGAN_PATHS = [
    soon it comes, and how fast it takes your sight. */
 const EYE_GEN_AT = [30, 45, 62];
 const EYE_COPY_TIER = [0, 2, 3, 5];
+/* what an eye cannot take: things that come from a body, a beast, a bloodline or a lineage, not from hand seals */
+const UNCOPYABLE = /Gate|Lotus|Peacock|Tiger|Elephant|Night Guy|Tailed Beast|Beast Bomb|Chakra Cloak|Chakra Mode|Kurama|Sage Mode|Sage Art|Baryon|Six Paths|Truth-Seeking|Rinnegan|Rinne|Byakugan|Eight Trigrams|Gentle Fist|Sharingan|Mangekyo|Amaterasu|Tsukuyomi|Susanoo|Kamui|Izanagi|Izanami|Kotoamatsukami|Almighty Push|Universal Pull|Chibaku|Preta|Wood Style|Ice Style|Lava Style|Magnet Style|Explosion Style|Storm Style|Boil Style|Scorch Style|Dust Style|Crystal Style|Swift Style|Steel Style|Shikotsumyaku|Dance of the|Curse Mark|Edo Tensei|Reaper Death|Flying Thunder|Summoning|Infinite|Limbo|Heavenly Meteorite|Otsutsuki|Jogan|Tenseigan|Karma|Expansive|Ash Bones|Kaguya|Shadow Possession|Mind Body|Insect|Puppet|Ink|Sand|Lariat|Version|Cloak/;
+const copyable = (n) => !!MOVES[n] && !MOVES[n].forbidden && !UNCOPYABLE.test(n) && MOVES[n].kind !== "tai";
 const EYE_STAT_WORD = { gen: "Genjutsu", con: "Control", spd: "Speed", nin: "Ninjutsu", cha: "Chakra", int: "Intellect", tai: "Taijutsu", str: "Strength" };
 const EYE_STAGE = {
   1: { title: "Sharingan (1-tomoe)", head: "YOUR BLOOD REMEMBERS", gains: { gen: 4, con: 2 }, unlock: ["Sharingan: Copy", "Copy Wheel Eye", "Hell Viewing Illusion"] },
@@ -13156,7 +13162,7 @@ function eyeBattle(c, L, b, kills0) {
     eyeEdge(c, L, hp < 0.4 ? 14 : 5);
     if ((e.lv || 0) >= 1 && !c.copyNin && b.e && b.e.moves) {
       const tmax = e.mangekyo || e.rinnegan ? 6 : EYE_COPY_TIER[Math.min(3, e.lv)];
-      const seen = b.e.moves.map((m) => m[0]).filter((n) => MOVES[n] && !MOVES[n].forbidden && !c.jutsu.includes(n) && (MOVES[n].tier || 2) <= tmax);
+      const seen = b.e.moves.map((m) => m[0]).filter((n) => copyable(n) && !c.jutsu.includes(n) && (MOVES[n].tier || 2) <= tmax);
       if (seen.length && roll(e.mangekyo ? 40 : 10 + e.lv * 8)) {
         const got = pick(seen);
         c.jutsu.push(got); c.copied = (c.copied || 0) + 1;
@@ -21101,7 +21107,7 @@ export default function ShinobiLife() {
       madaraTick(c, L);
       /* the Copy Ninja takes techniques off whoever shows him one */
       if (c.copyNin && b.win && b.e && b.e.moves) {
-        const seen = b.e.moves.map((m) => m[0]).filter((n2) => MOVES[n2] && !c.jutsu.includes(n2) && (MOVES[n2].tier || 2) <= (c.eye && c.eye.mangekyo ? 6 : 5));
+        const seen = b.e.moves.map((m) => m[0]).filter((n2) => copyable(n2) && !c.jutsu.includes(n2) && (MOVES[n2].tier || 2) <= (c.eye && c.eye.mangekyo ? 6 : 5));
         if (seen.length && roll(c.eye && c.eye.mangekyo ? 70 : 52)) {
           const got = pick(seen);
           c.copied = (c.copied || 0) + 1;
