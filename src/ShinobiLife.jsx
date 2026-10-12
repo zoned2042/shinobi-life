@@ -593,6 +593,7 @@ const ENEMIES = {
   jin: EN("Enemy Jinchuriki", "Vessel", 92, 46, "Chakra", [["Tailed Beast Bomb", 1.3, "nin"], ["Chakra Arms", 1.1, "tai"], ["Version Two Cloak", 0, "buff"]], "The chakra is red and not all of it is theirs."),
   jonin: EN("Enemy Jonin", "Elite", 66, 30, "Wind", [["Wind Style: Pressure Damage", 1.25, "nin"], ["Shadow Clone Feint", 0, "buff"], ["Chakra Blade", 1.15, "tai"]], "Somebody's teacher. Fights like it."),
   guard: EN("Kage's Guard", "Personal guard", 74, 36, "Lightning", [["Lightning Style: False Darkness", 1.3, "nin"], ["Guard Formation", 0, "guard"], ["Iaido Draw", 1.2, "tai"]], "Picked out of the whole village to stand between the hat and people like you."),
+  beast: EN("Wild Beast", "Border beast", 48, 26, null, [["Goring Charge", 1.3, "tai"], ["Maul", 1.1, "tai"], ["Roar", 0, "buff"]], "Bigger than it should be, and hungry."),
   samurai: EN("Samurai", "Land of Iron", 70, 32, null, [["Chakra Blade Draw", 1.35, "tai"], ["Mountain Stance", 0, "guard"], ["Cross Cut", 1.15, "tai"]], "No jutsu, no seals, and a sword that cuts chakra."),
   kage: EN("Rival Kage", "The hat", 94, 52, "Lightning", [["Kirin", 1.35, "nin"], ["Lightning Armour", 0, "buff"], ["Guillotine Drop", 1.2, "tai"]], "A whole village decided this person was the strongest alive."),
   /* named, because enemyFighter hands anything unnamed a randName() — which meant
@@ -11114,6 +11115,20 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.4", n: "Among Your People", items: [
+    "Field Command: 'Command a division' in the war window is now 'Take command in the field', a battle you run yourself in any war: clan wars, village wars and the Great Wars. You are given a squad as a genin, a platoon as a chunin, a division as a jonin, a strike unit in the ANBU and the whole army as Kage (in the Warring States, a raiding band up to the whole clan under arms)",
+    "Six rounds against a named enemy commander with their own style. Each round your scouts read what they are about to do, with how sure they are; Intellect, holding the enemy's order of battle, a dojutsu and the old soldier from your village make the read better. Order a Charge, Hold the line, Flank or a Ninjutsu barrage, and each one beats some moves and loses to others. Commanders who see you repeat yourself adapt",
+    "Lead from the front puts you in their line yourself: the stronger you are the more it does, and it costs health. Go after their commander starts a real fight in the middle of the battle (once per battle); win and their line wavers, a named commander dies. Fall back saves what you have left",
+    "Both sides have numbers and morale bars. Break their morale or their numbers for a rout, or win on points after six rounds. Results move the war's momentum and the enemy's strength, shift the War Room front and its casualty counts, and are written up in the paper, sized by the battle. Your field record is kept, with titles at the first win, 5 and 10 wins, a rout of 5,000 or more, and a rout you led from the front",
+    "Border Patrol: a new section on the Ninja Path for anyone from genin up. Three stops along the border, drawn from smugglers, enemy scouts, a caravan held up by bandits, a missing-nin from the Bingo Book, a beast raiding the farms, a courier with a forged seal, enemy patrols in wartime, lost pilgrims, a tampered barrier seal, and once you are strong, a named rogue crossing alone",
+    "Each stop has two or three choices: fight, a stat check with the odds shown, or the safe report. Results pay, raise standing, give the war intel or momentum, and the notable ones make the paper. Ten patrols earns Keeper of the Border. The old one-line border watch duty is gone from the duty list",
+    "The Village: 'Walk through' your village from the People window. Nine people who live there: the noodle cook, the Academy teacher, the weaponsmith, the old soldier, the medic, the merchant, the gate guard, the old neighbour and an Academy kid who has decided you are their hero. In the Warring States they are the clan's own",
+    "Stop by anybody once a year for free. What they say changes as you go from a face at the Academy to a living legend. Each year some of them ask you for something, and what they ask grows with you: help on festival night, protection for the stall, a talk to the graduating class, the graduation address, opening the new market hall, finding the cat. Helping takes an action and is a fight or a stat check",
+    "Get close enough and each one does something for you: free meals and patching up (health every year), a blade made for your hand, better battlefield reads, a cut of the trade, a good word at the tower, the street's gossip, and faster-growing children and students",
+    "Your apprentice grows up: graduates at 12, can make chunin and jonin (faster the more you teach them), and once they wear a headband and trust you they stand with you as a lieutenant in Field Command. The people get older every year and keep their bond with you; move village and you start again",
+    "Become a living legend and the village holds a festival day in your name (Pride of the village). Help ten times and you are Everybody's Shinobi. As a missing-nin you can still see them after dark, if nobody recognises you",
+    "More news written for what actually happened: field battles (routs, losses, a commander beaten mid-battle, a line broken by one person), patrol catches, smuggling rings, bounties paid at the border, named rogues tracked, the village's moments (a bowl named after you, the graduation address, the market hall, your apprentice's graduation, the festival), and weddings, which now make the paper sized by how famous you are",
+  ] },
   { v: "12.3", n: "Marked", items: [
     "Missing-nin and Akatsuki members get a Strike window (Ninja Path, under STRIKES, and a 'Strike at someone' row in the Akatsuki panel) with four kinds of target: a person, a person and their people, a group, or a village",
     "A person: any named shinobi alive in your era, strongest first, each marked as below you, an even fight or well above you. One fight",
@@ -14076,6 +14091,695 @@ const AKATSUKI_JOBS = [
 ];
 const canJoinAkatsuki = (c) => c.rogue && !c.akatsuki && AKATSUKI_ERAS.includes(c.era) && c.infamy >= 45 && power(c) >= 62;
 
+/* ============================ FIELD COMMAND ============================ */
+/* "Command a division" used to be a single roll against intellect. Now it is a battle:
+   your force against theirs over six exchanges, an order for each one, and a scout's read
+   on what the other side is about to do. What you are given to command grows with what
+   you are (a squad as a genin, a platoon as a chunin, a division as a jonin, the whole
+   army as Kage) and the stronger you are yourself, the more leading from the front does. */
+const FIELD_ORDERS = {
+  charge: { n: "Charge", d: "Everything forward. Catches seal teams mid-cast and flankers strung out in the trees. Breaks on a line that is set.", atk: 1.25, def: 1.15 },
+  hold: { n: "Hold the line", d: "Dig in and let them come. Stops a charge cold. A barrage or a flank will find you.", atk: 0.75, def: 0.68 },
+  flank: { n: "Flank", d: "Send the wings round. Beats a held line or casters standing still. A charge runs it down. Speed helps.", atk: 1.1, def: 1 },
+  barrage: { n: "Ninjutsu barrage", d: "Every seal team at once. Breaks a dug-in line. A flank comes round it. Ninjutsu and natures help.", atk: 1, def: 0.95 },
+};
+/* your order against what they actually did: +1 you read it, -1 they read you */
+const FIELD_ADV = {
+  charge: { charge: 0, hold: -1, flank: 1, barrage: 1 },
+  hold: { charge: 1, hold: 0, flank: -1, barrage: -1 },
+  flank: { charge: -1, hold: 1, flank: 0, barrage: 1 },
+  barrage: { charge: 0, hold: 1, flank: -1, barrage: 0 },
+};
+const FIELD_COUNTER = { charge: "hold", hold: "flank", flank: "charge", barrage: "flank" };
+const FIELD_STANCE = { charge: "a charge", hold: "a held line", flank: "a flanking move", barrage: "a ninjutsu barrage" };
+const FIELD_TELL = {
+  charge: ["Their front ranks are dropping their packs. They mean to come straight at you.", "You can hear them working themselves up behind the ridge. A charge is coming."],
+  hold: ["They are driving stakes and digging in. Nobody over there plans to move.", "Their line has gone still and tight. They want you to come to them."],
+  flank: ["Their wings are thinning out toward the tree line. Somebody is going around.", "A column left their left side an hour ago and has not come back."],
+  barrage: ["Seal teams are forming up behind their line in rows.", "You can feel chakra gathering behind their front rank, a lot of it, all at once."],
+};
+const FIELD_STYLE = {
+  Aggressive: { charge: 45, flank: 25, barrage: 20, hold: 10 }, Reckless: { charge: 50, flank: 20, barrage: 20, hold: 10 },
+  Relentless: { charge: 30, barrage: 35, flank: 20, hold: 15 }, Defensive: { hold: 45, barrage: 30, flank: 15, charge: 10 },
+  Cautious: { hold: 40, barrage: 30, flank: 20, charge: 10 }, Strategic: { flank: 40, hold: 25, barrage: 20, charge: 15 },
+  Intelligent: { flank: 30, barrage: 30, hold: 25, charge: 15 }, Improviser: { charge: 25, hold: 25, flank: 25, barrage: 25 },
+  Brilliant: { flank: 30, barrage: 30, hold: 20, charge: 20 }, Beloved: { charge: 30, hold: 30, flank: 20, barrage: 20 },
+};
+const FIELD_STYLE_WORD = { Aggressive: "likes to come straight at people", Reckless: "throws everything in early", Relentless: "never stops pressing", Defensive: "would rather hold than move", Cautious: "will not risk much", Strategic: "goes round rather than through", Intelligent: "reads you back", Improviser: "does not have a pattern", Brilliant: "is good at all of it", Beloved: "has people who will die for them" };
+const FIELD_SCALE = { genin: 0.35, chunin: 0.6, anbu: 0.8, jonin: 1, arbiter: 0.9, kage: 1.6, band: 0.5, captain: 0.9, clan: 1.4 };
+function fieldForce(c) {
+  const role = warRole(c);
+  if (preVillage(c)) {
+    if (role === "kage") return { scale: "clan", size: "whole clan under arms", word: "War Host", men: rr(260, 480), q: 1.12 };
+    if (c.clanRole === "War Captain" || c.rank >= 5) return { scale: "captain", size: "war band", word: "War Band", men: rr(70, 140), q: 1.06 };
+    if (c.rank >= 3 || c.clanRole === "Warrior") return { scale: "band", size: "raiding band", word: "Raiding Band", men: rr(18, 34), q: 1 };
+    return { scale: "genin", size: "handful of cousins", word: "Raiding Party", men: rr(6, 10), q: 0.9 };
+  }
+  const T2 = {
+    genin: { size: "squad", word: "Squad", men: [8, 14], q: 0.9 },
+    chunin: { size: "platoon", word: "Platoon", men: [40, 90], q: 1 },
+    jonin: { size: "division", word: "Division", men: [700, 1500], q: 1.08 },
+    anbu: { size: "black-ops strike unit", word: "Strike Unit", men: [24, 48], q: 1.45 },
+    arbiter: { size: "samurai column", word: "Column", men: [300, 700], q: 1.1 },
+    kage: { size: "army", word: "Army", men: [7000, 14000], q: 1.12 },
+  }[role] || { size: "squad", word: "Squad", men: [8, 14], q: 0.9 };
+  return { scale: T2.word === "Squad" && role !== "genin" ? "genin" : role, size: T2.size, word: T2.word, men: rr(T2.men[0], T2.men[1]), q: T2.q };
+}
+function fieldUnitName(c, F) {
+  if (preVillage(c)) return "the " + myClanWord(c) + " " + F.word.toLowerCase();
+  if (F.scale === "anbu") return "ANBU " + F.word + (c.anbu && c.anbu.code ? " " + c.anbu.code : "");
+  const short = c.founded ? c.founded.name : VSHORT[c.village] || vName2(c.village);
+  return ORDINAL_N[R(4)] + " " + short + " " + F.word;
+}
+/* the people you would trust with a wing */
+function fieldLieutenants(c) {
+  const out = [];
+  (c.team || []).forEach((t) => { if (t.alive) out.push(t.name); });
+  if (c.sibling && c.sibling.alive) out.push(c.sibling.name);
+  (c.students || []).forEach((s) => { if (s.alive) out.push(s.name); });
+  ((c.folk && c.folk.list) || []).forEach((f) => { if (f.role === "apprentice" && f.rank >= 1 && f.bond >= FOLK_ROLES.apprentice.perk) out.unshift(f.name); });
+  while (out.length < 2) out.push(freshName(c, preVillage(c) && c.clan !== "Civilian-born" ? c.clan : null));
+  return out.filter((x, i, a) => a.indexOf(x) === i).slice(0, 3);
+}
+/* who is giving the orders on the other side */
+function fieldCommander(c, w, f) {
+  const R2 = w.room;
+  if (R2 && R2.foes && (R2.foes[f.key] || []).length) {
+    const a = R2.foes[f.key].find((x) => x.men > 0) || R2.foes[f.key][0];
+    if (a && a.cmd && a.cmd.name && !(a.cmd.id && isDead(c, a.cmd.id))) return { name: a.cmd.name, id: a.cmd.id && NAMED[a.cmd.id] ? a.cmd.id : null, title: "commanding the " + a.n, trait: (a.cmd.traits || [])[0] || "Aggressive" };
+  }
+  if (f.kind === "village") {
+    const kn = c.kages[f.key] ? c.kages[f.key].named : null;
+    const pool = commanderPool(c, f.key, 4).filter((x) => x.id !== kn && x.id !== f.leaderId && x.name !== f.leaderName);
+    const g = pool.length ? pick(pool.slice(0, 3)) : null;
+    if (g) return { name: g.name, id: g.id && NAMED[g.id] ? g.id : null, title: "field commander of " + f.name, trait: (g.traits || [])[0] || "Aggressive" };
+  }
+  if (f.kind === "clan") {
+    const roster = (c.clanMembers && c.clanMembers[f.key]) || [];
+    const caps = roster.filter((m) => m.alive && m.role === "War Captain");
+    const m = caps.length ? pick(caps) : { name: freshName(c, f.key) };
+    return { name: m.name, id: null, title: "War Captain of the " + f.key, trait: pick(["Aggressive", "Reckless", "Defensive", "Cautious"]) };
+  }
+  const named = (w.champs || []).filter((x) => NAMED[x] && !isDead(c, x) && x !== f.leaderId);
+  if (named.length && roll(55)) { const id = pick(named); return { name: NAMED[id].name, id, title: NAMED[id].title, trait: "Relentless" }; }
+  return { name: freshName(c, null), id: null, title: "field commander of " + f.name, trait: pick(Object.keys(FIELD_STYLE)) };
+}
+/* how sure your scouts are */
+function fieldSure(c) {
+  return Math.round(cl(42 + c.stats.int * 0.35 + (c.war && c.war.intel ? 18 : 0) + (c.eye ? 12 : 0) + (folkPerk(c, "veteran") ? 10 : 0)
+    + Math.min(10, ((c.fieldRec && c.fieldRec.won) || 0) * 2), 35, 95));
+}
+function fieldNext(c) {
+  const F = c.field;
+  const wts = { ...(FIELD_STYLE[F.trait] || FIELD_STYLE.Improviser) };
+  if (F.lastOrd && FIELD_COUNTER[F.lastOrd]) wts[FIELD_COUNTER[F.lastOrd]] += F.prevOrd === F.lastOrd ? 35 : 12;
+  const tot = Object.values(wts).reduce((a, b) => a + b, 0);
+  let r2 = Math.random() * tot; let st = "charge";
+  for (const k of Object.keys(wts)) { r2 -= wts[k]; if (r2 <= 0) { st = k; break; } }
+  F.next = st;
+  F.sure = fieldSure(c);
+  F.shown = roll(F.sure) ? st : pick(Object.keys(FIELD_TELL).filter((k) => k !== st));
+  F.tell = pick(FIELD_TELL[F.shown]);
+}
+function fieldStart(c, L) {
+  const w = c.war; if (!w) return false;
+  const cur = (w.foes || [])[w.active];
+  const f = cur && !cur.out ? cur : liveFoes(w)[0];
+  if (!f) return false;
+  const F0 = fieldForce(c);
+  const fs = cl(f.strength || 50, 25, 100);
+  const fmen = Math.max(4, Math.round(F0.men * rr(85, 135) / 100 * (0.7 + fs / 160)));
+  const cmd = fieldCommander(c, w, f);
+  const site = f.front || w.front || pick(BATTLE_SITES);
+  c.field = {
+    foeKey: f.key, foeName: f.name, site, unit: fieldUnitName(c, F0), size: F0.size, scale: F0.scale,
+    men: F0.men, men0: F0.men, fmen, fmen0: fmen, mor: rr(68, 80) + (w.intel ? 8 : 0), fmor: rr(65, 80),
+    q: F0.q, fq: 0.95 + fs / 400 + (w.great ? 0.08 : 0), cmdr: cmd, trait: cmd.trait,
+    round: 0, max: 6, lt: fieldLieutenants(c), log: [], dueled: 0, fronted: 0, kills: 0, lostT: 0, lostO: 0,
+    done: null, lastOrd: null, prevOrd: null, war: w.name, year: c.year,
+  };
+  c.field.log.unshift({ t: "You have the " + c.field.unit + " at " + site + ": " + F0.men.toLocaleString() + " of yours against " + fmen.toLocaleString() + " of " + f.name + "'s under " + cmd.name + ", who " + (FIELD_STYLE_WORD[cmd.trait] || "has a reputation") + ". " + joinList(c.field.lt) + " have the wings.", k: "n" });
+  fieldNext(c);
+  P(L, "You took command of the " + c.field.unit + " at " + site + ".", "n");
+  return true;
+}
+function fieldLine(F, ord, st) {
+  const a = pick(F.lt);
+  const W = {
+    "charge:barrage": "They were still forming seals when your line reached them. The barrage never went off.",
+    "charge:flank": "Their flankers were strung out in the trees and your charge went straight through the gap they left.",
+    "hold:charge": "They came at a line that was set and broke on it. " + a + " held the centre and did not give a step.",
+    "flank:hold": a + " took the wing round the tree line and came down on a line facing the wrong way.",
+    "flank:barrage": "Their seal teams were standing still. " + a + "'s wing was among them before the second volley.",
+    "barrage:hold": "They dug in, and your seal teams took the ground they dug into apart.",
+    "charge:hold": "You charged a line that was waiting for you. It cost you.",
+    "hold:flank": "You held a line they simply went around. " + a + " turned the wing in time to keep it from becoming a rout.",
+    "hold:barrage": "They hit your line from out of reach and all you could do was hold.",
+    "flank:charge": "Your wings were out in the trees when their charge came down the middle.",
+    "barrage:flank": "Your casters were mid-seal when the flank came in from the side.",
+  };
+  return W[ord + ":" + st] || (st === ord ? pick(["Both sides had the same idea and met in the middle. Neither gave.", "They did what you did. It turned into a grind."]) : pick(["Neither side read the other. It was ugly and even.", "The exchange went nowhere and cost both sides."]));
+}
+function fieldOrder(c, L, ord) {
+  const F = c.field; if (!F || F.done) return;
+  if (ord === "fallback") { fieldEnd(c, L, "withdrew"); return; }
+  const st = F.next;
+  F.round += 1;
+  const pwr = power(c);
+  const adv = ord === "front" ? 0 : FIELD_ADV[ord][st];
+  const O = FIELD_ORDERS[ord] || { atk: 1, def: 0.9 };
+  let atk = O.atk; let def = O.def;
+  if (ord === "flank") atk *= 1 + c.stats.spd / 300;
+  if (ord === "barrage") atk *= 1 + c.stats.nin / 220 + Math.min(0.3, (c.natures || []).length * 0.06);
+  if (ord === "front") { atk *= 1 + Math.max(0, pwr - 30) / 70; def *= 0.9; }
+  const ourQ = F.q * (1 + c.stats.int / 260) * (0.5 + F.mor / 200);
+  const theirQ = F.fq * (0.5 + F.fmor / 200);
+  const sr = Math.sqrt(Math.max(0.05, (F.men * ourQ) / Math.max(1, F.fmen * theirQ)));
+  const sw = () => 0.8 + Math.random() * 0.4;
+  let tf = 0.075 * sr * (adv > 0 ? 1.75 : adv < 0 ? 0.6 : 1) * atk * sw();
+  let of = (0.075 / sr) * (adv > 0 ? 0.55 : adv < 0 ? 1.7 : 1) * def * sw();
+  /* one person who can flatten a hillside matters more the smaller the field is */
+  if (ord === "front") tf += (Math.max(0, pwr - 40) / 100) * (F.men0 < 200 ? 0.14 : F.men0 < 2000 ? 0.08 : 0.05);
+  tf = Math.min(0.6, tf); of = Math.min(0.6, of);
+  const tl = Math.min(F.fmen, Math.max(adv >= 0 ? 1 : 0, Math.round(F.fmen * tf)));
+  const ol = Math.min(F.men, Math.max(adv <= 0 ? 1 : 0, Math.round(F.men * of)));
+  F.fmen -= tl; F.men -= ol; F.lostT += tl; F.lostO += ol;
+  F.fmor = cl(F.fmor - Math.round(tf * 150) - (adv > 0 ? 8 : 0) - (ord === "front" ? 6 : 0));
+  F.mor = cl(F.mor - Math.round(of * 150) - (adv < 0 ? 8 : 0) + Math.min(6, Math.round(pwr / 22)));
+  let line; let head;
+  if (ord === "front") {
+    const hurt = rr(3, 9) + Math.round(F.fq * 4);
+    c.health = Math.max(5, cl(c.health - hurt));
+    F.fronted += 1;
+    F.kills += Math.max(1, Math.round(tl * (F.men0 < 200 ? 0.5 : 0.06)));
+    head = "You led from the front into " + FIELD_STANCE[st];
+    line = pwr >= 85 ? "Where you were standing, their line stopped moving. Your people saw it and went in after you."
+      : pwr >= 60 ? "The line moved with you. -" + hurt + " health."
+      : "You fought in the front rank with everybody else. It helped, and it hurt. -" + hurt + " health.";
+  } else { head = FIELD_ORDERS[ord].n + " into " + FIELD_STANCE[st]; line = fieldLine(F, ord, st); }
+  F.log.unshift({ t: "Round " + F.round + " — " + head + ". " + line + " (" + tl.toLocaleString() + " of theirs down, " + ol.toLocaleString() + " of yours.)", k: adv > 0 || (ord === "front" && tl > ol) ? "g" : adv < 0 ? "b" : "n" });
+  F.prevOrd = F.lastOrd; F.lastOrd = ord;
+  if (F.fmor <= 0 || F.fmen <= F.fmen0 * 0.28) { fieldEnd(c, L, "rout"); return; }
+  if (F.mor <= 0 || F.men <= F.men0 * 0.28) { fieldEnd(c, L, "routed"); return; }
+  if (F.round >= F.max) {
+    const us = (F.men / F.men0) * (F.mor + 10); const them = (F.fmen / F.fmen0) * (F.fmor + 10);
+    fieldEnd(c, L, us >= them * 1.08 ? "won" : them >= us * 1.08 ? "lost" : "draw"); return;
+  }
+  fieldNext(c);
+}
+const FIELD_OUT = { rout: "THEIR LINE BROKE", won: "THE FIELD IS YOURS", draw: "NEITHER SIDE GAVE", lost: "DRIVEN OFF", routed: "YOUR LINE BROKE", withdrew: "YOU FELL BACK" };
+function fieldEnd(c, L, how) {
+  const F = c.field; if (!F || F.done) return;
+  F.done = how;
+  const w = c.war;
+  const big = FIELD_SCALE[F.scale] || 1;
+  const win = how === "rout" || how === "won";
+  const sc = (a, b) => Math.max(1, Math.round(rr(a, b) * big));
+  const dm = how === "rout" ? sc(9, 15) : how === "won" ? sc(5, 10) : how === "draw" ? 1 : how === "withdrew" ? -sc(1, 3) : how === "lost" ? -sc(4, 8) : -sc(8, 13);
+  F.dm = dm;
+  let f = null;
+  if (w && w.name === F.war) {
+    w.momentum = cl(w.momentum + dm);
+    if (win) w.contribution += how === "rout" ? 2 + (big >= 1 ? 1 : 0) : 1;
+    f = (w.foes || []).find((x) => x.key === F.foeKey);
+    if (f && !f.out && win) { f.strength -= Math.round((how === "rout" ? 10 : 5) * big) + Math.round((F.lostT / Math.max(1, F.fmen0)) * 8); f.pressure = cl(f.pressure - 2, 2, 30); }
+    const R2 = w.room;
+    if (R2) {
+      /* the War Room hears about it: the front line moves and the casualty count includes yours */
+      const fr = R2.fronts && R2.fronts[F.foeKey];
+      if (fr) fr.line = cl(fr.line + Math.round(dm * 0.8), 0, 100);
+      if (R2.cas) { R2.cas.mine += F.lostO; R2.cas.theirs += F.lostT; }
+      if (big >= 1) {
+        const mine = (R2.armies || []).find((a) => a.front === F.foeKey && a.men > 0); if (mine) mine.men = Math.max(0, mine.men - F.lostO);
+        const theirs = ((R2.foes || {})[F.foeKey] || []).find((a) => a.men > 0); if (theirs) theirs.men = Math.max(0, theirs.men - F.lostT);
+      }
+    }
+  }
+  const rec = c.fieldRec || (c.fieldRec = { won: 0, lost: 0, drawn: 0, routs: 0, theirs: 0, ours: 0, biggest: 0 });
+  if (win) rec.won += 1; else if (how === "lost" || how === "routed") rec.lost += 1; else rec.drawn += 1;
+  if (how === "rout") rec.routs += 1;
+  rec.theirs += F.lostT; rec.ours += F.lostO; rec.biggest = Math.max(rec.biggest, F.men0);
+  c.kills += F.kills;
+  c.stats.int = cl(c.stats.int + rr(1, 3));
+  if (win) { c.wins += 1; c.standing = cl(c.standing + Math.round(4 * big) + 1); }
+  if (how === "routed") c.standing = cl(c.standing - 4);
+  const tally = F.lostT.toLocaleString() + " of theirs down for " + F.lostO.toLocaleString() + " of yours";
+  const line = {
+    rout: "Their line broke and ran. " + F.cmdr.name + " could not hold it together. " + tally + ".",
+    won: "They gave the field up before dark. " + tally + ".",
+    draw: "Both sides were still standing at dusk and both pulled back. " + tally + ".",
+    lost: F.cmdr.name + " held and you did not. You brought what was left of the " + F.unit + " off the field. " + tally + ".",
+    routed: "Your line broke. You got as many of them out as you could. " + tally + ".",
+    withdrew: "You pulled the " + F.unit + " off the field before it cost more. " + tally + ".",
+  }[how];
+  P(L, line + (w ? " Momentum " + w.momentum + "%." : ""), win ? "g" : how === "draw" || how === "withdrew" ? "n" : "b");
+  F.log.unshift({ t: line, k: win ? "e" : how === "draw" || how === "withdrew" ? "n" : "b" });
+  /* what the people who served under you start calling you */
+  if (win && rec.won === 1) addTitle(c, "Field Commander");
+  if (how === "rout" && F.men0 >= 5000) addTitle(c, "Breaker of Armies");
+  if (rec.won === 5) addTitle(c, "Never Gave Ground");
+  if (rec.won === 10) addTitle(c, "The General");
+  if (how === "rout" && F.fronted >= 3 && power(c) >= 85) addTitle(c, "An Army of One");
+  /* and the paper */
+  const wn = F.war ? lowerName(F.war) : "the war";
+  const solo = how === "rout" && F.fronted >= 3 && power(c) >= 85;
+  const bigNews = (win && (big >= 1 || F.men0 >= 500)) || (how === "routed" && big >= 1) || solo;
+  const nm = c.name + (c.epithet ? " " + c.epithet : "");
+  const pool = {
+    rout: [
+      "ROUT AT " + F.site.toUpperCase() + ". The " + F.unit + " under " + nm + " broke " + F.cmdr.name + "'s line in " + F.round + " exchanges. " + cap(tally) + ".",
+      cap(F.foeName) + " lost the field at " + F.site + " to the " + F.unit + ". Their survivors describe " + c.name + " giving orders from the front rank.",
+    ],
+    won: [
+      "The " + F.unit + " under " + nm + " held " + F.site + " against " + F.cmdr.name + " in " + wn + ". " + cap(tally) + ".",
+      c.name + " took the field at " + F.site + ". " + cap(F.foeName) + " fell back before dark.",
+    ],
+    draw: ["Neither side gave at " + F.site + ". The " + F.unit + " and " + F.cmdr.name + "'s force both pulled back at dusk."],
+    lost: ["The " + F.unit + " was driven off " + F.site + " by " + F.cmdr.name + ". " + cap(wn) + " goes on."],
+    routed: ["SETBACK AT " + F.site.toUpperCase() + ". The " + F.unit + " broke under " + F.cmdr.name + "'s attack. " + c.name + " was among the last off the field."],
+    withdrew: ["The " + F.unit + " under " + c.name + " withdrew from " + F.site + " rather than be ground down. Opinion in the tower is divided."],
+  }[how];
+  if (solo) pool.unshift("Witnesses at " + F.site + " say " + c.name + " went through " + F.foeName + "'s line personally and the line stopped holding. Both armies tell the same story.");
+  if (F.cmdrDown) pool.unshift(c.name + " beat " + F.cmdr.name + " in the middle of the battle at " + F.site + ". " + cap(F.foeName) + "'s line did not last long after that.");
+  if (how !== "withdrew" || roll(40)) newsItem(c, pick(pool.slice(0, F.cmdrDown || solo ? 1 : pool.length)), "WAR", bigNews);
+  if (f && f.strength <= 0 && w && liveFoes(w).length > 1) knockFoeOut(c, L, f);
+}
+/* the commander duel resolves here, after the fight on the battle screen */
+function fieldDuelResult(c, L, win, id, nameBeaten, killedHow) {
+  const F = c.field; if (!F || F.done) return;
+  F.dueled = win ? 1 : -1;
+  if (win) {
+    F.fmor = cl(F.fmor - rr(35, 50)); F.mor = cl(F.mor + 12); F.cmdrDown = true; c.wins += 1;
+    if (id && NAMED[id]) { killNamed(c, id, L, killedHow); killFeat(c, L, id); } else c.kills += 1;
+    F.log.unshift({ t: "You went looking for " + nameBeaten + " in the middle of it and found them. Their side watched it happen.", k: "e" });
+    P(L, "You beat " + nameBeaten + " in front of both lines.", "e");
+    if (F.fmor <= 0) fieldEnd(c, L, "rout");
+  } else {
+    F.mor = cl(F.mor - rr(30, 40));
+    F.log.unshift({ t: nameBeaten + " beat you in front of your own people. " + pick(F.lt) + " got you back behind the line.", k: "b" });
+    if (F.mor <= 0) fieldEnd(c, L, "routed");
+  }
+}
+/* ============================ BORDER PATROL ============================ */
+/* The border watch used to be one line of text. Now it is three stops along the line,
+   each one somebody or something crossing, and you decide what to do about it. */
+const PATROL_BEASTS = [["Border Boar", "a boar the size of a cart"], ["Ridge Bear", "a bear that has learned the farms are easier than the forest"], ["Wall Serpent", "a snake as long as the outer wall"], ["Marked Wolf", "a wolf pack with a summoner's mark on the leader"]];
+const PATROL_ROGUES = ["zabuza", "kisame", "orochimaru", "kabuto", "hidan", "kakuzu", "deidara", "sasori", "itachi", "kimimaro", "guren", "koji", "delta", "konan", "hanzo"];
+function patrolWhere(c) {
+  if (preVillage(c)) return "the edge of the " + myClanWord(c) + " lands";
+  const nb = VILLAGES.filter((v) => v.id !== c.village && villageExists(c, v.id) && !(c.razed || []).includes(v.name));
+  return "the " + (nb.length ? pick(nb).land : "northern") + " border";
+}
+const patrolOdds = (c, stat, dc) => cl(48 + ((c.stats[stat] || 0) - dc) * 1.8, 12, 94);
+const PATROL_ENC = [
+  { id: "smugglers", w: () => 14,
+    t: () => "A mule train is coming down the goat path after dark, loaded heavier than anything honest needs to be.",
+    o: [
+      { n: "Stop them and search the loads", d: "Six of them, and one is not a mule driver.", fight: () => ({ key: "bandit", title: "Smuggler boss" }),
+        go: (c, P2, x, ok) => ok ? (P2.ryo += rr(6000, 18000), P2.stand += 3, ["The loads were contraband sealing tags. The tower let you keep a finder's share.", "g"]) : ["They scattered into the dark with most of the loads.", "b"] },
+      { n: "Let them through and follow them to the buyer", d: "The loads are nothing. The buyer is something.", stat: "int", dc: 40,
+        go: (c, P2, x, ok) => {
+          if (!ok) return ["You lost them at the river crossing.", "b"];
+          P2.stand += 5; if (c.war) c.war.intel = true;
+          newsItem(c, "A smuggling ring moving contraband across " + P2.where + " has been broken up from the buyer's end. The tower credits " + c.name + ".", "THE ROAD");
+          return ["You followed them two days to a warehouse with a name on the door. The tower has the name now.", "g"];
+        } },
+      { n: "Count them and report it", d: "Somebody else's problem, properly written down.", go: (c, P2) => (P2.stand += 1, ["You noted the time, the count and the direction.", "n"]) },
+    ] },
+  { id: "scouts", w: (c) => (c.war ? 22 : 7),
+    t: (c) => "Three sets of tracks, too careful to be hunters, heading inland" + (c.war ? " from " + (c.war.enemyName || "the enemy") + "'s side." : "."),
+    o: [
+      { n: "Run them down", d: "Before they get home with whatever they saw.", fight: (c) => ({ key: "chunin", title: c.war && c.war.foeClan ? "Scout of the " + c.war.foeClan : "Enemy scout" }),
+        go: (c, P2, x, ok) => {
+          if (!ok) return ["They got away, and they know the patrol routes now.", "b"];
+          P2.stand += 4;
+          if (c.war) { c.war.momentum = cl(c.war.momentum + rr(2, 5)); c.war.contribution += 1; if (roll(50)) newsItem(c, "A scouting party was caught on " + P2.where + " before it could report back. " + cap(c.war.enemyName || "The enemy") + " is fighting blind on that front.", "WAR"); }
+          return ["Nobody is reporting back from that scouting party.", "g"];
+        } },
+      { n: "Shadow them back to their camp", d: "Let them show you the thing worth knowing.", stat: "spd", dc: 45,
+        go: (c, P2, x, ok) => {
+          if (!ok) { const d = rr(6, 14); c.health = cl(c.health - d); return ["They doubled back and you had to fight your way clear. -" + d + " health.", "b"]; }
+          if (c.war) { c.war.intel = true; P2.stand += 3; return ["You came back with where their camp is and how many are in it. The front has it by morning.", "g"]; }
+          P2.stand += 5; return ["You found a camp nobody knew about. The tower has sent people to ask why it is there.", "g"];
+        } },
+      { n: "Light the signal", d: "Safe, and the tower takes it from here.", go: (c, P2) => (P2.stand += 2, ["The signal went up and a hunter team went out. Your part was done.", "n"]) },
+    ] },
+  { id: "caravan", w: () => 12,
+    t: () => "A merchant caravan is stopped on the road below the ridge, and the men around it are not merchants.",
+    o: [
+      { n: "Drive them off", d: "There are more of them than there should be.", fight: () => ({ key: "thug", title: "Road bandit" }),
+        go: (c, P2, x, ok) => {
+          if (!ok) return ["They took two carts and ran. The merchants were shaken but whole.", "b"];
+          P2.ryo += rr(8000, 25000); P2.stand += 3; folkBond(c, "merchant", 8);
+          if (roll(55)) newsItem(c, "Bandits who stopped a caravan on " + P2.where + " were driven off by " + c.name + ". The merchants paid the reward twice over.", "THE ROAD");
+          return ["They will not be back on this road. The merchants insisted on paying you.", "g"];
+        } },
+      { n: "Talk them down", d: "Make them decide the cargo is not worth it.", stat: "int", dc: 40,
+        go: (c, P2, x, ok) => ok ? (P2.stand += 3, ["They looked at your headband for a long moment and decided the cargo was not worth it.", "g"]) : ["They took a cart and ran before you finished talking. Nobody was hurt.", "n"] },
+    ] },
+  { id: "missing", w: () => 12,
+    mk: (c) => { const tiers = BOUNTY_TIERS.filter((t) => ENEMIES[t.key].lvl <= power(c) + 12); const t = pick(tiers.length ? tiers : BOUNTY_TIERS.slice(0, 1)); const v = pick(VILLAGES); return { name: randName(roll(50) ? "m" : "f"), rank: t.r, key: t.key, pay: rr(t.pay[0], t.pay[1]), from: villageExists(c, v.id) ? v.name : "the " + v.land }; },
+    t: (c, x) => "Somebody is crossing at the old ford with their hood up. The face matches a page in the Bingo Book: " + x.name + ", " + x.rank + "-rank, formerly of " + x.from + ".",
+    o: [
+      { n: "Take them", d: "The bounty is on the page.", fight: (c, x) => ({ key: x.key, name: x.name, title: x.rank + "-rank missing-nin" }),
+        go: (c, P2, x, ok) => {
+          if (!ok) return [x.name + " got across and kept going.", "b"];
+          P2.ryo += x.pay; P2.stand += 5; c.kills += 1;
+          newsItem(c, x.name + ", " + x.rank + "-rank missing-nin formerly of " + x.from + ", was taken at " + P2.where + " by " + c.name + ". The bounty has been paid.", "BINGO BOOK");
+          return [x.name + " is off the Bingo Book. +" + money(x.pay) + " bounty.", "g"];
+        } },
+      { n: "Track them and send word", d: "Let the hunter-nin do the rest.", stat: "int", dc: 40,
+        go: (c, P2, x, ok) => ok ? (P2.stand += 3, ["You followed far enough to know where they are going and sent it on. The hunter-nin have it.", "g"]) : ["They lost you in the hills.", "b"] },
+    ] },
+  { id: "beast", w: () => 8,
+    mk: () => pick(PATROL_BEASTS),
+    t: (c, x) => "Something has been taking cattle from the farms along the line: " + x[1] + ".",
+    o: [
+      { n: "Put it down", d: "The farmers are not going to manage it.", fight: (c, x) => ({ key: "beast", name: x[0], title: "Border beast" }),
+        go: (c, P2, x, ok) => {
+          if (!ok) return ["It threw you into a ditch and went back to the hills.", "b"];
+          P2.stand += 3; P2.ryo += rr(3000, 9000); c.stats.str = cl(c.stats.str + 2);
+          if (roll(40)) newsItem(c, "The farms on " + P2.where + " have their cattle back. The " + x[0].toLowerCase() + " that had been taking them was dealt with by " + c.name + ".", "THE ROAD");
+          return ["The farms have their cattle back. The farmers would not let you leave without paying.", "g"];
+        } },
+      { n: "Turn it with a genjutsu", d: "Convince it the valley belongs to something bigger.", stat: "gen", dc: 40,
+        go: (c, P2, x, ok) => { if (ok) { c.stats.gen = cl(c.stats.gen + 2); P2.stand += 2; return ["It left convinced the valley was full of something bigger than it.", "g"]; } const d = rr(5, 12); c.health = cl(c.health - d); return ["It did not believe you. -" + d + " health.", "b"]; } },
+      { n: "Track it back to its den", d: "See where it came from.", stat: "spd", dc: 40,
+        go: (c, P2, x, ok) => { if (!ok) return ["It lost you in the rocks.", "n"]; const k = pick(["tai", "nin", "spd", "con"]); c.stats[k] = cl(c.stats[k] + 2); return ["It led you to an old training ground nobody has used in a century. You stayed a day.", "g"]; } },
+    ] },
+  { id: "courier", w: () => 10,
+    t: () => "A courier on the wrong road, carrying a scroll with a seal that is almost right.",
+    o: [
+      { n: "Read the scroll", d: "Breaking a seal you do not know is a risk.", stat: "int", dc: 40,
+        go: (c, P2, x, ok) => {
+          if (!ok) { const d = rr(3, 8); c.health = cl(c.health - d); return ["The scroll burned itself the moment you broke the seal. -" + d + " health.", "b"]; }
+          if (c.war) { c.war.intel = true; return ["Troop movements, in a code you can read. The front has their order of battle because of you.", "g"]; }
+          P2.stand += 4; return ["It was a forgery of the tower's own seal. Somebody is going to have a very bad week.", "g"];
+        } },
+      { n: "Detain them", d: "Couriers do not usually fight back.", fight: () => ({ key: "chunin", title: "Courier with a forged seal" }),
+        go: (c, P2, x, ok) => {
+          if (!ok) return ["This one fought back, and got away.", "b"];
+          P2.stand += 6;
+          if (!preVillage(c)) newsItem(c, "A courier carrying forged seals was stopped at " + P2.where + " by " + c.name + ". The tower is not saying whose seals they were.", "THE VILLAGES");
+          return ["Not a courier. The tower took them off your hands without asking any questions.", "g"];
+        } },
+      { n: "Wave them through", d: "It is probably nothing.", go: () => ["You let it go. It was probably nothing.", "n"] },
+    ] },
+  { id: "skirmish", w: (c) => (c.war ? 18 : 0), ok: (c) => !!c.war,
+    t: (c) => "A patrol from " + (c.war.enemyName || "the other side") + " has come over the same ridge as you. Both sides see each other at the same moment.",
+    o: [
+      { n: "Engage", d: "Before they get the high ground.", fight: (c) => ({ key: pick((c.war && c.war.pool) || eraOf(c).pool || ["chunin"]), title: "Patrol leader" }),
+        go: (c, P2, x, ok) => {
+          if (!ok || !c.war) return ["They held the ridge. You pulled your patrol back.", "b"];
+          c.war.momentum = cl(c.war.momentum + rr(3, 6)); c.war.contribution += 1; c.kills += 1;
+          if (roll(40)) newsItem(c, "A patrol clash on " + P2.where + " went " + c.war.side + "'s way. " + c.name + " led it.", "WAR");
+          return ["The ridge is yours. Momentum " + c.war.momentum + "%.", "g"];
+        } },
+      { n: "Parley", d: "Two patrols, nobody's orders say fight.", stat: "int", dc: 45,
+        go: (c, P2, x, ok) => { if (ok) { P2.stand += 3; if (c.war && roll(50)) c.war.intel = true; return ["Both patrols backed off. Their captain told you more than they meant to.", "g"]; } const d = rr(6, 14); c.health = cl(c.health - d); return ["Talking did not work. You got your people out. -" + d + " health.", "b"]; } },
+      { n: "Pull back", d: "Not worth it today.", go: (c, P2) => (P2.stand -= 1, ["You gave them the ridge.", "n"]) },
+    ] },
+  { id: "pilgrims", w: () => 8,
+    t: () => "A party of pilgrims has wandered off the road in the fog and is walking straight toward the old trap line.",
+    o: [
+      { n: "Guide them out through the fog", d: "It will take all night.", stat: "cha", dc: 30,
+        go: (c, P2, x, ok) => { P2.stand += ok ? 4 : 1; return [ok ? "You walked them back to the road and down to the next town. They are still talking about you there." : "It took all night and you are soaked, but everybody got home.", ok ? "g" : "n"]; } },
+      { n: "Mark the trap line and send them round", d: "Quick and safe.", go: (c, P2) => (P2.stand += 1, ["You marked the line and pointed them the long way round.", "n"]) },
+    ] },
+  { id: "seal", w: () => 6,
+    t: () => "Somebody has tampered with the barrier seal on a boundary stone. The ink is still wet.",
+    o: [
+      { n: "Repair it yourself", d: "Fuinjutsu, under a deadline.", stat: "int", dc: 45,
+        go: (c, P2, x, ok) => { if (ok) { c.stats.int = cl(c.stats.int + 1); P2.stand += 5; return ["The barrier is whole again, and you know which way whoever did it went.", "g"]; } const d = rr(8, 16); c.health = cl(c.health - d); return ["It went off in your hands. -" + d + " health.", "b"]; } },
+      { n: "Mark it and report", d: "The sealing team can come out.", go: (c, P2) => (P2.stand += 2, ["The sealing team came out the next morning.", "n"]) },
+    ] },
+  { id: "rogue", w: (c) => 9,
+    ok: (c) => power(c) >= 72 && patrolRogues(c).length > 0,
+    mk: (c) => pick(patrolRogues(c)),
+    t: (c, id) => NAMED[id].name + " is crossing " + "the line alone, at night, the way people do when they do not want to be seen.",
+    o: [
+      { n: "Confront them", d: "A name like that does not cross quietly by accident.", fight: (c, id) => ({ key: id, id }),
+        go: (c, P2, id, ok) => { if (!ok) return [NAMED[id].name + " left you on the ground and kept walking.", "b"]; P2.stand += 10; return [NAMED[id].name + " will not be crossing anybody's border again.", "e"]; } },
+      { n: "Shadow them", d: "Find out where they are going.", stat: "spd", dc: 55,
+        go: (c, P2, id, ok) => {
+          if (!ok) { const d = rr(10, 20); c.health = cl(c.health - d); return [NAMED[id].name + " knew you were there the whole time. -" + d + " health.", "b"]; }
+          P2.stand += 6; newsItem(c, NAMED[id].name + " was tracked across " + P2.where + " by " + c.name + ". Every village has the route now.", "BINGO BOOK");
+          return ["You followed them a day and a night and came back with the route.", "g"];
+        } },
+      { n: "Let them pass and report it", d: "Some fights are not yours to pick.", go: (c, P2) => (P2.stand += 1, ["You wrote down the time and the direction.", "n"]) },
+    ] },
+];
+function patrolRogues(c) {
+  return livingRoster(c).filter((id) => (isAkatsukiId(id) || PATROL_ROGUES.includes(id)) && namedVillage(id) !== c.village && !isPlayerNamed(c, id));
+}
+function patrolStart(c, L) {
+  const pool = PATROL_ENC.filter((e) => (!e.ok || e.ok(c)) && e.w(c) > 0);
+  const list = [];
+  for (let i = 0; i < 3 && pool.length; i++) {
+    const tot = pool.reduce((a, e) => a + e.w(c), 0);
+    let r2 = Math.random() * tot; let pickI = 0;
+    for (let j = 0; j < pool.length; j++) { r2 -= pool[j].w(c); if (r2 <= 0) { pickI = j; break; } }
+    const e = pool.splice(pickI, 1)[0];
+    list.push({ id: e.id, x: e.mk ? e.mk(c) : null });
+  }
+  c.patrol = { where: patrolWhere(c), step: 0, list, log: [], ryo: 0, stand: 0, done: false, year: c.year };
+  P(L, "You took the patrol out along " + c.patrol.where + ".", "n");
+}
+const patrolEnc = (c) => { const p = c.patrol; const it = p && p.list[p.step]; return it ? { it, e: PATROL_ENC.find((x) => x.id === it.id) } : null; };
+/* resolve the option you chose at this stop. won is the result of a fight, if it was one */
+function patrolPick(c, L, oi, won) {
+  const p = c.patrol; if (!p || p.done) return;
+  const cur = patrolEnc(c); if (!cur || !cur.e) return;
+  const o = cur.e.o[oi]; if (!o) return;
+  const ok = o.fight ? !!won : o.stat ? roll(patrolOdds(c, o.stat, o.dc)) : true;
+  const [t, k] = o.go(c, p, cur.it.x, ok);
+  p.log.push({ t: o.n + ". " + t, k });
+  P(L, t, k);
+  p.step += 1;
+  if (p.step >= p.list.length) patrolFinish(c, L);
+}
+function patrolFinish(c, L) {
+  const p = c.patrol; p.done = true;
+  const pay = Math.round(rr(4000, 12000) * (1 + (c.rank || 1) * 0.35));
+  c.ryo += pay + p.ryo;
+  c.standing = cl(c.standing + p.stand);
+  c.stats.cha = cl(c.stats.cha + 1); c.stats.spd = cl(c.stats.spd + 1);
+  if (!c.dutyLog) c.dutyLog = {};
+  c.dutyLog.border = (c.dutyLog.border || 0) + 1;
+  c.patrols = (c.patrols || 0) + 1;
+  if (c.patrols === 10) { addTitle(c, "Keeper of the Border"); newsItem(c, c.name + " has walked " + p.where + " ten times now. The people who live along it know the face.", "THE VILLAGES"); }
+  p.paid = pay + p.ryo;
+  P(L, "Patrol done: +" + money(pay + p.ryo) + (p.stand ? ", " + (p.stand > 0 ? "+" : "") + p.stand + " standing" : "") + ", +1 Chakra, +1 Speed.", "n");
+}
+/* ============================ THE VILLAGE ============================ */
+/* Getting stronger used to mean the village went quiet around you: more ranks, more
+   missions, and nobody in the street to talk to. Now there are people. The same nine of
+   them, every year: they get older, they ask you for things, they remember what you did,
+   and the way they talk to you changes as you go from a face at the Academy to a name
+   the whole country knows. */
+const FOLK_ROLES = {
+  cook: { s: "Noodle cook", n: "runs the noodle stall by the gate", pre: "keeps the cookfire for the war band", perk: 60, pd: "Feeds you whenever you come by: +6 health every year" },
+  teacher: { s: "Academy teacher", n: "teaches at the Academy", pre: "teaches the clan children their first seals", perk: 60, pd: "Sends the promising ones your way: your children and students grow faster" },
+  smith: { s: "Weaponsmith", n: "forges blades in the market quarter", pre: "keeps the clan forge", perk: 60, pd: "Forged you a blade made for your hand: +4 Taijutsu and +2 Speed, once" },
+  veteran: { s: "Old soldier", n: "fought in the last war and sits outside the tower most days", pre: "is the oldest fighter still alive in the clan", perk: 50, pd: "Taught you to read a battlefield: better scout reads in Field Command" },
+  medic: { s: "Medic", n: "works the wards at the hospital", pre: "is the clan's healer", perk: 60, pd: "Patches you up between missions: +8 health every year" },
+  merchant: { s: "Merchant", n: "trades at the market", pre: "trades with the river towns for the clan", perk: 60, pd: "Cut you into the trade: ryo every year" },
+  guard: { s: "Gate guard", n: "stands the main gate", pre: "keeps the watch on the compound wall", perk: 50, pd: "Speaks up for you at the tower: +2 standing every year" },
+  elder: { s: "Old neighbour", n: "feeds every stray cat in the village and knows everybody's business", pre: "keeps the shrine and knows everybody's business", perk: 50, pd: "Hears everything and tells you: +1 Intellect every year" },
+  apprentice: { s: "Your apprentice", n: "an Academy kid who has decided you are their hero", pre: "a clan child who follows you to the training yard", perk: 50, pd: "Stands with you in a war once they wear a headband: a lieutenant in Field Command" },
+};
+const FOLK_ORDER = ["cook", "teacher", "smith", "veteran", "medic", "merchant", "guard", "elder", "apprentice"];
+const FAME_WORD = ["a face from the Academy", "a shinobi people know", "somebody people stop to look at", "a living legend"];
+/* how the street sees you */
+function fameTier(c) {
+  const pw = power(c);
+  if (c.rank >= 6 || pw >= 88 || (c.titles || []).length >= 14 || c.standing >= 95) return 3;
+  if (c.rank >= 4 || pw >= 66 || c.standing >= 70) return 2;
+  if (c.rank >= 2) return 1;
+  return 0;
+}
+/* what they say when you stop by, by how famous you have become */
+const FOLK_SAY = {
+  cook: ["Waves you to a stool and asks whether you are eating properly. You are not.", "Slides you an extra egg and wants to hear about the mission.", "Has your order going before you sit down. Two customers ask if that is really you.", "There is a framed picture of you behind the counter now. They pretend not to know how it got there."],
+  teacher: ["Remembers which seal you always got wrong and tells you so.", "Asks you to stop by the class sometime. They want the children to meet a real one.", "Says half the class wants to be you. The other half wants to beat you.", "Admits they tell the children about you as a warning against giving up. Then as an example."],
+  smith: ["Looks at your kunai, sighs, and sharpens it without being asked.", "Wants to know what you are fighting so they know what to make.", "Has a blade on the wall they say is not for sale. They keep glancing at you.", "Says they have customers from four countries asking for 'what that one uses'."],
+  veteran: ["Tells you the same story about the bridge. You let them.", "Asks what the front looks like these days, and listens to the answer.", "Stands up when you arrive, which they do not do for anybody.", "Says they have seen three people like you in their life, and two of them are on the monument."],
+  medic: ["Checks the bandage you did yourself and redoes it properly.", "Has a bed with your name on it, they say, and not as a joke.", "Tells you which of your scars they stitched. It is most of them.", "Says the hospital runs on what people like you send back. Then sends you away to rest."],
+  merchant: ["Tries to sell you something you do not need, warmly.", "Gives you the price they give friends, and tells you that is what it is.", "Says business is good when you are seen in the market.", "Has your name on a sign now. They insist it was the customers' idea."],
+  guard: ["Waves you through the gate with a yawn.", "Asks how the mission went, and actually waits for the answer.", "Straightens up when you pass. Then grins.", "Says the gate is the safest place in the country while you are inside it."],
+  elder: ["Tells you which neighbour is feuding with which, in detail.", "Has heard what you did, and has opinions about it.", "Says the whole street talks about you. They are most of the street.", "Tells everybody you were always going to be somebody. They told you the opposite at the time."],
+  apprentice: ["Follows you around asking how to throw a kunai properly.", "Shows you a technique they have been practising. It is nearly right.", "Has started dressing like you. Badly.", "Introduces you to their friends like they discovered you."],
+};
+/* things they will ask you for. min is how famous you need to be before they would ask */
+const FOLK_REQ = {
+  cook: [
+    { id: "rush", min: 0, n: "Help out on festival night", d: "Three hundred bowls and one pair of hands.", stat: "spd", dc: 30, bond: 14, hp: 6, gain: { spd: 1 }, ok: "You ran bowls until midnight and they fed you until you could not stand.", no: "You dropped a tray of twelve bowls. They laughed about it for a week, warmly." },
+    { id: "racket", min: 1, n: "Some men have been leaning on the stall for money", d: "They come round at closing time.", fight: "thug", ftitle: "Protection racketeer", bond: 20, stand: 3, ok: "They will not be back. You are not allowed to pay for anything for a month.", no: "They ran off when the guard came. They will be back." },
+    { id: "bowl", min: 3, n: "Let them name a bowl after you", d: "Your face on a sign over the counter, and you eat the first one in public.", bond: 15, stand: 4, ok: "There is a queue down the street. It is a very good bowl.", news: "The noodle stall by the gate of {V} has named its biggest bowl after {name}. There is a queue." },
+  ],
+  teacher: [
+    { id: "lecture", min: 1, n: "Talk to the graduating class", d: "Twenty eleven-year-olds who think they know what the job is.", stat: "int", dc: 30, bond: 14, stand: 2, gain: { int: 1 }, ok: "They asked a hundred questions and three of them were good ones.", no: "They spent the whole hour asking how many people you have fought. You did not answer well." },
+    { id: "demo", min: 2, n: "Show the class a real technique", d: "In the yard, slowly, so they can see the seals.", stat: "nin", dc: 50, bond: 16, gain: { nin: 1 }, ok: "Nobody in that class will forget it.", no: "It went off bigger than you meant. The yard needs a new fence.", news: "Students at the Academy in {V} watched {name} demonstrate a technique in the yard this week. Applications to the Academy are up." },
+    { id: "speech", min: 3, n: "Give the graduation address", d: "The whole village comes to this one.", bond: 18, stand: 6, ok: "You kept it short. They will be quoting it for years.", news: "{name} gave this year's graduation address at the Academy in {V}. Several graduates have asked for the speech in writing." },
+  ],
+  smith: [
+    { id: "test", min: 0, n: "Test a new blade against you", d: "They want to know if it breaks before it ships.", stat: "tai", dc: 35, bond: 12, gain: { tai: 1 }, ok: "It held. They wrote down everything you said about the balance.", no: "It broke on the third exchange. They were delighted to find out now." },
+    { id: "ore", min: 1, n: "Bring back chakra metal from the old mine", d: "Something has moved into the mine.", fight: "beast", ftitle: "Mine crawler", fname: "Thing in the Mine", bond: 18, gain: { tai: 1 }, ok: "They held the ore up to the light for a long time without saying anything.", no: "You came back without the ore and with a limp." },
+  ],
+  veteran: [
+    { id: "story", min: 0, n: "Sit and hear about the war", d: "The real one, not the one in the books.", bond: 12, gain: { int: 2 }, ok: "It was not the version in the books. You understand some things better now." },
+    { id: "grave", min: 1, n: "Walk them out to an old friend's grave", d: "It is a long walk and their knee is bad.", stat: "str", dc: 35, bond: 18, gain: { str: 1 }, ok: "They talked to the grave for an hour. You kept watch and said nothing.", no: "You had to carry them the last mile. They did not mind, and neither did you." },
+    { id: "drill", min: 2, n: "Run the young chunin through a drill with them", d: "They have the plan; you have the reputation.", stat: "int", dc: 45, bond: 15, stand: 3, ok: "The chunin will never move like that again without thinking of you two.", no: "It was chaos. The old soldier said it was exactly like the real thing." },
+  ],
+  medic: [
+    { id: "ward", min: 0, n: "Help on the wards for a week", d: "Chakra for the healers who have run out.", stat: "con", dc: 35, bond: 14, stand: 2, gain: { con: 2 }, ok: "You slept for a day afterwards. Nobody you sat with got worse.", no: "You ran out before they did. They sent you home to rest." },
+    { id: "herb", min: 1, n: "Fetch a herb that only grows on the cliffs", d: "It only grows where it is hard to get to.", stat: "spd", dc: 35, bond: 14, hp: 8, ok: "You came back with a basket of it. Half the hospital came out to see.", no: "You found three stems. They said it was enough, kindly." },
+  ],
+  merchant: [
+    { id: "haggle", min: 0, n: "Help close a deal with the river traders", d: "They do better when a shinobi is in the room.", stat: "int", dc: 35, bond: 12, ryo: [5000, 15000], ok: "You did not say a word. The price dropped by a third anyway.", no: "The traders were not impressed. The deal closed at the old price." },
+    { id: "escort", min: 1, n: "Escort a caravan to the coast", d: "Bandits on the second day, every time.", fight: "bandit", ftitle: "Road bandit", bond: 16, ryo: [15000, 40000], ok: "The caravan got through. Your share was generous.", no: "They took one cart. The merchant said it was cheaper than losing all of them." },
+    { id: "hall", min: 3, n: "Open the new market hall", d: "Cut the ribbon. Everybody will be there.", bond: 15, stand: 4, ok: "The market hall is open and there is a carving of you over the door that you did not ask for.", news: "The new market hall in {V} was opened by {name}. Traders from three countries came for the day." },
+  ],
+  guard: [
+    { id: "shift", min: 0, n: "Cover their night shift", d: "Their kid is sick.", bond: 16, gain: { cha: 1 }, ok: "A long quiet night on the gate. They brought you breakfast." },
+    { id: "spar", min: 0, n: "Spar with them at shift change", d: "They want to know how far behind you they are.", fight: "chunin", spar: true, bond: 14, ok: "They lost, and asked for a rematch next year.", no: "They won, and will be telling people about it for the rest of their life." },
+    { id: "wall", min: 2, n: "Something came over the wall last night", d: "They saw it, and nobody believes them.", fight: "hunter", ftitle: "Intruder on the wall", bond: 18, stand: 5, ok: "They were right. Now everyone believes them.", no: "It got away. At least now people believe them.", news: "An intruder was stopped on the wall of {V} by {name} before the alarm had finished sounding." },
+  ],
+  elder: [
+    { id: "cat", min: 0, n: "Find the cat. Again.", d: "It is called Mochi and it does not want to be found.", stat: "spd", dc: 30, bond: 15, ok: "You found Mochi on the tower roof. Mochi scratched you. Worth it.", no: "Mochi came home on their own three days later, looking smug." },
+    { id: "shrine", min: 0, n: "Help clean the old shrine", d: "Nobody else remembers what it is for.", bond: 12, gain: { int: 1 }, ok: "They told you what it is for. It is a better story than you expected." },
+  ],
+  apprentice: [
+    { id: "teach", min: 0, n: "Teach them a technique", d: "They have been doing the hand signs wrong for a month.", bond: 15, mentor: 1, ok: "They got it on the fortieth try, and would not stop doing it." },
+    { id: "throw", min: 0, n: "Watch them practise their throwing", d: "Eight out of ten, they say. It is four.", stat: "tai", dc: 25, bond: 12, mentor: 1, ok: "It is six out of ten now. They are insufferable about it.", no: "One of them went into the river. You both pretended it did not happen." },
+    { id: "exam", min: 0, need: (c, f) => f.rank === 1, n: "Come and watch their chunin exam", d: "They will not say they want you there. They do.", bond: 18, mentor: 2, ok: "They looked up at the stands before every match to check you were still there." },
+  ],
+};
+const folkReq = (f) => (f && f.req ? (FOLK_REQ[f.role] || []).find((r) => r.id === f.req) : null);
+const folkPerk = (c, role) => !!(c && c.folk && !c.rogue && (c.folk.list || []).some((f) => f.role === role && f.alive !== false && f.bond >= FOLK_ROLES[role].perk));
+function folkBond(c, role, n) { const f = c && c.folk && (c.folk.list || []).find((x) => x.role === role); if (f) f.bond = cl(f.bond + n); }
+const folkVillageName = (c) => (c.founded ? c.founded.name : preVillage(c) ? "the " + myClanWord(c) + " compound" : vName2(c.village));
+const folkHome = (c) => (c.founded ? "founded:" + c.founded.name : preVillage(c) ? "clan:" + myClanWord(c) : c.village);
+function folkInit(c) {
+  const surname = preVillage(c) && c.clan && c.clan !== "Civilian-born" ? c.clan : null;
+  c.folk = {
+    home: folkHome(c), since: c.year, fest: null, tier: fameTier(c),
+    list: FOLK_ORDER.map((r, i) => ({
+      id: r + i, role: r, name: freshName(c, ["veteran", "teacher", "medic", "apprentice"].includes(r) ? surname : null),
+      age: r === "apprentice" ? rr(7, 9) : r === "veteran" || r === "elder" ? rr(62, 76) : rr(24, 50),
+      bond: r === "apprentice" ? rr(18, 26) : rr(4, 14), alive: true, seen: null, req: null, rank: 0, mentor: 0, perked: false,
+    })),
+  };
+  return c.folk;
+}
+/* make sure the list belongs to where you live now */
+function folkEnsure(c, L) {
+  if (c.rogue) return c.folk || null;
+  if (!c.folk) return folkInit(c);
+  if (c.folk.home !== folkHome(c)) {
+    if (L) P(L, "You left the people you knew behind. It takes a while to know anybody in a new place.", "n");
+    return folkInit(c);
+  }
+  return c.folk;
+}
+function folkReqFor(c, f) {
+  const tier = fameTier(c);
+  const opts = (FOLK_REQ[f.role] || []).filter((r) => r.min <= tier && (!r.need || r.need(c, f)));
+  if (!opts.length) return null;
+  /* the most famous thing they could ask, more often than not */
+  const top = opts.filter((r) => r.min === Math.max(...opts.map((x) => x.min)));
+  return (roll(55) ? pick(top) : pick(opts)).id;
+}
+function folkVisit(c, L, id) {
+  const F = folkEnsure(c, L); if (!F) return;
+  const f = F.list.find((x) => x.id === id); if (!f || f.seen === c.year) return;
+  f.seen = c.year;
+  const tier = fameTier(c);
+  if (c.rogue) {
+    if (!roll(patrolOdds(c, "spd", 45))) { c.infamy = cl(c.infamy + 2); P(L, "Somebody on " + f.name + "'s street recognised you. You were gone before the guard came, and " + f.name + " never knew you had been there.", "b"); return; }
+    f.bond = cl(f.bond + rr(2, 5));
+    P(L, "You saw " + f.name + " after dark, for a few minutes, with the shutters closed. They did not ask where you had been.", "n");
+    return;
+  }
+  const add = rr(3, 7) + tier;
+  f.bond = cl(f.bond + add);
+  const line = FOLK_SAY[f.role][Math.min(tier, FOLK_SAY[f.role].length - 1)];
+  P(L, f.name + " (" + FOLK_ROLES[f.role].s.toLowerCase() + "): " + line, "n");
+  if (f.role === "cook" && roll(30)) c.health = cl(c.health + 3);
+  if (!f.req && roll(35)) f.req = folkReqFor(c, f);
+  folkPerkCheck(c, L, f);
+}
+function folkPerkCheck(c, L, f) {
+  const R2 = FOLK_ROLES[f.role];
+  if (f.perked || f.bond < R2.perk) return;
+  f.perked = true;
+  P(L, f.name + " would do anything for you now. " + R2.pd + ".", "e");
+  if (f.role === "smith") { c.stats.tai = cl(c.stats.tai + 4); c.stats.spd = cl(c.stats.spd + 2); }
+}
+/* the result of helping, once you know whether it went well */
+function folkDone(c, L, id, ok) {
+  const F = c.folk; if (!F) return;
+  const f = F.list.find((x) => x.id === id); const r = folkReq(f); if (!r) return;
+  const V = folkVillageName(c);
+  f.req = null;
+  f.bond = cl(f.bond + (ok ? r.bond : Math.round(r.bond / 2)));
+  if (ok) {
+    if (r.stand) c.standing = cl(c.standing + r.stand);
+    if (r.hp) c.health = cl(c.health + r.hp);
+    if (r.ryo) c.ryo += rr(r.ryo[0], r.ryo[1]);
+    Object.entries(r.gain || {}).forEach(([k, v]) => { c.stats[k] = cl(c.stats[k] + v); });
+    if (r.mentor) f.mentor = (f.mentor || 0) + r.mentor;
+    if (r.news) newsItem(c, r.news.replace("{V}", V).replace("{name}", c.name), "THE VILLAGES", r.min >= 3);
+    F.helped = (F.helped || 0) + 1;
+    if (F.helped === 10) { addTitle(c, "Everybody's Shinobi"); newsItem(c, "Ask anybody in " + V + " who to go to when something goes wrong, and you will hear the same name: " + c.name + ".", "THE VILLAGES"); }
+  }
+  P(L, f.name + ": " + (ok ? r.ok : r.no || r.ok), ok ? "g" : "n");
+  folkPerkCheck(c, L, f);
+}
+/* a year in the street */
+function folkTick(c, L) {
+  if (c.rogue || c.alive === false || c.age < 6) return;
+  const F = folkEnsure(c, null); if (!F) return;
+  const V = folkVillageName(c);
+  const tier = fameTier(c);
+  F.list.forEach((f) => {
+    if (f.alive === false) return;
+    f.age += 1;
+    if (f.role === "apprentice") {
+      const was = f.rank;
+      if (f.rank === 0 && f.age >= 12) f.rank = 1;
+      else if (f.rank === 1 && f.age >= 14 && roll(28 + (f.mentor || 0) * 8)) f.rank = 2;
+      else if (f.rank === 2 && f.age >= 19 && roll(14 + (f.mentor || 0) * 4)) f.rank = 3;
+      if (f.rank > was) {
+        const word = ["", preVillage(c) ? "fought in their first battle" : "graduated from the Academy", "made chunin", "made jonin"][f.rank];
+        P(L, f.name + ", the kid who used to follow you around, " + word + ". They came to tell you first.", "e");
+        if (f.bond >= 40) newsItem(c, f.name + " " + word + " in " + V + " this year. They credit " + c.name + ", who they have been following around since they were eight.", "THE VILLAGES");
+        if (f.rank >= 1 && f.bond >= FOLK_ROLES.apprentice.perk) P(L, f.name + " will stand with you if there is a war.", "n");
+      }
+    }
+    if (f.bond >= FOLK_ROLES[f.role].perk) {
+      folkPerkCheck(c, L, f);
+      if (f.role === "cook") c.health = cl(c.health + 6);
+      if (f.role === "medic") c.health = cl(c.health + 8);
+      if (f.role === "merchant") c.ryo += Math.round(rr(6000, 20000) * (1 + tier * 0.5));
+      if (f.role === "guard") c.standing = cl(c.standing + 2);
+      if (f.role === "elder") c.stats.int = cl(c.stats.int + 1);
+      if (f.role === "teacher") { (c.kids || []).forEach((k) => { if (k.age >= 5) k.pw = Math.min(99, (k.pw || 0) + 2); }); (c.students || []).forEach((s) => { if (s.alive) s.pw = Math.min(99, (s.pw || 0) + 2); }); }
+    }
+    if (!f.req && roll(40)) f.req = folkReqFor(c, f);
+  });
+  if (tier > (F.tier || 0)) {
+    F.tier = tier;
+    P(L, ["", "People on your street have started saying hello first.", "People in " + V + " stop talking when you walk into a room, then start again about you.", "There is not a person in " + V + " who does not know your name."][tier], "n");
+  }
+  if (tier >= 3 && !F.fest) {
+    F.fest = c.year;
+    addTitle(c, "Pride of " + V);
+    P(L, V + " held a festival day in your name. You were told about it afterwards, because you were away.", "e");
+    newsItem(c, V + " held a festival day this year for " + c.name + ". Every stall on the main street was named after something they did.", "THE VILLAGES", true);
+  }
+}
+
 /* ============================ STRIKES ============================ */
 /* A missing-nin could already march on a village or hit it once. Now a missing-nin or an
    Akatsuki member can also go after one named shinobi, that shinobi together with the
@@ -17021,6 +17725,8 @@ export default function ShinobiLife() {
           line: "The histories had it written down before they said it out loud." });
       }
       c.year = (c.birthYear || 0) + c.age;
+      if (c.field) { if (!c.field.done && c.war && c.war.name === c.field.war) fieldEnd(c, L, "withdrew"); c.field = null; }
+      if (c.patrol) { if (!c.patrol.done) P(L, "You came off the patrol early. Somebody else finished the rotation.", "n"); c.patrol = null; }
       if (c.hit && (c.hit.done || c.year - c.hit.year >= 2)) { if (!c.hit.done) P(L, "The trail on " + c.hit.tgt + " went cold. Whoever you were after has moved on.", "n"); c.hit = null; }
 
       /* villages come into existence */
@@ -17147,6 +17853,7 @@ export default function ShinobiLife() {
       checkEpithet(c, L);
       bingoTick(c, L);
       bountyTick(c, L, true);
+      folkTick(c, L);
       if (!c.kg && !c.myClan && c.age >= 6 && c.age <= 20 && roll(3)) {
         const k = rollExtraKG(c);
         if (k) {
@@ -20436,6 +21143,64 @@ export default function ShinobiLife() {
     startBattle(s2.key, { type: "hit", i: H.i, id: s2.id || null }, adv, hitOpener(c, H), s2.id ? null : s2.forced);
     setModal(null);
   }
+  /* ---------- field command ---------- */
+  function fieldUi(kind, arg) {
+    if (kind === "start") {
+      if (c.field && !c.field.done) { setModal("field"); return; }
+      commit((c2, L) => { spend(c2); c2.field = null; fieldStart(c2, L); });
+      setModal("field"); return;
+    }
+    if (kind === "order") { commit((c2, L) => { fieldOrder(c2, L, arg); if (c2.war && c2.war.momentum <= 0) endWar(c2, L); }); return; }
+    if (kind === "duel") {
+      const F = c.field; if (!F || F.done || F.dueled) return;
+      const cm = F.cmdr; const named = cm.id && NAMED[cm.id] && !isDead(c, cm.id);
+      startBattle(named ? cm.id : "jonin", { type: "field", id: named ? cm.id : null }, F.mor >= F.fmor ? 1 : 0,
+        "You went through your own line and out the other side looking for " + cm.name + ". They saw you coming and stepped out to meet you.",
+        named ? null : { name: cm.name, title: cm.title });
+      setModal(null); return;
+    }
+    if (kind === "close") { commit((c2) => { if (c2.field && c2.field.done) c2.field = null; }); setModal(null); }
+  }
+  /* ---------- border patrol ---------- */
+  function patrolUi(kind, arg) {
+    if (kind === "start") {
+      if (c.patrol && !c.patrol.done) { setModal("patrol"); return; }
+      commit((c2, L) => { spend(c2); patrolStart(c2, L); });
+      setModal("patrol"); return;
+    }
+    if (kind === "pick") {
+      const cur = patrolEnc(c); if (!cur || !cur.e) return;
+      const o = cur.e.o[arg]; if (!o) return;
+      if (o.fight) {
+        const fo = o.fight(c, cur.it.x);
+        const named = fo.id && NAMED[fo.id];
+        startBattle(fo.key, { type: "patrol", oi: arg, step: c.patrol.step, id: named ? fo.id : null }, 0, cur.e.t(c, cur.it.x), named ? null : { name: fo.name, title: fo.title });
+        setModal(null); return;
+      }
+      commit((c2, L) => { patrolPick(c2, L, arg); });
+      return;
+    }
+    if (kind === "close") { commit((c2) => { if (c2.patrol && c2.patrol.done) c2.patrol = null; }); setModal(null); }
+  }
+  /* ---------- the village ---------- */
+  function folkUi(kind, id) {
+    if (kind === "open") { commit((c2, L) => { folkEnsure(c2, L); }); setModal("folk"); return; }
+    if (kind === "visit") { commit((c2, L) => { folkVisit(c2, L, id); }); return; }
+    if (kind === "help") {
+      const f = c.folk && c.folk.list.find((x) => x.id === id); const r = folkReq(f);
+      if (!f || !r || c.rogue) return;
+      if (r.fight) {
+        startBattle(r.fight, { type: "folk", fid: id, req: r.id }, 0, f.name + " asked you for help. " + r.d,
+          { name: r.spar ? f.name : r.fname, title: r.spar ? FOLK_ROLES[f.role].s : r.ftitle });
+        setModal(null); return;
+      }
+      commit((c2, L) => {
+        const f2 = c2.folk && c2.folk.list.find((x) => x.id === id); const r2 = folkReq(f2); if (!r2) return;
+        spend(c2);
+        folkDone(c2, L, id, r2.stat ? roll(patrolOdds(c2, r2.stat, r2.dc)) : true);
+      });
+    }
+  }
 
   /* ---------- quests & battles ---------- */
   /* an assigned mission runs in stages and ends with the name on the scroll */
@@ -21912,6 +22677,34 @@ export default function ShinobiLife() {
           if (c.health <= 0) die(c, L, "was killed by " + nm.name);
         }
       }
+      if (ctx.type === "field") {
+        if (c.field && !c.field.done) {
+          const site = c.field.site;
+          fieldDuelResult(c, L, b.win, ctx.id, b.e.name, "was killed by " + c.name + " in the middle of the battle at " + site);
+          if (!b.win && !b.fled) { const d = rr(10, 24); c.health = cl(c.health - d); P(L, "-" + d + " health.", "b"); if (c.health <= 0) die(c, L, "was killed in single combat with " + b.e.name + " at " + site); }
+          if (c.war && c.war.momentum <= 0) endWar(c, L);
+        }
+      }
+      if (ctx.type === "patrol") {
+        const p = c.patrol;
+        if (p && !p.done && p.step === ctx.step) {
+          if (b.win) { c.wins += 1; if (ctx.id && NAMED[ctx.id]) { killNamed(c, ctx.id, L, "was killed by " + c.name + " crossing " + p.where); killFeat(c, L, ctx.id); } }
+          else if (!b.fled) { const d = rr(10, 24); c.health = cl(c.health - d); P(L, "-" + d + " health.", "b"); }
+          patrolPick(c, L, ctx.oi, b.win);
+          if (c.health <= 0) die(c, L, "was killed on patrol along " + p.where);
+        }
+      }
+      if (ctx.type === "folk") {
+        spend(c);
+        const f = c.folk && c.folk.list.find((x) => x.id === ctx.fid);
+        const r = folkReq(f);
+        if (f && r && r.id === ctx.req) {
+          if (b.win) c.wins += 1;
+          else if (!b.fled && !r.spar) { const d = rr(8, 20); c.health = cl(c.health - d); P(L, "-" + d + " health.", "b"); }
+          folkDone(c, L, ctx.fid, b.win);
+          if (c.health <= 0) die(c, L, "was killed helping " + f.name);
+        }
+      }
       if (ctx.type === "hit") {
         spend(c);
         const H = c.hit;
@@ -21946,7 +22739,7 @@ export default function ShinobiLife() {
     });
     setTimeout(() => setC((prev) => (prev && prev.killFlash ? { ...prev, killFlash: null } : prev)), 3400);
     setBt(null);
-    if (ctx.type === "hit") setTimeout(() => setModal("hit"), 60);
+    if (ctx.type === "hit" || ctx.type === "field" || ctx.type === "patrol" || ctx.type === "folk") setTimeout(() => setModal(ctx.type), 60);
   }
 
   /* ---------- exams ---------- */
@@ -22304,7 +23097,14 @@ export default function ShinobiLife() {
         P(L, "You started spending time with " + nm + ". It is going somewhere.", "g");
       }
       if (kind === "date") { c.crush.rel = cl(c.crush.rel + rr(8, 20)); P(L, "You spent the day with " + c.crush.name + ". It went well.", "g"); }
-      if (kind === "marry") { c.spouse = { name: c.crush.name, rel: c.crush.rel }; c.crush = null; P(L, "You married " + c.spouse.name + ". The whole squad showed up.", "e"); }
+      if (kind === "marry") {
+        c.spouse = { name: c.crush.name, rel: c.crush.rel }; c.crush = null; P(L, "You married " + c.spouse.name + ". The whole squad showed up.", "e");
+        const ft = fameTier(c); const wv = folkVillageName(c);
+        newsItem(c, ft >= 3 ? "THE WEDDING OF THE YEAR. " + c.name + " married " + c.spouse.name + " in " + wv + ". Half the village turned out and the other half watched from the roofs."
+          : ft >= 2 ? c.name + " married " + c.spouse.name + " this year. The ceremony in " + wv + " was small, by request, and everybody knew about it anyway."
+          : c.name + " and " + c.spouse.name + " were married in " + wv + ".", "THE VILLAGES", ft >= 3);
+        if (c.folk && !c.rogue) { c.folk.list.forEach((f) => { f.bond = cl(f.bond + 3); }); P(L, "The people on your street all came. The cook did the food.", "n"); }
+      }
       if (kind === "kid") {
         const g = roll(50) ? "m" : "f";
         const kid = { name: givenName(g, takenGiven(c)) + " " + familyName(c), gender: g, age: 0, pw: rr(4, 12), bond: 70, trained: 0 };
@@ -25419,6 +26219,9 @@ export default function ShinobiLife() {
 
       {modal === "people" && (
         <Modal title="PEOPLE" accent={accent} onClose={() => setModal(null)}>
+          <Row label={c.rogue ? "The people you left behind" : "Walk through " + folkVillageName(c)}
+            sub={c.rogue ? "After dark, if you are quick and nobody sees you." : (c.folk ? c.folk.list.filter((f) => folkReq(f)).length + " of them could use your help. " : "") + "The people who live there: the cook, the teacher, the smith, the old soldier and the rest."}
+            right="Visit" onClick={() => folkUi("open")} tone={accent} />
           {!c.team && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">You have no squad. One is assigned when you pass {TT(c, "grad")}.</div>}
           {c.team && c.team.map((t, i) => (
             <Row key={i} label={t.alive ? t.name : t.name + " (deceased)"}
@@ -25533,10 +26336,19 @@ export default function ShinobiLife() {
             <Row label={"Accept promotion to " + rankLabel(c, 5)} sub={canElite ? "The rank above jonin, and the paperwork that comes with it" : "Requires 2 years at " + rankLabel(c, 4)} onClick={() => promote(5)} disabled={!canElite} />
             <Row label={"Stand for " + (eraOf(c).kage || V.kage)} sub={canKage ? "They will vote" : "Requires " + rankLabel(c, 4) + ", age 22, standing 65"} onClick={() => promote(6)} disabled={!canKage} />
           </>}
+          {!c.rogue && c.rank >= 2 && (
+            <>
+              <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 10 }} className="mt-4 mb-1 font-bold sl-patrol-h">BORDER PATROL</div>
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">Three stops along the line. Whatever is crossing, you decide what to do about it.</div>
+              {c.patrol && !c.patrol.done
+                ? <Row label="Back to the patrol" sub={"Stop " + (c.patrol.step + 1) + " of " + c.patrol.list.length + " along " + c.patrol.where} right="Go" onClick={() => setModal("patrol")} tone={accent} />
+                : <Row label="Walk the border patrol" sub={(c.patrols ? "Walked " + c.patrols + " time" + (c.patrols === 1 ? "" : "s") + ". " : "") + "Smugglers, scouts, missing-nin, beasts" + (c.war ? " and enemy patrols" : "") + ". Pay, standing, Chakra and Speed."} right="1 action" onClick={() => patrolUi("start")} disabled={c.actions < 1} tone={accent} />}
+            </>
+          )}
           {!c.rogue && c.rank >= 3 && (() => {
             /* the work that comes with the rank, rather than the mission board
                a twelve-year-old picks from. Repeatable, one action each. */
-            const mine = DUTIES.filter((d) => c.rank >= d.min && c.rank <= d.max && (!d.vill || !eraOf(c).hideVillages));
+            const mine = DUTIES.filter((d) => d.id !== "border" && c.rank >= d.min && c.rank <= d.max && (!d.vill || !eraOf(c).hideVillages));
             if (!mine.length) return null;
             const served = Object.values(c.dutyLog || {}).reduce((a, b) => a + b, 0);
             return (
@@ -25827,7 +26639,9 @@ export default function ShinobiLife() {
               <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-2">Hold 60% or better when the fighting stops and your side wins. Hit zero and it collapses early.</div>
             </div>
             <Row label={"Hold the gap at " + w.front} sub={"A real fight against " + w.enemyArmy + ", and the line moves with it."} right="+9% on a win" onClick={() => warAct("front")} tone={T.blood} />
-            <Row label="Command a division" sub={"Read " + w.leaderName + "'s formation before it closes. Intellect " + c.stats.int} right="+6 to 12%" onClick={() => warAct("command")} />
+            {c.field && !c.field.done
+              ? <Row label={"Back to the battle at " + c.field.site} sub={"Round " + (c.field.round + 1) + " of " + c.field.max + " \u2014 the " + c.field.unit + " against " + c.field.cmdr.name} right="Return" onClick={() => setModal("field")} tone={T.gold} />
+              : <Row label="Take command in the field" sub={"Lead your " + fieldForce(c).size + " against " + w.leaderName + "'s forces at " + w.front + ". Six rounds: read their moves, give the orders, lead from the front or go after their commander." + (c.fieldRec ? " Your record: " + c.fieldRec.won + " won, " + c.fieldRec.lost + " lost." : "")} right="Battle" onClick={() => fieldUi("start")} disabled={c.actions < 1} tone={T.gold} />}
             <Row label={"Burn " + w.enemyName + "'s supply camp"} sub={"In and out behind " + w.front + " before the alarm. Speed " + c.stats.spd} right="+7 to 14%" onClick={() => warAct("raid")} />
             <Row label="Scout their lines" sub={"Bring back their order of battle. Your next engagement starts on your terms."} right={w.intel ? "Held" : "+4 to 9%"} onClick={() => warAct("scout")} disabled={!!w.intel} />
             <Row label="Run the field hospital" sub="Unglamorous, and it saves more people than the front does." right="+4 to 9%" onClick={() => warAct("medic")} />
@@ -30828,6 +31642,148 @@ export default function ShinobiLife() {
                 </>
               );
             })()}
+          </Modal>
+        );
+      })()}
+
+      {modal === "field" && c.field && c.alive !== false && (() => {
+        const F = c.field;
+        const close = () => { if (F.done) fieldUi("close"); else setModal(null); };
+        const side = (lbl, name, sub, men, men0, mor, col) => (
+          <div style={{ background: T.panel2, border: "1px solid " + col + "66", borderRadius: 10 }} className="p-3">
+            <div style={{ color: col, fontSize: 9, letterSpacing: ".2em" }} className="font-bold mb-1">{lbl}</div>
+            <div className="text-sm font-bold" style={{ lineHeight: 1.2 }}>{name}</div>
+            <div style={{ color: T.dim, fontSize: 11 }} className="mb-2">{sub}</div>
+            <div className="flex justify-between" style={{ fontSize: 10.5, color: T.dim }}><span>Fighting</span><b style={{ color: T.text }}>{men.toLocaleString()} / {men0.toLocaleString()}</b></div>
+            <Bar v={men} max={men0} col={col} h={6} />
+            <div className="flex justify-between mt-1.5" style={{ fontSize: 10.5, color: T.dim }}><span>Morale</span><b style={{ color: mor >= 50 ? T.good : mor >= 25 ? T.gold : T.bad }}>{mor}</b></div>
+            <Bar v={mor} max={100} col={mor >= 50 ? T.good : mor >= 25 ? T.gold : T.bad} h={4} />
+          </div>
+        );
+        return (
+          <Modal wide title={"FIELD COMMAND · " + F.site.toUpperCase()} accent={T.gold} onClose={close}>
+            <div className="grid grid-cols-2 gap-2 mb-3 sl-field">
+              {side("YOUR " + F.size.toUpperCase(), F.unit, "Wings: " + joinList(F.lt), F.men, F.men0, F.mor, T.good)}
+              {side("AGAINST YOU", cap(F.foeName), "Under " + F.cmdr.name + ", " + F.cmdr.title, F.fmen, F.fmen0, F.fmor, T.blood)}
+            </div>
+            {!F.done && (
+              <>
+                <div style={{ ...glass(T.gold) }} className="p-3 mb-3 sl-field-read">
+                  <div style={{ color: T.gold, fontSize: 9, letterSpacing: ".22em" }} className="font-bold mb-1">ROUND {F.round + 1} OF {F.max} {"·"} YOUR SCOUTS' READ</div>
+                  <div style={{ fontFamily: SERIF, fontSize: 13.5, color: T.soft }}>{F.tell}</div>
+                  <div style={{ color: T.dim, fontSize: 11 }} className="mt-1.5">
+                    It looks like {FIELD_STANCE[F.shown]}, and your scouts are about {F.sure}% sure. {F.cmdr.name} {FIELD_STYLE_WORD[F.trait] || "has no pattern you know of"}{F.lastOrd ? ", and saw what you did last time" : ""}.
+                  </div>
+                </div>
+                {Object.entries(FIELD_ORDERS).map(([k, o]) => (
+                  <Row key={k} label={o.n} sub={o.d} right={k === F.lastOrd ? "Again" : "Order"} onClick={() => fieldUi("order", k)} tone={T.gold} />
+                ))}
+                <Row label="Lead from the front" sub={"Go into their line yourself. The stronger you are the more it does (power " + pw + "), and it costs you health either way."} right="You" onClick={() => fieldUi("order", "front")} tone={T.blood} />
+                <Row label={"Go after " + F.cmdr.name} sub={F.dueled ? "You already went after them in this battle." : "A real fight in the middle of the battle. Win and their line wavers. Lose and yours does."}
+                  right={F.cmdr.id && NAMED[F.cmdr.id] ? "Lvl " + NAMED[F.cmdr.id].lvl : "Duel"} onClick={() => fieldUi("duel")} disabled={!!F.dueled} tone={T.epic} />
+                <Row label="Fall back" sub="Save what you have left. The front gives up a little ground." right="Withdraw" onClick={() => fieldUi("order", "fallback")} />
+              </>
+            )}
+            {F.done && (
+              <div style={{ ...glass(F.dm > 0 ? T.gold : T.blood) }} className="p-4 mb-3 sl-field-done">
+                <div style={{ color: F.dm > 0 ? T.gold : F.dm < 0 ? T.bad : T.soft, letterSpacing: ".22em", fontSize: 11 }} className="font-bold mb-1">{FIELD_OUT[F.done]}</div>
+                <div style={{ fontFamily: SERIF, fontSize: 13.5, color: T.soft }}>{(F.log.find((x) => x.k === "e" || x.k === "b" || x.k === "n") || F.log[0]).t}</div>
+                <div style={{ color: T.dim, fontSize: 11 }} className="mt-2">
+                  {F.dm > 0 ? "Momentum +" + F.dm + "%" : F.dm < 0 ? "Momentum " + F.dm + "%" : "The front did not move"}
+                  {c.fieldRec ? " · your field record: " + c.fieldRec.won + " won, " + c.fieldRec.lost + " lost" + (c.fieldRec.drawn ? ", " + c.fieldRec.drawn + " even" : "") : ""}
+                </div>
+                <button onClick={close} style={{ background: T.gold, color: "#0b0d11", borderRadius: 8 }} className="w-full py-2.5 mt-3 font-bold text-sm">Back to the war</button>
+              </div>
+            )}
+            <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold mb-1.5 mt-1">THE BATTLE SO FAR</div>
+            {F.log.slice(0, 8).map((x, i) => (
+              <div key={i} style={{ fontFamily: SERIF, fontSize: 12, color: x.k === "g" || x.k === "e" ? T.good : x.k === "b" ? T.bad : T.soft, borderLeft: "2px solid " + T.line, paddingLeft: 8 }} className="mb-1.5">{x.t}</div>
+            ))}
+          </Modal>
+        );
+      })()}
+
+      {modal === "patrol" && c.patrol && c.alive !== false && (() => {
+        const p = c.patrol; const cur = patrolEnc(c);
+        const close = () => { if (p.done) patrolUi("close"); else setModal(null); };
+        const statName = (k) => (STAT_KEYS.find((x) => x[0] === k) || [k, k])[1];
+        return (
+          <Modal title="BORDER PATROL" accent={accent} onClose={close}>
+            <div className="flex gap-2 mb-2">{p.list.map((_, i) => <span key={i} style={{ flex: 1, height: 5, borderRadius: 99, background: i < p.step ? accent : T.line }} />)}</div>
+            <div style={{ color: T.dim, fontSize: 11 }} className="mb-3">Along {p.where}</div>
+            {!p.done && cur && cur.e && (
+              <div className="sl-patrol-stop">
+                <div style={{ color: accent, fontSize: 9.5, letterSpacing: ".22em" }} className="font-bold mb-1">STOP {p.step + 1} OF {p.list.length}</div>
+                <p style={{ fontFamily: SERIF, color: T.soft }} className="text-sm mb-3">{cur.e.t(c, cur.it.x)}</p>
+                {cur.e.o.map((o, i) => (
+                  <Row key={i} label={o.n}
+                    sub={o.d + (o.stat ? " " + statName(o.stat) + " " + c.stats[o.stat] + "." : o.fight ? " A fight." : "")}
+                    right={o.fight ? "Fight" : o.stat ? "~" + Math.round(patrolOdds(c, o.stat, o.dc)) + "%" : "Do it"}
+                    onClick={() => patrolUi("pick", i)} tone={o.fight ? T.blood : accent} />
+                ))}
+              </div>
+            )}
+            {p.done && (
+              <div style={{ ...glass(accent) }} className="p-3.5 mb-3 sl-patrol-done">
+                <div style={{ color: accent, letterSpacing: ".22em", fontSize: 10 }} className="font-bold mb-1">PATROL DONE</div>
+                <div style={{ fontFamily: SERIF, color: T.soft, fontSize: 13 }}>
+                  +{money(p.paid || 0)}{p.stand ? ", " + (p.stand > 0 ? "+" : "") + p.stand + " standing" : ""}, +1 Chakra, +1 Speed. {c.patrols ? "That is patrol number " + c.patrols + "." : ""}
+                </div>
+                <button onClick={close} style={{ background: accent, color: ON(), borderRadius: 8 }} className="w-full py-2.5 mt-3 font-bold text-sm">Close</button>
+              </div>
+            )}
+            {p.log.length > 0 && <div style={{ color: T.dim, letterSpacing: ".2em", fontSize: 9.5 }} className="font-bold mb-1.5 mt-2">SO FAR</div>}
+            {p.log.map((x, i) => (
+              <div key={i} style={{ fontFamily: SERIF, fontSize: 12, color: x.k === "g" || x.k === "e" ? T.good : x.k === "b" ? T.bad : T.soft, borderLeft: "2px solid " + T.line, paddingLeft: 8 }} className="mb-1.5">{i + 1}. {x.t}</div>
+            ))}
+          </Modal>
+        );
+      })()}
+
+      {modal === "folk" && (() => {
+        const F = c.folk;
+        const tier = fameTier(c);
+        const Vn = folkVillageName(c);
+        const statName = (k) => (STAT_KEYS.find((x) => x[0] === k) || [k, k])[1];
+        const bondWord = (b) => (b >= 80 ? "like family" : b >= 60 ? "close" : b >= 35 ? "friendly" : b >= 15 ? "knows you" : "barely knows you");
+        return (
+          <Modal wide title={c.rogue ? "THE PEOPLE YOU LEFT" : Vn.toUpperCase()} accent={accent} onClose={() => setModal(null)}>
+            <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">
+              {c.rogue
+                ? "You cannot walk these streets in daylight any more. You can still see people after dark if you are quick, and if nobody recognises you."
+                : "In the street you are " + FAME_WORD[tier] + ". Stopping by costs nothing, once a year each. Helping with what they ask takes an action."}
+            </p>
+            {!F && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody here knows you yet.</div>}
+            {F && F.list.map((f) => {
+              const R2 = FOLK_ROLES[f.role];
+              const r = c.rogue ? null : folkReq(f);
+              const seen = f.seen === c.year;
+              const up = f.bond >= R2.perk;
+              return (
+                <div key={f.id} style={{ background: T.panel2, border: "1px solid " + (up ? T.gold + "66" : T.line), borderRadius: 12 }} className="p-3 mb-2 sl-folk">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm">{f.name} <span style={{ color: T.dim, fontWeight: 500 }}>{"·"} {R2.s}{f.role === "apprentice" && f.rank ? " (" + ["", "genin", "chunin", "jonin"][f.rank] + ")" : ""} {"·"} {f.age}</span></div>
+                      <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 12 }}>{cap(preVillage(c) ? R2.pre : R2.n)}.</div>
+                    </div>
+                    <button onClick={() => folkUi("visit", f.id)} disabled={seen}
+                      style={{ flexShrink: 0, background: seen ? "transparent" : accent + "22", border: "1px solid " + (seen ? T.line : accent), color: seen ? T.dim : accent, borderRadius: 99, fontSize: 11 }}
+                      className="px-3 py-1 font-bold sl-folk-visit">{seen ? "Seen this year" : c.rogue ? "Visit after dark" : "Stop by"}</button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div style={{ flex: 1 }}><Bar v={f.bond} max={100} col={up ? T.gold : accent} h={5} /></div>
+                    <span style={{ color: up ? T.gold : T.dim, fontSize: 11 }}>{bondWord(f.bond)}</span>
+                  </div>
+                  <div style={{ color: up ? T.gold : T.dim, fontSize: 11 }} className="mt-1">{up ? "✓ " + R2.pd : "At " + R2.perk + ": " + R2.pd}</div>
+                  {r && (
+                    <div className="mt-2">
+                      <Row label={r.n} sub={r.d + (r.stat ? " " + statName(r.stat) + " " + c.stats[r.stat] + ", about " + Math.round(patrolOdds(c, r.stat, r.dc)) + "%." : r.fight ? " A fight." : "")}
+                        right="Help" onClick={() => folkUi("help", f.id)} disabled={c.actions < 1} tone={r.min >= 3 ? T.gold : accent} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </Modal>
         );
       })()}
