@@ -591,6 +591,9 @@ const ENEMIES = {
   missing: EN("S-rank Missing-nin", "Bingo Book, top page", 78, 40, "Fire", [["Great Fire Annihilation", 1.35, "nin"], ["Silent Killing", 1.2, "tai"], ["Killing Intent", 0, "buff"]], "Every village on the continent wants this one dead."),
   akatsuki: EN("Akatsuki Operative", "Akatsuki", 84, 44, "Earth", [["Detonating Clay", 1.35, "nin"], ["Iron Sand Wave", 1.15, "nin"], ["Absorption Barrier", 0, "guard"]], "They travel in pairs. You only found one of them."),
   jin: EN("Enemy Jinchuriki", "Vessel", 92, 46, "Chakra", [["Tailed Beast Bomb", 1.3, "nin"], ["Chakra Arms", 1.1, "tai"], ["Version Two Cloak", 0, "buff"]], "The chakra is red and not all of it is theirs."),
+  jonin: EN("Enemy Jonin", "Elite", 66, 30, "Wind", [["Wind Style: Pressure Damage", 1.25, "nin"], ["Shadow Clone Feint", 0, "buff"], ["Chakra Blade", 1.15, "tai"]], "Somebody's teacher. Fights like it."),
+  guard: EN("Kage's Guard", "Personal guard", 74, 36, "Lightning", [["Lightning Style: False Darkness", 1.3, "nin"], ["Guard Formation", 0, "guard"], ["Iaido Draw", 1.2, "tai"]], "Picked out of the whole village to stand between the hat and people like you."),
+  samurai: EN("Samurai", "Land of Iron", 70, 32, null, [["Chakra Blade Draw", 1.35, "tai"], ["Mountain Stance", 0, "guard"], ["Cross Cut", 1.15, "tai"]], "No jutsu, no seals, and a sword that cuts chakra."),
   kage: EN("Rival Kage", "The hat", 94, 52, "Lightning", [["Kirin", 1.35, "nin"], ["Lightning Armour", 0, "buff"], ["Guillotine Drop", 1.2, "tai"]], "A whole village decided this person was the strongest alive."),
   /* named, because enemyFighter hands anything unnamed a randName() — which meant
      you tracked down the Nine-Tails and fought a jinchuriki called Kenji Mori. */
@@ -11111,6 +11114,18 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "12.3", n: "Marked", items: [
+    "Missing-nin and Akatsuki members get a Strike window (Ninja Path, under STRIKES, and a 'Strike at someone' row in the Akatsuki panel) with four kinds of target: a person, a person and their people, a group, or a village",
+    "A person: any named shinobi alive in your era, strongest first, each marked as below you, an even fight or well above you. One fight",
+    "A person and their people: the same names, but you go through the ones with them first. That is their Akatsuki partner, their team (Team Kakashi, Team Minato, Team Guy, Zabuza and Haku, the Raikage and his people and so on) or, for a Kage, their personal guard. Three fights, the name you marked last",
+    "A group: the Akatsuki (if you are not wearing the ring), Kara, the Legendary Sannin, Orochimaru's people, Team Kakashi, Team Minato, Team Guy, the new era's Team Seven, the Seven Swordsmen of the Mist, Root, your old village's hunter-nin, a rival clan's war band in the Warring States, the samurai of the Land of Iron, or a bandit company sitting on a chest. Only groups with enough people still alive show up, and up to three fights each",
+    "A village: the existing march on a village (gate, their best, then the Kage) and the terror strikes, from the same window",
+    "Choose how you go in. Ambush them on the road (a speed check: the first fight starts in your favour, or against you if you are spotted), call them out in the open (even odds, more infamy), or, in the Akatsuki, bring your partner (every fight starts in your favour)",
+    "Every fight is a real battle and costs an action. A named shinobi you beat is killed, with the usual kill rewards. Lose any fight and the strike is over. A strike you have started holds through the next year, then the trail goes cold. You can call it off at any time",
+    "Finishing one pays out by how strong the targets were, raises infamy and your bounty, counts as an Akatsuki job, and carries titles: for going through someone's guard, for breaking a group, and at 5 and 10 strikes",
+    "The Bingo Book reports each one its own way: an open challenge, a road ambush, a whole party taken down, a group broken, with your partner and the cloaks named where they were seen. A failed attempt gets reported too",
+    "New enemy types for these fights: enemy jonin, a Kage's personal guard, and samurai of the Land of Iron",
+  ] },
   { v: "12.2.4", n: "Some Things Cannot Be Copied", items: [
     "Fixed: the Sharingan (and the Copy Ninja) could copy things no eye can take, like the Eight Gates off Might Guy or a Tailed Beast Bomb off a jinchuriki. Copying now only takes hand-seal techniques: no taijutsu or gates, nothing that needs a tailed beast, Sage Mode or a dojutsu, no bloodline releases, no clan or summoning techniques",
   ] },
@@ -14061,6 +14076,184 @@ const AKATSUKI_JOBS = [
 ];
 const canJoinAkatsuki = (c) => c.rogue && !c.akatsuki && AKATSUKI_ERAS.includes(c.era) && c.infamy >= 45 && power(c) >= 62;
 
+/* ============================ STRIKES ============================ */
+/* A missing-nin could already march on a village or hit it once. Now a missing-nin or an
+   Akatsuki member can also go after one named shinobi, that shinobi together with the
+   people who stand with them, or a whole fighting group. Each one is a run of real
+   fights, one action a fight, and the Bingo Book hears about every one of them. */
+const STRIKE_NOT = ["madaraRe", "kaguya", "isshiki", "momoshiki", "urashiki"];
+const AK_PAIR = { itachi: "kisame", kisame: "itachi", deidara: "sasori", sasori: "deidara", hidan: "kakuzu", kakuzu: "hidan", pain: "konan", konan: "pain", obito: "zetsu", zetsu: "obito" };
+/* who is standing next to whom when you come for them */
+const STRIKE_TEAMS = {
+  kakashi: ["naruto", "sasuke", "sakura"], minato: ["kakashiYoung", "obitoYoung", "rin"], guy: ["lee", "neji", "tenten"], kurenai: ["hinata"],
+  naruto: ["sasuke", "sakura"], sasuke: ["naruto", "sakura"], sakura: ["naruto", "sasuke"], hinata: ["neji", "hanabi"], neji: ["lee", "tenten"],
+  orochimaru: ["kabuto", "kimimaro", "tayuya"], kabuto: ["orochimaru"], tsunade: ["shizune"], hiruzen: ["danzo"],
+  hashirama: ["tobirama", "toka"], tobirama: ["hashirama", "toka"], madara: ["izuna"], izuna: ["madara"], tajima: ["izuna"], butsuma: ["kawarama"],
+  gaara: ["temari"], temari: ["gaara"], rasa: ["temari"], ay: ["killerb", "darui", "mabui"], killerb: ["ay", "samui"], darui: ["samui", "karui"], samui: ["karui"],
+  mei: ["chojuro"], onoki: ["kurotsuchi"], kurotsuchi: ["onoki"], zabuza: ["haku"], haku: ["zabuza"],
+  narutoAdult: ["sasukeAdult", "hinata"], sasukeAdult: ["sarada"], boruto: ["sarada", "mitsuki"], sarada: ["boruto", "mitsuki"], mitsuki: ["boruto", "sarada"],
+  jigen: ["delta", "koji", "code"], delta: ["koji"], koji: ["delta"],
+};
+/* the same person filed twice, young and grown (Kakashi and teenage Kakashi, the masked Obito and the boy
+   at Kannabi Bridge): once the later file's era has arrived, the earlier one is the same person, not a second target */
+const STRIKE_SAME = {};
+Object.keys(NAMED).forEach((id) => { (STRIKE_SAME[NAMED[id].name] = STRIKE_SAME[NAMED[id].name] || []).push(id); });
+function strikeSuperseded(c, id) {
+  const e = eraIndex(c); const mine = NAMED_ERA[id] === undefined ? -1 : NAMED_ERA[id];
+  return (STRIKE_SAME[NAMED[id].name] || []).some((x) => x !== id && !STRIKE_NOT.includes(x) && NAMED_ERA[x] !== undefined && NAMED_ERA[x] <= e && NAMED_ERA[x] > mine);
+}
+function strikeAlive(c, id) {
+  if (!NAMED[id] || STRIKE_NOT.includes(id) || isDead(c, id) || isPlayerNamed(c, id) || isHeld(c, id)) return false;
+  if (strikeSuperseded(c, id)) return false;
+  if (NAMED_ERA[id] !== undefined && NAMED_ERA[id] > eraIndex(c)) return false;
+  if (c.akatsuki && c.akatsuki.partnerId === id) return false;
+  const a = livingAge(c, id);
+  if (a != null) return a >= 12 && a <= 105;
+  return (c.roster || []).includes(id);
+}
+const stageLvl = (s) => (NAMED[s.key] ? NAMED[s.key].lvl : ENEMIES[s.key] ? ENEMIES[s.key].lvl : 50);
+const stNamed = (c, id) => ({ key: id, id, n: NAMED[id].name, t: namedTitle(c, id) });
+/* a stage with no name yet: it gets one when you actually set out, so the list does not reshuffle every time it is drawn */
+const stGen = (key, t) => ({ key, gen: true, n: null, t });
+function strongestLast(c, ids, max) {
+  return ids.filter((x) => strikeAlive(c, x)).sort((a, b) => NAMED[a].lvl - NAMED[b].lvl).slice(-max).map((x) => stNamed(c, x));
+}
+/* every named shinobi you could go after, strongest first */
+function strikeTargets(c) {
+  return Object.keys(NAMED).filter((id) => strikeAlive(c, id)).sort((a, b) => NAMED[b].lvl - NAMED[a].lvl);
+}
+/* the people who would be with them: their partner, their team, or the guard their seat comes with */
+function strikeEscorts(c, id) {
+  const ok = (x) => x !== id && strikeAlive(c, x);
+  let ids = [];
+  if (AK_PAIR[id] && ok(AK_PAIR[id])) ids.push(AK_PAIR[id]);
+  (STRIKE_TEAMS[id] || []).forEach((x) => { if (ok(x) && !ids.includes(x)) ids.push(x); });
+  const v = namedVillage(id);
+  if (ids.length < 2 && v) {
+    const more = (c.roster || []).filter((x) => ok(x) && !ids.includes(x) && namedVillage(x) === v && NAMED[x].lvl < NAMED[id].lvl && !isKageId(x));
+    more.sort((a, b) => NAMED[b].lvl - NAMED[a].lvl);
+    ids = ids.concat(more);
+  }
+  const out = ids.slice(0, 2).sort((a, b) => NAMED[a].lvl - NAMED[b].lvl).map((x) => stNamed(c, x));
+  const seat = isKageId(id) || (v && c.kages && c.kages[v] && c.kages[v].named === id);
+  while (out.length < 2) out.unshift(stGen(seat ? "guard" : "jonin", seat ? "Kage's guard" : "Bodyguard of " + NAMED[id].name));
+  return out;
+}
+const STRIKE_GANGS = ["Kurogane Pass", "Red Ford", "Hollow Cedar", "Nine Bells", "Saltwind"];
+/* fighting groups: organisations, teams, corps. never anybody who is not a fighter */
+function strikeGroups(c) {
+  const out = [];
+  const pre = !!eraOf(c).hideVillages;
+  const add = (key, n, d, stages, pay) => { if (stages.length >= 2) out.push({ key, n, d, stages: stages.slice(-3), pay: pay || 0 }); };
+  if (!c.akatsuki && AKATSUKI_ERAS.includes(c.era)) add("akatsuki", "The Akatsuki", "The cloaks with red clouds. Two of their members, then the strongest one left.", strongestLast(c, ["kisame", "itachi", "deidara", "sasori", "hidan", "kakuzu", "konan", "obito", "zetsu", "pain"], 3));
+  add("kara", "Kara", "The organisation of this age: its Inners, then whoever is at the top.", strongestLast(c, ["delta", "koji", "code", "jigen"], 3));
+  add("sannin", "The Legendary Sannin", "The three names that came out of the Rain alive.", strongestLast(c, ["jiraiya", "tsunade", "orochimaru"], 3));
+  add("sound", "Orochimaru's people", "The ones he made and kept, and then the man himself.", strongestLast(c, ["tayuya", "guren", "kimimaro", "kabuto", "orochimaru"], 3));
+  [["kakashi", "Team Kakashi"], ["minato", "Team Minato"], ["guy", "Team Guy"], ["boruto", "Team Seven of the new era"]].forEach(([lead, n]) => {
+    if (!strikeAlive(c, lead)) return;
+    const mem = strongestLast(c, STRIKE_TEAMS[lead] || [], 2);
+    if (mem.length) add("team-" + lead, n, "The team, then " + NAMED[lead].name + ".", mem.concat([stNamed(c, lead)]));
+  });
+  if (!pre && villageExists(c, "kiri")) {
+    const sw = strongestLast(c, ["zabuza", "chojuro", "kisame"], 2);
+    const st = sw.length >= 2 ? sw : [stGen("swordsman", "Swordsman of the Mist")].concat(sw.length ? sw : [stGen("swordsman", "Swordsman of the Mist")]);
+    add("swords", "The Seven Swordsmen of the Mist", "Whoever is carrying the blades this year.", st);
+  }
+  if (!pre && villageExists(c, "konoha") && strikeAlive(c, "danzo")) add("root", "Root", "The part of Konoha's ANBU that does not exist, and the man who runs it.", [stGen("hunter", "Root agent"), stGen("hunter", "Root agent"), stNamed(c, "danzo")]);
+  if (c.rogue && !pre && villageExists(c, c.village)) add("hunters", "The " + vName2(c.village) + " hunter-nin", "The squad your old village keeps sending after you.", [stGen("hunter", "Hunter-nin of " + vName2(c.village)), stGen("hunter", "Hunter-nin of " + vName2(c.village)), stGen("hunter", "Hunter-nin captain")]);
+  if (pre) liveClans(c).filter((x) => x !== c.clan).forEach((x) => add("clan-" + x, "The " + x + " war band", "Two of their warriors in the field, then a War Captain.", [stGen("chunin", "Warrior of the " + x), stGen("chunin", "Warrior of the " + x), stGen("hunter", "War Captain of the " + x)]));
+  if (!pre) add("samurai", "The samurai of the Land of Iron", "Three swords from the mountain, the last one a general.", [stGen("samurai", "Samurai of the Land of Iron"), stGen("samurai", "Samurai of the Land of Iron"), stGen("samurai", "General of the Iron samurai")]);
+  add("bandits", "The " + STRIKE_GANGS[(c.year || 0) % STRIKE_GANGS.length] + " bandit company", "Forty sell-swords holding a mountain road. Their chest is the point.", [stGen("thug", "Bandit sell-sword"), stGen("thug", "Bandit sell-sword"), stGen("thug", "Bandit captain")], rr(180000, 420000));
+  return out;
+}
+function strikePlan(c, kind, key) {
+  let stages; let label; let tgt; let tid = null; let pay = 0;
+  if (kind === "person" || kind === "crew") {
+    if (!strikeAlive(c, key)) return null;
+    tid = key; tgt = NAMED[key].name;
+    stages = kind === "person" ? [stNamed(c, key)] : strikeEscorts(c, key).concat([stNamed(c, key)]);
+    label = kind === "person" ? tgt : tgt + " and their people";
+  } else {
+    const g = strikeGroups(c).find((x) => x.key === key);
+    if (!g) return null;
+    stages = g.stages; label = g.n; tgt = g.n; pay = g.pay || 0;
+  }
+  const clan = key && String(key).startsWith("clan-") ? String(key).slice(5) : null;
+  stages = stages.map((s) => {
+    if (!s.gen) return { ...s };
+    const nm = freshName(c, clan);
+    return { key: s.key, n: nm, t: s.t, forced: { name: nm, title: s.t } };
+  });
+  return { kind, key, label, tgt, tid, stages, pay };
+}
+/* a partner who is dead cannot come with you */
+const akPartnerUp = (c) => !!c.akatsuki && !(c.akatsuki.partnerId && isDead(c, c.akatsuki.partnerId));
+const STRIKE_HOW = {
+  ambush: { n: "Ambush them on the road", d: "Catch them moving and the first fight starts in your favour. Get spotted and it starts against you." },
+  open: { n: "Call them out in the open", d: "No tricks. Even odds, and everybody hears about it afterwards." },
+  partner: { n: "Bring your partner", d: "Every fight starts in your favour." },
+};
+function hitStart(c, L, kind, key, how) {
+  const plan = strikePlan(c, kind, key); if (!plan) return false;
+  let first = 0; let all = 0;
+  if (how === "ambush") {
+    const top = Math.max(...plan.stages.map(stageLvl));
+    first = roll(cl(45 + c.stats.spd * 0.45 - Math.max(0, top - power(c)) * 0.8, 12, 92)) ? 1 : -1;
+  }
+  if (how === "partner" && akPartnerUp(c)) all = 1;
+  c.hit = { ...plan, i: 0, first, all, how, year: c.year, done: null, beat: [] };
+  P(L, (kind === "group" ? "You have picked a fight with " + plan.label + "." : "You have marked " + plan.tgt + ".")
+    + (how === "ambush" ? (first > 0 ? " You know the road they take." : " Somebody saw you asking about the road they take.") : how === "partner" && all ? " " + c.akatsuki.partner + " is coming with you." : " You are not going to hide it."), first < 0 ? "b" : "n");
+  return true;
+}
+function hitOpener(c, H) {
+  const s = H.stages[H.i];
+  if (H.i > 0) return s.n + " is next, and they know you are coming now.";
+  if (H.how === "partner" && H.all && c.akatsuki) return "You and " + c.akatsuki.partner + " came at them from two sides.";
+  if (H.how === "ambush") return H.first > 0 ? "You were already waiting when " + s.n + " came round the bend." : "They saw you first. " + s.n + " was ready.";
+  return "You stood in the road and said " + (H.kind === "group" ? "who you had come for" : H.tgt + "'s name") + " loud enough to carry. " + s.n + " stepped out to answer.";
+}
+function strikeNews(c, H, who) {
+  const ak = c.akatsuki ? " Witnesses describe black cloaks with red clouds." : "";
+  const partner = H.how === "partner" && H.all && c.akatsuki ? " " + c.akatsuki.partner + " was seen with them." : "";
+  const others = (H.beat || []).slice(0, -1);
+  const vid = H.tid ? namedVillage(H.tid) : null;
+  if (H.kind === "person") return pick(H.how === "open" ? [
+    cap(who) + " called " + H.tgt + " out in the open and won. Everybody who was there tells it the same way." + ak,
+    H.tgt + " accepted a challenge from " + who + " and lost it. The Bingo Book has two pages to rewrite." + ak,
+  ] : [
+    H.tgt + " was caught on the road" + (vid ? " outside " + vName2(vid) : "") + ". Every bounty station is already putting " + who + "'s name to it." + ak + partner,
+    "Nobody saw it coming for " + H.tgt + ". " + cap(who) + " is the name pinned to it." + ak + partner,
+  ]);
+  if (H.kind === "crew") return pick([
+    H.tgt + " and " + joinList(others) + " were taken down together in a single attack. " + cap(who) + " walked away from it." + ak + partner,
+    "An attack on " + H.tgt + "'s party has ended with " + joinList(others.concat([H.tgt])) + " all gone. The villages are calling it the work of " + who + "." + ak + partner,
+  ]);
+  return pick([
+    H.label + " has been broken. " + cap(who) + " went through " + joinList(H.beat) + ", one after another." + ak + partner,
+    cap(who) + " took on " + H.label + " and is the only one still standing. " + joinList(H.beat) + " are gone." + ak + partner,
+  ]);
+}
+function hitFinish(c, L, who) {
+  const H = c.hit; if (!H) return;
+  H.done = "won";
+  const lv = H.stages.reduce((a, s) => a + stageLvl(s), 0);
+  const pay = Math.round((lv * rr(1800, 3200) + (H.pay || 0)) / 1000) * 1000;
+  c.ryo += pay; H.paid = pay;
+  const inf = ({ person: 10, crew: 16, group: 22 }[H.kind] || 10) + (H.how === "open" ? 6 : 0);
+  c.infamy = cl(c.infamy + inf);
+  c.bingo = c.infamy > 80 ? "S" : c.infamy > 55 ? "A" : c.infamy > 30 ? "B" : "C";
+  if (c.akatsuki) c.akatsuki.jobs = (c.akatsuki.jobs || 0) + 1;
+  c.hits = (c.hits || 0) + 1;
+  if (H.kind === "crew") addTitle(c, "Went Through " + H.tgt + "'s Guard");
+  if (H.kind === "group") addTitle(c, "Broke " + H.label.replace(/^The /, "the "));
+  if (c.hits === 5) addTitle(c, "Nobody Is Out of Reach");
+  if (c.hits === 10) addTitle(c, "The Name in Every Ledger");
+  P(L, (H.kind === "group" ? H.label + " is finished." : H.kind === "crew" ? H.tgt + " and everybody with them are down." : H.tgt + " is down.") + " +" + money(pay) + ", infamy " + c.infamy + ".", "e");
+  const big = H.kind === "group" || H.stages.some((s) => stageLvl(s) >= 85);
+  newsItem(c, strikeNews(c, H, who), "BINGO BOOK", big);
+}
+
 /* ---------- what the black market sells to people with no village ---------- */
 const ROGUE_GEAR = [
   { id: "kubi", n: "Executioner's Blade", d: "+26 attack. A slab of steel with a hole in it, taken off somebody who was using it.", cost: 320000, kind: "gear", slot: "weapon", v: { atk: 26 }, rogue: true },
@@ -16361,6 +16554,8 @@ export default function ShinobiLife() {
   const [eyeReplay, setEyeReplay] = useState(null);
   const [tsukuFx, setTsukuFx] = useState(null);
   const [scrollTab, setScrollTab] = useState("nature");
+  const [strikeTab, setStrikeTab] = useState("person");
+  const [strikeSel, setStrikeSel] = useState(null);
   const [arrival, setArrival] = useState(null);
   const [arrivalLeaving, setArrivalLeaving] = useState(false);
   function dismissArrival() {
@@ -16826,6 +17021,7 @@ export default function ShinobiLife() {
           line: "The histories had it written down before they said it out loud." });
       }
       c.year = (c.birthYear || 0) + c.age;
+      if (c.hit && (c.hit.done || c.year - c.hit.year >= 2)) { if (!c.hit.done) P(L, "The trail on " + c.hit.tgt + " went cold. Whoever you were after has moved on.", "n"); c.hit = null; }
 
       /* villages come into existence */
       VILLAGES.forEach((v) => {
@@ -20227,6 +20423,19 @@ export default function ShinobiLife() {
     const dmg = c.vdamage[c.raid.vid] || 0;
     startBattle(st.key, { type: "raid", vid: c.raid.vid, stage: c.raid.stage, id: st.id }, dmg >= 40 ? 1 : 0, st.n + " of " + v.name + ". " + st.d + (dmg >= 40 ? " Their defence is already gutted from your earlier strikes." : ""), st.forced);
   }
+  /* ---------- strikes: a person, a person and their people, a group ---------- */
+  function strikeGo(kind, key, how) {
+    commit((c2, L) => { hitStart(c2, L, kind, key, how); });
+    setStrikeSel(null);
+    setModal("hit");
+  }
+  function hitFight() {
+    const H = c.hit; if (!H || H.done) return;
+    const s2 = H.stages[H.i]; if (!s2) return;
+    const adv = H.all || (H.i === 0 ? H.first : 0);
+    startBattle(s2.key, { type: "hit", i: H.i, id: s2.id || null }, adv, hitOpener(c, H), s2.id ? null : s2.forced);
+    setModal(null);
+  }
 
   /* ---------- quests & battles ---------- */
   /* an assigned mission runs in stages and ends with the name on the scroll */
@@ -21703,6 +21912,30 @@ export default function ShinobiLife() {
           if (c.health <= 0) die(c, L, "was killed by " + nm.name);
         }
       }
+      if (ctx.type === "hit") {
+        spend(c);
+        const H = c.hit;
+        if (H && !H.done && H.i === ctx.i) {
+          if (b.win) {
+            const s2 = H.stages[H.i];
+            c.wins += 1;
+            H.beat = (H.beat || []).concat([b.e.name]);
+            if (s2 && s2.id && NAMED[s2.id]) { killNamed(c, s2.id, L, "was killed by " + killedBy(c)); killFeat(c, L, s2.id); }
+            else c.kills += 1;
+            c.health = cl(c.health - rr(3, 10));
+            H.i += 1;
+            if (H.i >= H.stages.length) hitFinish(c, L, killedBy(c));
+            else P(L, b.e.name + " is down. " + H.stages[H.i].n + " is next.", "g");
+          } else {
+            H.done = "lost";
+            if (b.fled) P(L, "You broke off and got clear. " + H.tgt + " knows your face now.", "b");
+            else { const d = rr(22, 42); c.health = cl(c.health - d); P(L, b.e.name + " stopped you. You got away with your life and nothing else. -" + d + " health.", "b"); }
+            c.infamy = cl(c.infamy + 4);
+            newsItem(c, H.tgt + (H.kind === "group" ? " fought off " : " survived an attempt by ") + killedBy(c) + "." + ((H.beat || []).length ? " " + joinList(H.beat) + " did not." : ""), "BINGO BOOK", H.stages.some((x) => stageLvl(x) >= 85));
+            if (c.health <= 0) die(c, L, "was killed going after " + H.tgt);
+          }
+        }
+      }
       if (ctx.type === "exam") {
         const q = ctx.quest;
         const passes = q.passes + (b.win ? 1 : 0);
@@ -21713,6 +21946,7 @@ export default function ShinobiLife() {
     });
     setTimeout(() => setC((prev) => (prev && prev.killFlash ? { ...prev, killFlash: null } : prev)), 3400);
     setBt(null);
+    if (ctx.type === "hit") setTimeout(() => setModal("hit"), 60);
   }
 
   /* ---------- exams ---------- */
@@ -25376,6 +25610,16 @@ export default function ShinobiLife() {
             </div>
           </>}
           {c.founded && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">You are {c.rankName} of {c.founded.name}, {c.founded.land}. There is no rank above this one.</div>}
+          {(c.rogue || c.akatsuki) && (
+            <>
+              <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-5 mb-1 font-bold sl-strikes">STRIKES</div>
+              <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                Go after one named shinobi, that shinobi and the people who stand with them, a whole fighting group, or a village. Every target is a run of real fights, one action each.
+              </div>
+              {c.hit && !c.hit.done && c.hit.stages[c.hit.i] && <Row label={"Continue: " + c.hit.label} sub={"Fight " + (c.hit.i + 1) + " of " + c.hit.stages.length + " \u2014 " + c.hit.stages[c.hit.i].n} right="Go" onClick={() => setModal("hit")} tone={T.blood} />}
+              <Row label="Choose a target" sub={(c.hits ? c.hits + " done so far. " : "") + "Infamy " + c.infamy + (c.bounty ? ", bounty " + money(c.bounty) : "")} right="Open" onClick={() => { setStrikeSel(null); setModal("strike"); }} tone={T.blood} />
+            </>
+          )}
           {!eraOf(c).hideVillages && (
             <>
               <div style={{ color: T.blood, letterSpacing: ".2em", fontSize: 10 }} className="mt-5 mb-1 font-bold">MARCH ON A VILLAGE</div>
@@ -28884,6 +29128,8 @@ export default function ShinobiLife() {
                 </div>
               );
             })()}
+            {c.hit && !c.hit.done && c.hit.stages[c.hit.i] && <Row label={"Continue: " + c.hit.label} sub={"Fight " + (c.hit.i + 1) + " of " + c.hit.stages.length + " \u2014 " + c.hit.stages[c.hit.i].n} right="Go" onClick={() => setModal("hit")} tone={T.blood} />}
+            <Row label="Strike at someone" sub={"A named shinobi, a shinobi and their people, a fighting group or a village. " + (akPartnerUp(c) ? ak.partner + " can come with you, and every" : "Every") + " one counts as a job."} right="Choose" onClick={() => { setStrikeSel(null); setModal("strike"); }} tone={T.blood} />
             {AKATSUKI_JOBS.map((j) => (
               <Row key={j.id} label={j.n} sub={j.d}
                 right={j.pay[1] ? money(j.pay[0]) + "+" : "+" + j.inf + " infamy"}
@@ -30586,6 +30832,140 @@ export default function ShinobiLife() {
         );
       })()}
 
+      {modal === "strike" && (c.rogue || c.akatsuki) && (() => {
+        const lvTone = (lv) => (lv > pw + 10 ? T.blood : lv > pw - 5 ? T.gold : T.good);
+        const odds = (lv) => (lv > pw + 10 ? "well above you" : lv > pw - 5 ? "an even fight" : "below you");
+        const stName = (s) => s.n || s.t;
+        const sel = strikeSel;
+        if (sel) {
+          const g = sel.kind === "group" ? strikeGroups(c).find((x) => x.key === sel.key) : null;
+          const live = sel.kind === "group" ? !!g : strikeAlive(c, sel.key);
+          const stages = !live ? [] : sel.kind === "person" ? [stNamed(c, sel.key)] : sel.kind === "crew" ? strikeEscorts(c, sel.key).concat([stNamed(c, sel.key)]) : g.stages;
+          const title = sel.kind === "group" ? (g ? g.n : "") : NAMED[sel.key] ? NAMED[sel.key].name + (sel.kind === "crew" ? " and their people" : "") : "";
+          return (
+            <Modal wide title={"MARK: " + title.toUpperCase()} accent={T.blood} onClose={() => { setStrikeSel(null); setModal(null); }}>
+              {!live && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-3">That target is not there to go after any more.</div>}
+              {live && (
+                <div style={{ ...glass(T.blood) }} className="p-3.5 mb-3 sl-strike-plan">
+                  <div style={{ color: T.blood, fontSize: 9, letterSpacing: ".22em" }} className="font-bold mb-2">THE FIGHTS, IN ORDER</div>
+                  {stages.map((s, i) => (
+                    <div key={i} className="flex justify-between gap-2 mb-1" style={{ fontSize: 12.5 }}>
+                      <span style={{ color: T.text }}>{i + 1}. {stName(s)}{s.n ? <span style={{ color: T.dim }}> {"·"} {s.t}</span> : null}</span>
+                      <b style={{ color: lvTone(stageLvl(s)), flexShrink: 0 }}>Lvl {stageLvl(s)}</b>
+                    </div>
+                  ))}
+                  <div style={{ color: T.dim, fontFamily: SERIF, fontSize: 11.5 }} className="mt-2">
+                    One action a fight. Lose any one of them and it is over. Your power is {pw}.
+                  </div>
+                </div>
+              )}
+              {live && Object.entries(STRIKE_HOW).filter(([k]) => k !== "partner" || akPartnerUp(c)).map(([k, h]) => (
+                <Row key={k} label={h.n}
+                  sub={(k === "ambush" ? "Speed " + c.stats.spd + ". " : k === "partner" ? c.akatsuki.partner + " comes with you. " : "") + h.d}
+                  right={k === "partner" ? "Edge in every fight" : k === "ambush" ? "Edge or not" : "More infamy"}
+                  onClick={() => strikeGo(sel.kind, sel.key, k)} disabled={c.actions < 1 || !!(c.hit && !c.hit.done)} tone={T.blood} />
+              ))}
+              {c.hit && !c.hit.done && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">You are already after {c.hit.label}. Finish that or call it off first.</div>}
+              <button onClick={() => setStrikeSel(null)} style={{ color: T.dim }} className="w-full text-xs mt-1 py-2">Back to the list</button>
+            </Modal>
+          );
+        }
+        const tabs = [["person", "A person"], ["crew", "A person and their people"], ["group", "A group"], ["village", "A village"]];
+        const tab = strikeTab;
+        const ids = tab === "person" || tab === "crew" ? strikeTargets(c).slice(0, 80) : [];
+        const groups = tab === "group" ? strikeGroups(c) : [];
+        return (
+          <Modal wide title="STRIKE" accent={T.blood} onClose={() => setModal(null)}>
+            <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">
+              Pick who. Every target is a run of real fights, one action each, and the Bingo Book hears about all of it.
+              {c.akatsuki ? " Every strike you finish counts as a job for the organisation." : ""}
+            </p>
+            <div className="flex gap-1.5 mb-3 overflow-x-auto sl-quick">
+              {tabs.map(([k, n]) => {
+                const on = tab === k;
+                return (
+                  <button key={k} onClick={() => setStrikeTab(k)}
+                    style={{ flexShrink: 0, background: on ? T.blood + "22" : "transparent", border: "1px solid " + (on ? T.blood : T.line), color: on ? T.blood : T.dim, borderRadius: 99, fontSize: 10, letterSpacing: ".1em" }}
+                    className="sl-card px-2.5 py-1 font-bold">{n}</button>
+                );
+              })}
+            </div>
+            {c.hit && !c.hit.done && c.hit.stages[c.hit.i] && <Row label={"Continue: " + c.hit.label} sub={"Fight " + (c.hit.i + 1) + " of " + c.hit.stages.length + " — " + c.hit.stages[c.hit.i].n} right="Go" onClick={() => setModal("hit")} tone={T.blood} />}
+            {tab === "person" && (ids.length ? ids.map((id) => (
+              <Row key={id} label={NAMED[id].name}
+                sub={namedTitle(c, id) + (namedVillage(id) && villageExists(c, namedVillage(id)) ? " · " + vName2(namedVillage(id)) : "") + " · " + odds(NAMED[id].lvl)}
+                right={"Lvl " + NAMED[id].lvl} onClick={() => setStrikeSel({ kind: "person", key: id })} tone={lvTone(NAMED[id].lvl)} />
+            )) : <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody worth the trouble is alive right now.</div>)}
+            {tab === "crew" && (ids.length ? ids.map((id) => {
+              const esc = strikeEscorts(c, id);
+              return (
+                <Row key={id} label={NAMED[id].name + " and their people"}
+                  sub={"With " + joinList(esc.map(stName)) + " · three fights, " + NAMED[id].name + " last"}
+                  right={"Lvl " + NAMED[id].lvl} onClick={() => setStrikeSel({ kind: "crew", key: id })} tone={lvTone(Math.max(NAMED[id].lvl, ...esc.map(stageLvl)))} />
+              );
+            }) : <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">Nobody worth the trouble is alive right now.</div>)}
+            {tab === "group" && (groups.length ? groups.map((g) => {
+              const top = Math.max(...g.stages.map(stageLvl));
+              return (
+                <Row key={g.key} label={g.n} sub={g.d + " " + g.stages.map(stName).join(" → ")}
+                  right={"Lvl " + top} onClick={() => setStrikeSel({ kind: "group", key: g.key })} tone={lvTone(top)} />
+              );
+            }) : <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm">There is no group left worth going after.</div>)}
+            {tab === "village" && (
+              <>
+                <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mb-2">
+                  Two ways in. March on it and fight through the gate, their best and then their Kage to take it (power 70). Or hit it once with a terror strike and leave.
+                </div>
+                {c.raid && <Row label={"Continue the assault on " + vName2(c.raid.vid)} sub={"Stage " + (c.raid.stage + 1) + " of 3"} right="Fight" onClick={() => setModal("raid")} tone={T.blood} />}
+                {VILLAGES.filter((v) => villageExists(c, v.id) && c.kages[v.id] && !c.destroyed.includes(v.name)).map((v) => (
+                  <Row key={v.id} label={"March on " + v.name}
+                    sub={v.land + " — " + c.kages[v.id].title + " " + c.kages[v.id].name + (v.id === c.village ? " (your old village)" : "")}
+                    right="Invade" onClick={() => startRaid(v.id)} disabled={!!c.raid || pw < 70} tone={T.blood} />
+                ))}
+                {!VILLAGES.some((v) => villageExists(c, v.id)) && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-sm mb-2">There are no hidden villages yet. There are only clans.</div>}
+                <Row label="Hit a village once" sub="One fight, lasting damage that thins their defenders for when you do come for the tower." right="Open" onClick={() => setModal("terror")} tone={T.blood + "88"} />
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {modal === "hit" && c.hit && c.alive !== false && (() => {
+        const H = c.hit;
+        const s = H.stages[Math.min(H.i, H.stages.length - 1)];
+        const close = () => { if (H.done) commit((c2) => { c2.hit = null; }); setModal(null); };
+        const edge = H.all ? (c.akatsuki ? c.akatsuki.partner + " is with you. You have the edge." : "You have the edge.")
+          : H.i === 0 && H.first > 0 ? "You have the jump on them."
+          : H.i === 0 && H.first < 0 ? "They saw you coming. This one starts against you."
+          : H.i > 0 ? "They know you are coming now." : "Even odds.";
+        return (
+          <Modal title={(H.kind === "group" ? "STRIKE: " : "MARKED: ") + H.label.toUpperCase()} accent={T.blood} onClose={close}>
+            <div className="flex gap-2 mb-3">{H.stages.map((x, i) => <span key={i} style={{ flex: 1, height: 5, borderRadius: 99, background: i < H.i ? T.blood : T.line }} />)}</div>
+            {!H.done && (
+              <div className="sl-hit-live">
+                <div style={{ color: T.dim, fontSize: 10, letterSpacing: ".2em" }} className="font-bold mb-1">FIGHT {H.i + 1} OF {H.stages.length}</div>
+                <h2 className="text-lg font-bold">{s.n}</h2>
+                <div style={{ color: T.dim, fontSize: 12 }} className="mb-2">{s.t} {"·"} Lvl {stageLvl(s)}</div>
+                <p style={{ fontFamily: SERIF, color: T.soft }} className="text-sm mb-4">{edge}</p>
+                <button onClick={hitFight} disabled={c.actions < 1} style={{ background: c.actions < 1 ? T.panel2 : T.blood, color: c.actions < 1 ? T.dim : ON(), borderRadius: 8 }} className="w-full py-3 font-bold">Fight</button>
+                {c.actions < 1 && <div style={{ color: T.dim, fontFamily: SERIF }} className="text-xs mt-2">No actions left this year. The mark holds through next year, and then the trail goes cold.</div>}
+                <button onClick={() => { commit((c2, L) => { if (c2.hit) P(L, "You called it off. " + c2.hit.tgt + " never knew how close it came.", "n"); c2.hit = null; }); setModal(null); }} style={{ color: T.dim }} className="w-full text-xs mt-2 py-2">Call it off</button>
+              </div>
+            )}
+            {H.done && (
+              <div className="sl-hit-done">
+                <div style={{ color: H.done === "won" ? T.gold : T.bad, letterSpacing: ".2em", fontSize: 11 }} className="font-bold mb-1">{H.done === "won" ? "IT IS DONE" : "IT FAILED"}</div>
+                <p style={{ fontFamily: SERIF, color: T.soft }} className="text-sm mb-4">
+                  {H.done === "won"
+                    ? ((H.beat || []).length > 1 ? joinList(H.beat) + " are down." : (H.beat || [H.tgt])[0] + " is down.") + (H.paid ? " +" + money(H.paid) + "." : "") + " The Bingo Book will have it by morning."
+                    : ((H.beat || []).length ? "You got through " + joinList(H.beat) + " and no further. " : "") + H.tgt + " is still out there, and knows your face now."}
+                </p>
+                <button onClick={close} style={{ background: T.blood, color: ON(), borderRadius: 8 }} className="w-full py-3 font-bold">Close</button>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
       {modal === "raid" && c.raid && (() => {
         const v = VILLAGES.find((x) => x.id === c.raid.vid);
         const st = raidStage(c, c.raid.vid, c.raid.stage);
