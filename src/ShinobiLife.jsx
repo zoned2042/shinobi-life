@@ -6564,13 +6564,73 @@ function situationOf(c) {
   return out.sort((a, b) => order[a.sev] - order[b.sev]);
 }
 const SEV_COL = (T2) => ({ red: T2.blood, orange: "#e08a3c", yellow: T2.gold, purple: "#a77fe0", blue: "#4a8fd6" });
+/* ============================ V13: A LIFE WORTH LIVING ============================ */
+/* The screen used to show every system at once. Now it asks what stage of life you are
+   in and puts that first. This never removes anything: every action stays reachable from
+   its destination and from More. It only decides what comes first. */
+function lifeStage(c) {
+  if (!c) return "child";
+  if (c.retired) return "retired";
+  if (c.akatsuki) return "akatsuki";
+  if (c.rogue) return "rogue";
+  /* the same test the game uses for whether you rule: the seat (or a village you founded), or the head of your clan before there were villages */
+  if (((c.rank >= 6 || !!c.founded) && !c.retired) || (preVillage(c) && !c.retired && (c.clanRole === "Clan Head" || (c.myClan && c.myClan.headIsYou)))) return "kage";
+  if (c.iron && c.iron.seated) return "arbiter";
+  if (c.anbu) return "anbu";
+  if (c.rank >= 4) return "jonin";
+  if (c.rank === 3) return "chunin";
+  if (c.rank === 2) return "genin";
+  if (c.rank === 1) return "academy";
+  return "child";
+}
+/* the four acts of a life, as the Home screen names them */
+function lifeChapter(c) {
+  const s = lifeStage(c);
+  if (s === "child" || s === "academy") return { n: "The Beginning", d: "Family, the Academy, first friends and first rivals." };
+  if (s === "genin" || s === "chunin") return { n: "The Shinobi", d: "Missions, teammates, promotions and the choices that define you." };
+  if (s === "kage" || s === "arbiter" || s === "retired" || c.age >= 55) return { n: "The Legacy", d: "What you lead, who you raise, and what survives you." };
+  return { n: "The Path", d: "Your own way now: a specialist, a leader, a missing-nin, or something stronger." };
+}
+const healthWord = (h) => (h >= 80 ? "Healthy" : h >= 55 ? "Bruised" : h >= 30 ? "Hurt" : "Badly hurt");
+function repWord(c) {
+  if (c.rogue) return c.infamy >= 80 ? "Feared" : c.infamy >= 55 ? "Notorious" : c.infamy >= 30 ? "Wanted" : "Unknown";
+  return c.standing >= 85 ? "Revered" : c.standing >= 65 ? "Respected" : c.standing >= 40 ? "Trusted" : c.standing >= 20 ? "Known" : "Doubted";
+}
+/* the five places the whole game now lives */
+const DESTS = [["home", "Home", "home"], ["explore", "Explore", "compass"], ["character", "Character", "profile"], ["world", "World", "globe"], ["chronicle", "Chronicle", "scroll"]];
+/* which destination each of the old hubs belongs to, so a hub opened from World only shows World's tabs */
+const HUB_GROUP = { life: "character", people: "character", records: "chronicle", world: "world", politics: "world", society: "world", law: "world", power: "world" };
+/* what turning the year will settle, in plain words */
+function advanceNotes(c) {
+  const out = [];
+  if (c.actions > 0) out.push(c.actions + " action" + (c.actions === 1 ? "" : "s") + " left unspent");
+  if (c.field && !c.field.done) out.push("the battle at " + c.field.site + " ends in a withdrawal");
+  if (c.patrol && !c.patrol.done) out.push("your patrol is cut short");
+  if (c.hit && !c.hit.done && c.year - c.hit.year >= 1) out.push("the trail on " + c.hit.tgt + " goes cold");
+  if (c.war) out.push(c.war.name + " goes on");
+  if (c.study) out.push("your study of " + c.study.name + " continues");
+  if ((c.rogue || c.akatsuki) && c.bounty) out.push("the price on your head goes up");
+  if ((c.students || []).some((s) => s.alive)) out.push("your students train");
+  if ((c.kids || []).some((k) => !k.dead)) out.push("your children grow");
+  out.push("the world moves on");
+  return out.slice(0, 4);
+}
+/* the year just turned, cut down to what mattered */
+function yearReview(L, c) {
+  const rank = { e: 0, b: 1, g: 2 };
+  const lines = (L || []).map((e, i) => ({ ...e, i })).filter((e) => e && e.txt && rank[e.k] !== undefined);
+  const top = lines.slice().sort((a, b) => rank[a.k] - rank[b.k] || a.i - b.i).slice(0, 5).sort((a, b) => a.i - b.i);
+  const said = top.map((e) => e.txt);
+  const world = (c.news || []).filter((n) => n.big && n.year === c.year && !said.includes(n.txt)).slice(0, 2).map((n) => n.txt);
+  return { year: c.year, age: c.age, items: top.map((e) => ({ t: e.txt, k: e.k })), world, more: Math.max(0, (L || []).length - top.length) };
+}
 
 /* ---- the world, in one line ---- */
 function worldStateOf(c) {
   const W = c.world || {};
   const tags = [];
   const wars = (W.wars || []).filter((w) => w.years > 0).length + (c.war ? 1 : 0);
-  tags.push(c.war && c.war.great ? "GREAT WAR" : wars ? (wars === 1 ? "WAR" : wars + " WARS") : "PEACE");
+  tags.push((c.war && c.war.great) || greatWarAt(c.year) ? "GREAT WAR" : wars ? (wars === 1 ? "WAR" : wars + " WARS") : "PEACE");
   const Ld = (W.lands || {})[c.village];
   const h = (Ld && Ld.hist) || [];
   const d = h.length >= 4 ? h[h.length - 1] - h[h.length - 4] : 0;
@@ -11115,6 +11175,20 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "13.0", n: "A Life Worth Living", items: [
+    "A new interface, built around one question at a time. The screen used to show about forty things at once: eight hub doors, nineteen quick chips, a world ticker, a news bar, an ongoing strip and a deck of twenty tiles. Now there are five destinations: Home, Explore, Character, World and Chronicle. On a phone they sit in a bar along the bottom",
+    "Home answers who you are, what matters and what to do next: the new office art, your name, rank and village, your health and reputation in words (Healthy, Respected, Feared, Wanted), and which part of life you are in: The Beginning, The Shinobi, The Path or The Legacy",
+    "Your next chapter: one thing, with the button that does it. In order: a live broadcast, a battle, patrol, strike or assault you left half-done, graduation, the Chunin Exams, Madara's next chapter, your war, anything urgent, the next step of your Way, the Akatsuki noticing you, somebody in your village asking for help, or what your life is for right now: missions for a genin, the seat for a Kage, contracts for a missing-nin, the ring for the Akatsuki. When the year is spent it says so and offers to advance",
+    "Up to three suggestions for the rest of the year, chosen for where you are in life, and only things you can do right now. What needs you: up to four ongoing matters, worst first, each one press from where it lives. Recently: the last few things that mattered. And the Times' lead story",
+    "Advance year is always in the top bar. On Home it says where it is going and what will resolve when the year turns: unspent actions, your war, your studies, your bounty, your students, a half-fought battle. After the year turns, Home shows The Year That Was: only the lines that mattered, the biggest world news, and a link to everything else",
+    "Explore is places, not menus: the training grounds, the Academy, the mission desk, the border, the streets, the market, the tower, ANBU headquarters, your clan, your cell, the tribunal, the daimyo's court, the bounty station and beyond the walls; for a missing-nin the underworld, the hideout and the black market. Each place offers only its own actions, and which places appear, and in what order, depends on who you are",
+    "Character: your body and all eight stats, your abilities and the advanced powers you actually have, your people, your path, your gear and record. World: your war (and the War Room once you have a role in it), the Times, everything ongoing, the map, politics, society, lands and organisations, the Bingo Book, and justice when it applies to you. Chronicle: your story so far, the Chronicle, the story of this save, your line, the Histories, Kage lines, rumours and investigations, the Times archive",
+    "More, in the top bar, lists every screen in the game in five groups, so nothing that has been built is ever out of reach. A hub opened from a destination now shows only that destination's tabs",
+    "Every button opens the same screen, or runs the same action, it always did. No simulation, combat, story or save code changed for this, and your save carries over untouched",
+    "Everyone lands in the new interface once. The Dossier and the Scroll are still under Appearance, and if you switch back the game remembers",
+    "Fixed: the one-line state of the world said Peace while a Great Ninja War was being fought, whenever your own village was not in it",
+    "The game's tests now live with the game (npm test), including new ones for all of this",
+  ] },
   { v: "12.4", n: "Among Your People", items: [
     "Field Command: 'Command a division' in the war window is now 'Take command in the field', a battle you run yourself in any war: clan wars, village wars and the Great Wars. You are given a squad as a genin, a platoon as a chunin, a division as a jonin, a strike unit in the ANBU and the whole army as Kage (in the Warring States, a raiding band up to the whole clan under arms)",
     "Six rounds against a named enemy commander with their own style. Each round your scouts read what they are about to do, with how sure they are; Intellect, holding the enemy's order of battle, a dojutsu and the old soldier from your village make the read better. Order a Charge, Hold the line, Flank or a Ninjutsu barrage, and each one beats some moves and loses to others. Commanders who see you repeat yourself adapt",
@@ -16315,6 +16389,12 @@ const ICONS = {
   times: "M4 5h13v15H6a2 2 0 0 1-2-2ZM17 9h3v9a2 2 0 0 1-2 2M7 8.5h7M7 12h7M7 15.5h4",
   age: "M12 4v8l5 3M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z",
   live: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6.5 6.5a8 8 0 0 0 0 11M17.5 6.5a8 8 0 0 1 0 11",
+  home: "M3.5 11 12 4l8.5 7M6 9.5V20h4.5v-5.5h3V20H18V9.5",
+  compass: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM15.5 8.5l-2 5-5 2 2-5Z",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.5 12h17M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9M12 3c-2.4 2.6-3.6 5.6-3.6 9s1.2 6.4 3.6 9",
+  scroll: "M7 4h10.5a2.5 2.5 0 0 1 0 5H7ZM7 4a2.5 2.5 0 0 0 0 5v9.5A1.5 1.5 0 0 0 8.5 20H17V9M10 12.5h5M10 15.5h4",
+  menu: "M4 7h16M4 12h16M4 17h16",
+  chev: "M9.5 6l6 6-6 6",
 };
 /* ---------- era key art: original vector scenes, one per age ----------
    drawn here rather than sourced, so nothing is lifted from anyone's artwork.
@@ -17260,6 +17340,10 @@ export default function ShinobiLife() {
   const [scrollTab, setScrollTab] = useState("nature");
   const [strikeTab, setStrikeTab] = useState("person");
   const [strikeSel, setStrikeSel] = useState(null);
+  const [dest, setDest] = useState("home");
+  const [review, setReview] = useState(null);
+  /* every life, and every relative who plays on, starts at Home */
+  useEffect(() => { if (screen === "play") { setDest("home"); setReview(null); } }, [screen]);
   const [arrival, setArrival] = useState(null);
   const [arrivalLeaving, setArrivalLeaving] = useState(false);
   function dismissArrival() {
@@ -17272,7 +17356,7 @@ export default function ShinobiLife() {
   const [bgMode, setBgMode] = useState(() => INITIAL_PREFS.bgMode || "village");
   const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
   /* which interface the game wears, not which colours it wears */
-  const [ui, setUi] = useState(() => INITIAL_PREFS.ui || "dossier");
+  const [ui, setUi] = useState(() => (INITIAL_PREFS.v13 ? INITIAL_PREFS.ui || "life" : "life"));
   /* How loud the touch effects are. This has been tuned by guesswork across
      three rounds of "still too big", so it is a setting now rather than a
      number I keep picking for somebody else's screen. */
@@ -17295,7 +17379,7 @@ export default function ShinobiLife() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(() => (typeof INITIAL_PREFS.musicVolume === "number" ? INITIAL_PREFS.musicVolume : 45));
   const [musicError, setMusicError] = useState(false);
-  useEffect(() => { writePrefs({ themeId, bgMode, layout, ui, touchFx, motion, cinema, engineMode, musicTrackId, musicVolume }); },
+  useEffect(() => { writePrefs({ themeId, bgMode, layout, ui, touchFx, motion, cinema, engineMode, musicTrackId, musicVolume, v13: true }); },
     [themeId, bgMode, layout, ui, touchFx, motion, cinema, engineMode, musicTrackId, musicVolume]);
   const audioRef = useRef(null);
   function playMusicTrack(id) {
@@ -17701,7 +17785,9 @@ export default function ShinobiLife() {
     setYearFlash((c.birthYear || 0) + c.age + 1);
     setTimeout(() => setYearFlash(null), 1230);
     setTimeout(() => setC((prev) => (prev && prev.eyeFlash ? { ...prev, eyeFlash: null } : prev)), 2600);
+    let yearL = null;
     commit((c, L) => {
+      yearL = L;
       c.age += 1; c.actions = 4;
       /* a canon seat you were always going to inherit */
       if (c.pendingSeat && (c.birthYear || 0) + c.age === c.pendingSeat.atYear - 1 && !c.pendingSeat.warned) {
@@ -18028,6 +18114,7 @@ export default function ShinobiLife() {
       }
       if (roll(dc)) die(c, L, cause);
     });
+    if (yearL && cRef.current) { setReview(yearReview(yearL, cRef.current)); if (ui === "life") setDest("home"); }
   }
   function die(c, L, cause) {
     if (c.canonId === "madara" && c.madara) {
@@ -24314,6 +24401,132 @@ export default function ShinobiLife() {
       .lay-wide .sl-deck { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 
       @media (min-width: 1900px) { .lay-stacked .sl-shell { max-width: 1240px; } }
+      /* ---------- V13: A Life Worth Living ---------- */
+      .v13-top { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+      .v13-top-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 16px; }
+      .v13-id { min-width: 0; flex: 0 1 230px; }
+      .v13-id-n { font-family: Georgia,'Times New Roman',serif; font-weight: 700; font-size: 17px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .v13-id-s { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+      .v13-tabs { display: flex; gap: 2px; flex: 1 1 auto; justify-content: center; min-width: 0; }
+      .v13-tab { display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px 8px; font-size: 13px; font-weight: 700; border-bottom: 2px solid transparent; background: none; white-space: nowrap; transition: color .15s ease, border-color .15s ease; }
+      .v13-when { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; flex-shrink: 0; }
+      .v13-when b { font-family: Georgia,'Times New Roman',serif; font-size: 20px; font-variant-numeric: tabular-nums; }
+      .v13-when span { font-size: 9px; letter-spacing: .2em; font-weight: 800; margin-top: 3px; }
+      .v13-adv { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
+      .v13-adv:disabled { opacity: .4; cursor: not-allowed; }
+      .v13-adv-n { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; border-radius: 99px; font-size: 10px; font-weight: 800; padding: 0 4px; }
+      .v13-more { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.03); flex-shrink: 0; }
+      .v13-main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 48px; }
+      .v13-kick { font-size: 10px; letter-spacing: .26em; font-weight: 800; }
+      .v13-hero { position: relative; border-radius: 22px; overflow: hidden; min-height: clamp(240px, 32vw, 390px); border: 1px solid rgba(255,255,255,.09); box-shadow: 0 24px 60px rgba(0,0,0,.45); margin-bottom: 16px; isolation: isolate; }
+      .v13-hero-img { position: absolute; inset: -3%; background-size: cover; background-position: center 42%; animation: v13-drift 28s ease-in-out infinite alternate; will-change: transform; }
+      @keyframes v13-drift { from { transform: scale(1.06) translate3d(-1%, 0, 0); } to { transform: scale(1) translate3d(1%, -1%, 0); } }
+      .v13-hero-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,7,11,.08) 0%, rgba(6,7,11,.26) 42%, rgba(6,7,11,.90) 100%), linear-gradient(90deg, rgba(6,7,11,.62) 0%, rgba(6,7,11,0) 64%); }
+      .v13-hero-in { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 24px 20px; }
+      .v13-hero-name { font-family: Georgia,'Times New Roman',serif; font-weight: 700; font-size: clamp(32px, 5.4vw, 56px); line-height: 1.02; letter-spacing: -.02em; margin: 8px 0 0; text-shadow: 0 2px 24px rgba(0,0,0,.6); }
+      .v13-hero-ep { display: block; font-size: .36em; letter-spacing: 0; font-weight: 400; font-style: italic; margin-top: 4px; opacity: .85; }
+      .v13-hero-sub { font-size: 14px; margin-top: 6px; text-shadow: 0 1px 12px rgba(0,0,0,.7); }
+      .v13-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      .v13-chip { border: 1px solid; border-radius: 99px; padding: 3px 11px; font-size: 11.5px; font-weight: 700; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+      .v13-cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+      .v13-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+      .v13-chapter, .v13-review, .v13-advance, .v13-card { padding: 18px 18px 16px; }
+      .v13-ch-t { font-family: Georgia,'Times New Roman',serif; font-weight: 700; font-size: clamp(22px, 2.6vw, 28px); line-height: 1.12; margin: 6px 0 0; letter-spacing: -.01em; }
+      .v13-ch-p { font-family: Georgia,'Times New Roman',serif; font-size: 15px; line-height: 1.5; margin-top: 8px; }
+      .v13-ch-acts, .v13-row-acts, .v13-place-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+      .v13-btn { border-radius: 11px; padding: 10px 16px; font-size: 13.5px; font-weight: 800; line-height: 1.1; transition: transform .12s ease, filter .12s ease; }
+      .v13-btn:not(:disabled):hover { filter: brightness(1.08); }
+      .v13-btn:not(:disabled):active { transform: translateY(1px); }
+      .v13-btn:disabled { cursor: not-allowed; }
+      .v13-btn.is-primary { padding: 12px 20px; font-size: 14.5px; }
+      .v13-sect-h { display: flex; align-items: center; gap: 10px; font-size: 9.5px; letter-spacing: .24em; font-weight: 800; margin-bottom: 8px; }
+      .v13-rule { flex: 1; height: 1px; }
+      .v13-link { font-size: 11.5px; font-weight: 700; letter-spacing: 0; white-space: nowrap; }
+      .v13-sugs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .v13-sug { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px 13px; border-radius: 14px; min-height: 104px; transition: transform .14s ease; }
+      .v13-sug:not(:disabled):hover { transform: translateY(-2px); }
+      .v13-sug:disabled { cursor: not-allowed; }
+      .v13-sug-l { font-weight: 800; font-size: 14px; line-height: 1.15; }
+      .v13-sug-s { font-size: 11.5px; line-height: 1.35; }
+      .v13-adv-big { width: 100%; border-radius: 14px; padding: 14px 18px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+      .v13-adv-big:disabled { opacity: .5; cursor: not-allowed; }
+      .v13-adv-big-l { font-size: 17px; font-weight: 800; }
+      .v13-adv-big-s { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; opacity: .8; font-weight: 700; }
+      .v13-notes { font-size: 12px; line-height: 1.45; margin-top: 10px; text-align: center; }
+      .v13-p { font-family: Georgia,'Times New Roman',serif; font-size: 13.5px; line-height: 1.5; margin-top: 4px; }
+      .v13-rv { font-family: Georgia,'Times New Roman',serif; font-size: 14px; line-height: 1.45; border-left: 2px solid; padding: 2px 0 2px 10px; margin-top: 8px; }
+      .v13-rv-w { font-size: 12px; line-height: 1.45; margin-top: 10px; font-family: Georgia,'Times New Roman',serif; }
+      .v13-pend { width: 100%; display: flex; align-items: flex-start; gap: 10px; text-align: left; border: 1px solid; border-radius: 11px; padding: 9px 11px; margin-bottom: 7px; }
+      .v13-pend-tx { display: flex; flex-direction: column; gap: 1px; font-size: 13px; font-weight: 700; min-width: 0; }
+      .v13-pend-tx span:last-child { font-size: 11.5px; font-weight: 500; }
+      .v13-dot { width: 8px; height: 8px; border-radius: 99px; margin-top: 5px; flex-shrink: 0; }
+      .v13-recent { font-family: Georgia,'Times New Roman',serif; font-size: 13px; line-height: 1.45; border-left: 2px solid; padding: 1px 0 1px 10px; margin-bottom: 8px; }
+      .v13-headline { font-family: Georgia,'Times New Roman',serif; font-size: 14.5px; line-height: 1.38; font-weight: 700; }
+      .v13-banner { position: relative; border-radius: 20px; overflow: hidden; height: clamp(170px, 22vw, 240px); margin-bottom: 16px; border: 1px solid rgba(255,255,255,.08); }
+      .v13-banner-art { position: absolute; inset: 0; }
+      .v13-banner-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,7,11,0) 30%, rgba(6,7,11,.8) 100%); }
+      .v13-panel { padding: 16px 16px 8px; gap: 18px; }
+      .v13-chapter, .v13-review, .v13-advance, .v13-card, .v13-sug, .v13-door, .v13-place, .v13-panel { position: relative; isolation: isolate; backdrop-filter: blur(12px) saturate(1.05); -webkit-backdrop-filter: blur(12px) saturate(1.05); }
+      .v13-chapter::before, .v13-review::before, .v13-advance::before, .v13-card::before, .v13-sug::before, .v13-door::before, .v13-place::before, .v13-panel::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--v13-base); z-index: -1; pointer-events: none; }
+      .v13-banner-in { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 22px; }
+      .v13-banner-t { font-family: Georgia,'Times New Roman',serif; font-weight: 700; font-size: clamp(28px, 4vw, 42px); line-height: 1.05; margin: 6px 0 0; }
+      .v13-places { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+      .v13-place { padding: 15px 16px 14px; display: flex; flex-direction: column; }
+      .v13-place-h { display: flex; align-items: center; gap: 10px; }
+      .v13-place-n { font-family: Georgia,'Times New Roman',serif; font-size: 17px; font-weight: 700; line-height: 1.15; margin: 0; }
+      .v13-place-d { font-size: 12.5px; line-height: 1.45; margin-top: 8px; flex: 1; }
+      .v13-place-acts { margin-top: 12px; }
+      .v13-place-acts .v13-btn { padding: 8px 13px; font-size: 12.5px; }
+      .v13-foot { font-size: 11.5px; text-align: center; margin-top: 18px; }
+      .v13-door-ic { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; border: 1px solid; flex-shrink: 0; }
+      .v13-door { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 13px; margin-bottom: 8px; transition: transform .14s ease; }
+      .v13-door:not(:disabled):hover { transform: translateX(2px); }
+      .v13-door:disabled { cursor: not-allowed; }
+      .v13-door-tx { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+      .v13-door-n { font-family: Georgia,'Times New Roman',serif; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+      .v13-door-d { font-size: 12px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .v13-badge { font-family: 'Trebuchet MS',system-ui,sans-serif; font-size: 10.5px; font-weight: 800; border-radius: 99px; padding: 1px 7px; }
+      .v13-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+      .v13-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+      .v13-num { background: rgba(0,0,0,.24); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .v13-num b { font-family: Georgia,'Times New Roman',serif; font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .v13-num span { font-size: 10px; letter-spacing: .08em; }
+      .v13-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 14px; margin-top: 10px; }
+      .v13-track { height: 5px; background: rgba(0,0,0,.45); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+      .v13-track > div { height: 100%; border-radius: 99px; }
+      .v13-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+      .v13-kv span:last-child { text-align: right; }
+      .v13-world-h { margin-bottom: 16px; }
+      .v13-sect + .v13-sect { margin-top: 16px; }
+      .v13-feed { position: relative; padding: 0 12px 12px; max-height: 64vh; overflow-y: auto; }
+      .v13-bottom { display: none; }
+      .v13-bt { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 7px; font-size: 10.5px; font-weight: 700; background: none; }
+      body.sl-motion-off .v13-hero-img { animation: none; transform: none; }
+      body.sl-motion-off .v13-sug, body.sl-motion-off .v13-door, body.sl-motion-off .v13-btn { transition: none; }
+      @media (prefers-reduced-motion: reduce) { .v13-hero-img { animation: none; transform: none; } .v13-sug, .v13-door, .v13-btn { transition: none; } }
+      @media (max-width: 1000px) {
+        .v13-cols { grid-template-columns: minmax(0, 1fr); }
+        .v13-tab span { display: none; }
+        .v13-tab { padding: 9px 10px 8px; }
+      }
+      @media (max-width: 720px) {
+        .v13-tabs { display: none; }
+        .v13-bottom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding-bottom: env(safe-area-inset-bottom); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+        .v13-main { padding: 12px 12px 104px; }
+        .v13-top-in { padding: 8px 12px; gap: 9px; }
+        .v13-id { flex: 1 1 auto; }
+        .v13-adv-l, .v13-more-l { display: none; }
+        .v13-adv { padding: 0 10px; }
+        .v13-sugs { grid-template-columns: minmax(0, 1fr); }
+        .v13-sug { min-height: 0; flex-direction: row; align-items: center; flex-wrap: wrap; }
+        .v13-sug-s { flex-basis: 100%; padding-left: 26px; margin-top: -4px; }
+        .v13-grid2 { grid-template-columns: minmax(0, 1fr); }
+        .v13-hero { border-radius: 18px; min-height: 300px; }
+        .v13-hero-in { padding: 18px 16px 16px; }
+        .v13-places { grid-template-columns: minmax(0, 1fr); }
+        .v13-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .v13-stats { grid-template-columns: minmax(0, 1fr); }
+      }
 
       /* ---------- mobile ---------- */
       html, body { overflow-x: hidden; background: #04050a; min-height: 100%; }
@@ -25285,6 +25498,519 @@ export default function ShinobiLife() {
         </div>
       </div>
       </>)}
+
+      {/* ---------- V13: A LIFE WORTH LIVING ----------
+           Five destinations instead of a header with forty things in it. Home answers who you
+           are, what matters and what to do next; the other four hold everything else, and
+           every button opens the same screen, or runs the same action, it always did. */}
+      {ui === "life" && (() => {
+        const stage = lifeStage(c);
+        const chap = lifeChapter(c);
+        const A = (id) => acts.find((a) => a.id === id) || null;
+        const actOf = (id, label, k) => { const a = A(id); return a ? { l: label || a.label, on: a.onClick, dis: !!a.disabled, k: k || id } : null; };
+        const leader = isLeader(c);
+        const pre = preVillage(c);
+        const hasVillage = villageExists(c, c.village);
+        const placeName = c.founded ? c.founded.name : c.rogue ? "no village" : hasVillage ? V.name : pre ? "the " + myClanWord(c) + " lands" : "the " + c.land;
+        const goDest = (d) => { setDest(d); try { window.scrollTo({ top: 0 }); } catch (e) { /* nothing to scroll */ } };
+        const openStrike = () => { setStrikeSel(null); setModal("strike"); };
+        const ownerTap = () => { if (owner) { setModal("owner"); return; } const n = taps + 1; setTaps(n); if (n >= 5) { setOwner(true); setModal("owner"); } };
+        const situ = situationOf(c);
+        const SC = SEV_COL(T);
+        const folkAsks = c.folk && !c.rogue ? c.folk.list.filter((f) => folkReq(f)) : [];
+        const HERO_TXT = "#f4f2ea";
+        const kick = (t, col) => <div className="v13-kick" style={{ color: col || accent }}>{t}</div>;
+        const Btn13 = ({ b, primary, tone }) => {
+          if (!b) return null;
+          const col = tone || accent;
+          return (
+            <button onClick={(e) => { if (!b.dis) { ripple(e); b.on(); } }} disabled={!!b.dis}
+              className={"v13-btn" + (primary ? " is-primary" : "")}
+              style={primary
+                ? { background: b.dis ? T.panel2 : "linear-gradient(140deg," + col + "," + col + "cc)", color: b.dis ? T.dim : ON(), border: "1px solid " + (b.dis ? T.line : col), boxShadow: b.dis ? "none" : "0 8px 24px " + col + "40" }
+                : { background: "rgba(255,255,255,.03)", color: b.dis ? T.dim : T.text, border: "1px solid " + (b.dis ? T.line : col + "66") }}>
+              {b.l}
+            </button>
+          );
+        };
+
+        /* ---------- the one thing that matters most right now ---------- */
+        const chapter = (() => {
+          const mk = (o) => ({ tone: accent, alt: [], ...o, go: o.go || { l: "Train", on: () => setModal("train"), dis: c.actions < 1 || c.age < 5, k: "train" } });
+          if (c.broadcast && !c.broadcast.answered) return mk({ kick: "HAPPENING NOW", tone: T.blood, title: c.broadcast.org + " at " + c.broadcast.targetName, text: "It is being broadcast live, and everybody is watching to see who answers.", go: { l: "See it", on: () => setModal("broadcast") } });
+          if (c.field && !c.field.done) return mk({ kick: "IN THE FIELD", tone: T.gold, title: "The battle at " + c.field.site, text: "Round " + (c.field.round + 1) + " of " + c.field.max + ". The " + c.field.unit + " is waiting for your orders against " + c.field.cmdr.name + ".", go: { l: "Back to the battle", on: () => setModal("field") } });
+          if (c.patrol && !c.patrol.done) return mk({ kick: "ON PATROL", title: "Stop " + (c.patrol.step + 1) + " of " + c.patrol.list.length + " along " + c.patrol.where, text: "Your patrol is still out on the line.", go: { l: "Back to the patrol", on: () => setModal("patrol") } });
+          if (c.hit && !c.hit.done && c.hit.stages[c.hit.i]) return mk({ kick: "A MARK", tone: T.blood, title: c.hit.label, text: "Fight " + (c.hit.i + 1) + " of " + c.hit.stages.length + ": " + c.hit.stages[c.hit.i].n + " is next.", go: { l: "Go", on: () => setModal("hit") } });
+          if (c.raid) return mk({ kick: "THE ASSAULT", tone: T.blood, title: "The assault on " + vName2(c.raid.vid), text: "Stage " + (c.raid.stage + 1) + " of 3. They know you are inside the walls.", go: { l: "Push forward", on: () => setModal("raid") } });
+          if (c.canonRun) return mk({ kick: "A MISSION BY NAME", title: (CANON_MISSIONS.find((m) => m.id === c.canonRun.id) || {}).t || "Your mission", text: "The tower gave you this one by name, and it is not finished.", go: { l: "Continue", on: () => setModal("canonmission") } });
+          if (canAcademy) return mk({ kick: pre ? "YOUR FIRST BATTLE" : "GRADUATION", title: pre ? "The war band is a fighter short" : "The graduation exam", text: pre ? "You are the right size to carry a blade now. The clan is waiting to see what you do with it." : "You are old enough. Pass and you get a forehead protector, a squad and a sensei.", go: { l: pre ? "Go to the line" : "Take the exam", on: () => openExam("academy") }, alt: [{ l: "Train first", on: () => setModal("train"), dis: c.actions < 1, k: "train" }] });
+          if (canExam) return mk({ kick: pre ? "THE CLAN HEAD'S JUDGEMENT" : "THE CHUNIN EXAMS", title: pre ? "Prove yourself in front of the war band" : "The Chunin Exams are open", text: pre ? "Hold the flank and break their line, with the clan head watching." : "The written test, the forest, and the finals with the whole village watching.", go: { l: "Enter", on: () => openExam("chunin") }, alt: [{ l: "Train first", on: () => setModal("train"), dis: c.actions < 1, k: "train" }] });
+          const mN = c.madara && c.canonId === "madara" && c.madara.phase !== "over" ? madaraNext(c) : null;
+          if (mN && mN.fight && mN.y <= c.year) return mk({ kick: "THE MOON'S EYE PLAN", tone: T.blood, title: mN.n, text: "The next chapter of Madara's life is here.", go: { l: "Open it", on: () => setModal("madara") } });
+          if (c.war) {
+            const w = c.war;
+            return mk({ kick: "AT WAR", tone: T.blood, title: w.name, from: "war",
+              text: (liveFoes(w).length > 1 ? liveFoes(w).length + " fronts against " : "Against ") + (foeSummary(w, 2) || w.enemyName) + ". The front at " + w.front + " stands at " + w.momentum + "%.",
+              go: leader ? { l: "The War Room", on: () => openWarRoom() } : { l: "Take command in the field", on: () => fieldUi("start"), dis: c.actions < 1 || c.rank < 2 },
+              alt: [{ l: "Your part in the war", on: () => setModal("war"), dis: c.actions < 1 || c.rank < 2 }] });
+          }
+          const red = situ.find((a) => a.sev === "red");
+          if (red) return mk({ kick: "NEEDS YOU", tone: T.blood, title: cap(red.title.toLowerCase()), text: red.lines.join(" ") + " " + red.status + ".", go: { l: "Deal with it", on: () => goTo(red.go) }, from: red.k });
+          if (wayReady(c) && c.way && !c.way.finished) return mk({ kick: "YOUR WAY", tone: T.gold, title: (WAYS[c.way.id] || {}).n || "Your way", text: "The next step of the way you chose is within reach.", go: { l: "Take it", on: () => setModal("path") } });
+          if (canJoinAkatsuki(c)) return mk({ kick: "THEY ARE WATCHING", tone: T.blood, title: "The Akatsuki have noticed you", text: "Ten rings, ten fingers. Somebody could be standing in your room within the year.", go: { l: "The Organisation", on: () => setModal("akatsuki"), k: "akatsuki" } });
+          if (folkAsks.length) {
+            const f = folkAsks[0]; const r = folkReq(f);
+            return mk({ kick: "SOMEBODY NEEDS YOU", title: f.name + ": " + r.n.charAt(0).toLowerCase() + r.n.slice(1), text: r.d + (folkAsks.length > 1 ? " " + (folkAsks.length - 1) + " more of your people are asking for help too." : ""), go: { l: "Walk through " + folkVillageName(c), on: () => folkUi("open"), k: "streets" } });
+          }
+          /* nothing urgent: the chapter for where you are in life */
+          const D = {
+            child: { kick: "GROWING UP", title: "Growing up in " + placeName, text: c.age < 5 ? "You are small and the world is enormous. Your family is everything for now." : "The Academy is coming. What you do with these years is yours.", go: c.age < 5 ? { l: "Your family", on: () => setModal("people"), k: "people" } : { l: "Train", on: () => setModal("train"), dis: c.actions < 1, k: "train" } },
+            academy: { kick: pre ? "THE TRAINING YARD" : "THE ACADEMY", title: pre ? "The training yard" : "Life at the Academy", text: "Seals, kunai, clones." + (c.age < 12 ? " Graduation is in " + (12 - c.age) + " year" + (12 - c.age === 1 ? "" : "s") + "." : ""), go: { l: "Train", on: () => setModal("train"), dis: c.actions < 1, k: "train" } },
+            genin: { kick: "A MISSION IS WAITING", title: pre ? "The war band rides out" : "The mission desk", text: pre ? "Raids, escorts, and the fights the clan is paid for." : "D-ranks, C-ranks, and the odd one that turns into something else. Your squad is waiting.", go: actOf("mission", "Take a mission") },
+            chunin: { kick: "TRUSTED NOW", title: pre ? "The clan trusts you with others" : "Missions, and the border", text: pre ? "You lead raids now, and walk the edge of the clan lands." : "Chunin lead missions and walk the line. The tower is writing your name down for both.", go: actOf("mission", "Take a mission"), alt: [{ l: "Walk the border", on: () => patrolUi("start"), dis: c.actions < 1, k: "border" }] },
+            jonin: { kick: "THE VILLAGE LEANS ON YOU", title: pre ? "A captain's year" : "A jonin's year", text: "A-ranks and S-ranks, a cell of your own to raise, and the duties nobody else will take.", go: actOf("mission", "Take a mission") },
+            anbu: { kick: "NO NAME ON THE FILE", title: TT(c, "anbuName"), text: "There is a file on the desk in the room under the tower, and it has no mission number.", go: { l: "Open the file", on: () => setModal("anbu"), dis: c.actions < 1, k: "anbu" } },
+            kage: { kick: "THE SEAT", title: pre ? "The clan is yours" : "The village is yours", text: "Decrees, the council, the treasury, and whoever is testing your borders this year.", go: actOf("rule", null, "rule") },
+            arbiter: { kick: "THE SIXTH CHAIR", title: "The court at Tetsu", text: "The Iron Scales sit with or without you. The docket is waiting.", go: { l: "Go to Tetsu", on: () => openIron(), k: "iron" } },
+            rogue: { kick: "HUNTED", title: "Out here, on your own", text: "No village, a price on your head" + (c.bounty ? " (" + money(c.bounty) + ")" : "") + ", and contracts nobody will sign in daylight.", go: actOf("mission", "Find a contract"), alt: [{ l: "Strike at someone", on: openStrike, dis: c.actions < 1, k: "strike" }] },
+            akatsuki: { kick: "THE ORGANISATION", from: "aka", title: c.akatsuki ? "Ring " + c.akatsuki.ring + " of the Akatsuki" : "The Organisation", text: c.akatsuki ? "Your partner is " + c.akatsuki.partner + ". The organisation always has work." : "", go: actOf("akatsuki", "The organisation"), alt: [{ l: "Strike at someone", on: openStrike, dis: c.actions < 1, k: "strike" }] },
+            retired: { kick: "A QUIETER LIFE", title: "After the work", text: "The village goes on. The people you trained are the ones holding it up now.", go: { l: "Your people", on: () => setModal("people"), k: "people" } },
+          }[stage];
+          return mk(D);
+        })();
+
+        if (c.actions < 1 && chapter.go && chapter.go.dis) {
+          chapter.alt = [];
+          chapter.kick = "THE YEAR IS SPENT";
+          chapter.text = (chapter.text ? chapter.text + " " : "") + "You have nothing left to give this year.";
+          chapter.go = { l: "Advance to " + AH(c.year + 1), on: () => ageUp(), k: "advance" };
+        }
+        /* ---------- up to three suggestions, for where you are in life ---------- */
+        const fromAct = (id, icon) => { const a = A(id); return a ? { k: id, l: a.label, s: a.sub, icon: icon || a.icon, on: a.onClick, dis: !!a.disabled } : null; };
+        const SUG_DEF = {
+          people: () => ({ k: "people", l: "Your people", s: "Family, friends and teammates", icon: "people", on: () => setModal("people") }),
+          train: () => fromAct("train"),
+          jutsu: () => fromAct("jutsu"),
+          streets: () => c.age >= 6 ? { k: "streets", l: c.rogue ? "The people you left" : "Walk through " + folkVillageName(c), s: folkAsks.length ? folkAsks.length + " of them could use your help" : "The people who live there", icon: "people", on: () => folkUi("open") } : null,
+          mission: () => fromAct("mission"),
+          border: () => !c.rogue && c.rank >= 2 ? { k: "border", l: "Walk the border", s: "Three stops along the line", icon: "war", on: () => patrolUi("start"), dis: c.actions < 1 } : null,
+          students: () => fromAct("students"),
+          anbu: () => c.anbu ? { k: "anbu", l: "Black ops", s: "The file with no number", icon: "bingo", on: () => setModal("anbu"), dis: c.actions < 1 } : null,
+          rule: () => fromAct("rule"),
+          iron: () => c.iron ? { k: "iron", l: "The Iron Scales", s: "Your court at Tetsu", icon: "rule", on: () => openIron() } : null,
+          strike: () => c.rogue || c.akatsuki ? { k: "strike", l: "Strike at someone", s: "A person, their people, or a group", icon: "war", on: openStrike, dis: c.actions < 1 } : null,
+          bounty: () => fromAct("bounty"),
+          akatsuki: () => fromAct("akatsuki"),
+          life: () => ({ k: "life", l: "Body and work", s: "Injuries, career and cases", icon: "profile", on: () => setModal("life") }),
+        };
+        const SUG = {
+          child: ["people", "train", "streets"], academy: ["train", "jutsu", "people"], genin: ["mission", "train", "people"],
+          chunin: ["mission", "border", "train"], jonin: ["mission", "students", "border"], anbu: ["anbu", "mission", "train"],
+          kage: ["rule", "people", "streets"], arbiter: ["iron", "train", "people"], rogue: ["mission", "strike", "bounty"],
+          akatsuki: ["akatsuki", "strike", "mission"], retired: ["life", "people", "streets"],
+        }[stage] || ["train", "people", "streets"];
+        const taken = [chapter.go && chapter.go.k].concat((chapter.alt || []).map((x) => x.k)).filter(Boolean);
+        const sugs = SUG.concat(["train", "people", "streets", "jutsu"]).filter((k, i, a) => a.indexOf(k) === i)
+          .map((k) => SUG_DEF[k] && SUG_DEF[k]()).filter((s) => s && !s.dis && !taken.includes(s.k)).slice(0, 3);
+        const pend = situ.filter((a) => a.k !== chapter.from).slice(0, 4);
+        const recentImp = log.filter((e) => e.k === "e" || e.k === "b" || e.k === "g").slice(-4).reverse();
+        const rv = review && review.age === c.age ? review : null;
+        const notes = advanceNotes(c);
+        const chips = [
+          [healthWord(c.health), c.health >= 55 ? T.good : c.health >= 30 ? T.gold : T.bad],
+          [repWord(c), c.rogue ? T.blood : T.gold],
+          c.war ? ["At war", T.blood] : null,
+          (c.rogue || c.akatsuki) && c.bounty ? ["Bounty " + money(c.bounty), T.gold] : null,
+          c.akatsuki ? ["Akatsuki", T.blood] : null,
+        ].filter(Boolean);
+
+        /* ---------- Explore: places, each with only its own actions ---------- */
+        const exploreTitle = c.rogue ? "On the road" : c.founded ? c.founded.name : hasVillage ? V.name : pre ? "The " + myClanWord(c) + " lands" : "The " + c.land;
+        const exploreSub = c.rogue ? "No village takes you in now. These are the places that still will." : hasVillage ? V.hidden + ", " + V.land + "." : pre ? "No hidden villages yet. There are only clans." : "";
+        const P2 = (o) => o;
+        const places = [
+          P2({ k: "train", n: pre ? "The Training Yard" : "The Training Grounds", icon: "train", show: c.age >= 5, d: c.study ? "You are working on " + c.study.name + "." : "Train a regimen, or work on a technique.", acts: [actOf("train", "Train"), actOf("jutsu", "Study a technique")] }),
+          P2({ k: "academy", n: pre ? "The Clan Yard" : "The Academy", icon: "path", show: !c.rogue && c.rank <= 1, d: canAcademy ? (pre ? "The war band is waiting for you." : "Graduation is open to you this year.") : "Classes, and the exam that ends them, at twelve.", acts: [canAcademy ? { l: pre ? "Your first battle" : "Take the graduation exam", on: () => openExam("academy") } : { l: "Ninja path", on: () => setModal("path"), dis: c.actions < 1 }] }),
+          P2({ k: "desk", n: pre ? "The War Band" : "The Mission Desk", icon: "mission", show: !c.rogue && c.rank >= 2, d: canExam ? "The Chunin Exams are open this year." : c.rank >= 4 ? "A-ranks, S-ranks, and the jobs that come with the rank." : "D through S rank, and the duties of your rank.", acts: [actOf("mission", "Missions"), canExam ? { l: "Enter the Chunin Exams", on: () => openExam("chunin") } : { l: "Rank and duties", on: () => setModal("path"), dis: c.actions < 1 }] }),
+          P2({ k: "border", n: "The Border", icon: "war", show: !c.rogue && c.rank >= 2, d: c.patrol && !c.patrol.done ? "Your patrol is still out." : "Smugglers, scouts, missing-nin, beasts" + (c.war ? " and enemy patrols" : "") + ".", acts: [{ l: c.patrol && !c.patrol.done ? "Back to the patrol" : "Walk the patrol", on: () => patrolUi("start"), dis: c.actions < 1 && !(c.patrol && !c.patrol.done) }] }),
+          P2({ k: "streets", n: c.rogue ? "Your Old Streets" : "The Streets", icon: "people", show: c.age >= 6, d: c.rogue ? "After dark, if nobody recognises you." : folkAsks.length ? folkAsks.length + " of the people you know could use your help." : "The cook, the teacher, the smith, the old soldier and the rest.", acts: [{ l: c.rogue ? "Visit after dark" : "Walk through", on: () => folkUi("open") }] }),
+          P2({ k: "market", n: c.rogue ? "The Black Market" : "The Market", icon: "shop", show: true, d: "Gear, pills, tutors, and the scroll broker.", acts: [{ l: "Shop", on: () => setModal("shop") }, { l: "Scroll broker", on: () => setModal("scrolls") }] }),
+          P2({ k: "tower", n: leader ? (pre ? "The Clan Hall" : "The Tower") : pre ? "The Clan Elders" : "The Tower", icon: "rule", show: !c.rogue && (leader || c.rank >= 2), d: leader ? "The seat, the council and the treasury." : "Promotion, the ANBU, and the rank above yours.", acts: leader ? [actOf("rule")] : [{ l: "Rank and promotion", on: () => setModal("path"), dis: c.actions < 1 }] }),
+          P2({ k: "anbu", n: TT(c, "anbuName"), icon: "bingo", show: !!c.anbu || canAnbu, d: c.anbu ? "You are " + c.anbu.code + ". The file is on the desk." : "They do not advertise. They are watching you anyway.", acts: [c.anbu ? { l: "Open the file", on: () => setModal("anbu") } : { l: "Answer them", on: () => joinAnbu(), dis: c.actions < 1 }] }),
+          P2({ k: "clan", n: A("myclan") ? A("myclan").label : "Your Clan", icon: "clans", show: !!A("myclan") && (c.myClan || bornClan(c) || c.age >= 18), d: A("myclan") ? A("myclan").sub : "", acts: [actOf("myclan", "Go")] }),
+          P2({ k: "students", n: c.studentSquad || "Your Cell", icon: "people", show: !!A("students"), d: A("students") ? A("students").sub : "", acts: [actOf("students", c.students ? "Train them" : "Take students")] }),
+          P2({ k: "tribunal", n: "The Tribunal", icon: "rule", show: !!A("bench"), d: A("bench") ? A("bench").sub : "", acts: [actOf("bench", "Go in")] }),
+          P2({ k: "court", n: c.daimyoSeat ? "The " + c.daimyoSeat.land : "The Daimyo's Court", icon: "rule", show: !!A("court"), d: A("court") ? A("court").sub : "", acts: [actOf("court", "Go")] }),
+          P2({ k: "bounty", n: c.rogue ? "The Bounty Stations" : "The Bounty Station", icon: "bounty", show: !!A("bounty") && (c.rank >= 2 || c.rogue), d: "Bounties posted for missing-nin" + (ORGS[c.era] ? ", and for " + lowerName(ORGS[c.era].n) : "") + ".", acts: [actOf("bounty", "The board")] }),
+          P2({ k: "underworld", n: "The Underworld", icon: "mission", show: c.rogue, d: "Contracts no village would sign off on.", acts: [actOf("mission", "Contracts")] }),
+          P2({ k: "hideout", n: c.akatsuki ? "The Akatsuki Hideout" : "Your Hideout", icon: "war", show: c.rogue || !!c.akatsuki, d: c.akatsuki ? "Your partner " + c.akatsuki.partner + " is waiting." : "Somewhere to plan, and nobody to tell you no.", acts: [{ l: "Strike at someone", on: openStrike, dis: c.actions < 1 }, A("akatsuki") ? actOf("akatsuki", c.akatsuki ? "The Ring" : "The Organisation") : null] }),
+          P2({ k: "summit", n: "The Kage Summit", icon: "war", show: !!A("summitraid"), d: A("summitraid") ? A("summitraid").sub : "", acts: [actOf("summitraid", "Go")] }),
+          P2({ k: "beyond", n: "Beyond the Walls", icon: "globe", show: true, d: "Other lands, other villages, and the map of all of it.", acts: [{ l: "The lands", on: () => { setLandsTab("lands"); setModal("lands"); } }, { l: "World map", on: () => setModal("map") }] }),
+        ];
+        const ORDER = {
+          rogue: ["hideout", "underworld", "bounty", "market", "train", "streets", "summit", "beyond"],
+          akatsuki: ["hideout", "underworld", "bounty", "market", "train", "streets", "summit", "beyond"],
+          child: ["train", "academy", "streets", "market", "clan", "beyond"],
+          academy: ["academy", "train", "streets", "market", "clan", "beyond"],
+          kage: ["tower", "desk", "streets", "border", "train", "market", "clan", "court", "tribunal", "students", "bounty", "beyond"],
+        }[stage] || ["desk", "train", "border", "streets", "market", "tower", "students", "anbu", "clan", "tribunal", "court", "bounty", "beyond"];
+        const shown = places.filter((p) => p.show).sort((a, b) => (ORDER.indexOf(a.k) + 1 || 99) - (ORDER.indexOf(b.k) + 1 || 99));
+
+        /* ---------- shared pieces ---------- */
+        const Door13 = ({ n, d, on, tone, badge, dis, icon }) => (
+          <button onClick={(e) => { if (!dis) { ripple(e); on(); } }} disabled={!!dis} className="v13-door"
+            style={{ ...glass(tone), opacity: dis ? .5 : 1 }}>
+            <span className="v13-door-ic" style={{ background: (tone || accent) + "1f", borderColor: (tone || accent) + "55" }}><Icon name={icon || "records"} size={16} color={tone || accent} /></span>
+            <span className="v13-door-tx">
+              <span className="v13-door-n" style={{ color: T.text }}>{n}{badge != null && badge !== 0 && badge !== "" ? <span className="v13-badge" style={{ background: (tone || accent) + "26", color: tone || accent }}>{badge}</span> : null}</span>
+              {d ? <span className="v13-door-d" style={{ color: T.soft }}>{d}</span> : null}
+            </span>
+            <Icon name="chev" size={15} color={T.dim} />
+          </button>
+        );
+        const Sect = ({ t, col, children, extra }) => (
+          <section className="v13-sect">
+            <div className="v13-sect-h"><span style={{ color: col || T.dim }}>{t}</span><span className="v13-rule" style={{ background: T.line }} />{extra}</div>
+            {children}
+          </section>
+        );
+        const hubOpen = (k) => { setHub(k); setModal("hub"); };
+        const statBar = (k, l) => (
+          <div key={k} className="v13-stat">
+            <div className="flex justify-between" style={{ fontSize: 12 }}><span style={{ color: T.dim }}>{l}</span><b style={{ color: c.stats[k] >= 90 ? accent : T.text, fontVariantNumeric: "tabular-nums" }}>{c.stats[k]}</b></div>
+            <div className="v13-track"><div className="sl-fill" style={{ width: cl(c.stats[k]) + "%", background: c.stats[k] >= 90 ? "linear-gradient(90deg," + accent + "," + T.gold + ")" : "linear-gradient(90deg," + accent + "88," + accent + ")" }} /></div>
+          </div>
+        );
+        const eyeWord = c.eye ? (c.eye.rinnegan ? "Rinnegan" : c.eye.tenseigan ? "Tenseigan" : c.eye.eternal ? "Eternal Mangekyo" : c.eye.mangekyo ? "Mangekyo Sharingan" : c.eye.t + (c.eye.t === "Sharingan" ? (c.eye.lv ? ", " + c.eye.lv + " tomoe" : " (dormant)") : "")) : null;
+        const powersList = [
+          c.kg ? ["Bloodline", c.kg] : null, eyeWord ? ["Eyes", eyeWord] : null,
+          c.beast ? ["Sealed inside you", c.beast.name + " (" + c.beast.tails + "-Tails) · " + BEAST_STAGES[c.beast.stage].n] : null,
+          c.sage ? ["Sage", c.sageType || "Sage Mode"] : null, c.gates > 0 ? ["Eight Gates", c.gates + " of 8 open"] : null,
+          c.curse > 0 ? ["Curse Mark", "stage " + c.curse] : null, c.summon ? ["Summoning", c.summon] : null,
+          c.specialty ? ["Specialty", (SPECIALTIES.find((s) => s.id === c.specialty) || {}).n] : null,
+        ].filter(Boolean);
+        const people = [
+          c.spouse ? ["Married to", c.spouse.name] : c.crush ? ["Seeing", c.crush.name] : null,
+          c.team && c.team.some((t) => t.alive) ? [TT(c, "squad") || "Squad", c.team.filter((t) => t.alive).map((t) => t.name.split(" ")[0]).join(", ")] : null,
+          c.sensei && c.sensei.alive ? [cap(TT(c, "sensei") || "sensei"), c.sensei.name] : null,
+          c.rival ? ["Rival", c.rival.name] : null,
+          c.akatsuki ? ["Partner", c.akatsuki.partner] : null,
+          (c.kids || []).filter((k) => !k.dead).length ? ["Children", (c.kids || []).filter((k) => !k.dead).map((k) => k.name.split(" ")[0]).join(", ")] : null,
+          (c.students || []).some((s) => s.alive) ? ["Students", c.students.filter((s) => s.alive).map((s) => s.name.split(" ")[0]).join(", ")] : null,
+        ].filter(Boolean);
+        const ws = worldStateOf(c);
+        const warLead = c.war && (["kage", "jonin", "anbu", "arbiter"].includes(warRole(c)) || (c.war && c.war.room));
+        const openCases = (c.cases || []).filter((x) => !x.done && !x.cold).length;
+        const justice = (c.rank >= 3 && !c.rogue) || (c.iron && (c.iron.seated || c.iron.crisis)) || (c.bench && c.bench.seat);
+
+        return (
+          <div className="v13" style={{ position: "relative", zIndex: 1, "--v13-base": THEME.light ? "rgba(236,229,210,.86)" : "rgba(7,9,13,.78)" }}>
+            {/* ---------- the top bar: who, when, where to go ---------- */}
+            <header className="v13-top" style={{ background: THEME.light ? "linear-gradient(180deg," + T.ink + "f2," + T.panel + "e6)" : "linear-gradient(180deg, rgba(10,12,17,.95), rgba(7,8,12,.86))", borderBottom: "1px solid " + (THEME.light ? T.line : "rgba(255,255,255,.07)") }}>
+              <div className="v13-top-in">
+                <div onClick={ownerTap} style={{ cursor: "pointer", position: "relative", flexShrink: 0 }} aria-label="Headband">
+                  <Headband size={34} slashed={c.rogue} />
+                </div>
+                <div className="v13-id">
+                  <div className="v13-id-n" style={{ color: T.text }}>{c.name}</div>
+                  <div className="v13-id-s" style={{ color: T.dim }}><span style={{ color: accent }}>{c.rankName}</span> {"·"} {placeName}</div>
+                </div>
+                <nav className="v13-tabs" aria-label="Destinations">
+                  {DESTS.map(([k, n, ic]) => (
+                    <button key={k} onClick={() => goDest(k)} aria-label={n} aria-current={dest === k ? "page" : undefined} className={"v13-tab" + (dest === k ? " is-on" : "")}
+                      style={{ color: dest === k ? T.text : T.dim, borderColor: dest === k ? accent : "transparent" }}>
+                      <Icon name={ic} size={15} color={dest === k ? accent : T.dim} /><span>{n}</span>
+                    </button>
+                  ))}
+                </nav>
+                <div className="v13-when" style={{ color: T.text }}><b>{c.year}</b><span style={{ color: accent }}>AH {"·"} {c.age}</span></div>
+                <button onClick={(e) => { ripple(e); ageUp(); }} disabled={!!bt} className="v13-adv" title={"Advance to " + AH(c.year + 1)}
+                  style={{ background: c.actions > 0 ? "rgba(255,255,255,.04)" : "linear-gradient(140deg," + accent + "," + accent + "cc)", color: c.actions > 0 ? T.text : ON(), border: "1px solid " + (c.actions > 0 ? T.line : accent), boxShadow: c.actions > 0 ? "none" : "0 0 18px " + accent + "55" }}>
+                  <Icon name="age" size={14} color={c.actions > 0 ? accent : ON()} />
+                  <span className="v13-adv-l">Advance year</span>
+                  {c.actions > 0 ? <span className="v13-adv-n" style={{ background: accent, color: ON() }}>{c.actions}</span> : null}
+                </button>
+                <button onClick={() => setModal("more")} aria-label="More" className="v13-more" style={{ color: T.soft, border: "1px solid " + T.line }}>
+                  <Icon name="menu" size={17} color={T.soft} /><span className="v13-more-l">More</span>
+                </button>
+                {owner && <button onClick={() => setModal("owner")} aria-label="Owner panel" className="v13-more" style={{ color: T.epic, border: "1px solid " + T.epic + "88" }}>{"◆"}</button>}
+              </div>
+            </header>
+
+            <main className="v13-main">
+              {/* ================= HOME ================= */}
+              {dest === "home" && (
+                <div className="v13-home sl-in">
+                  <section className="v13-hero" aria-label="Your shinobi">
+                    <div className="v13-hero-img" style={{ backgroundImage: "url(img/home.webp)" }} />
+                    <div className="v13-hero-veil" />
+                    <div className="v13-hero-in">
+                      <div className="v13-kick" style={{ color: "#f0c27a" }}>YEAR {c.year} AH {"·"} AGE {c.age} {"·"} {chap.n.toUpperCase()}</div>
+                      <h1 className="v13-hero-name" style={{ color: HERO_TXT }}>{c.name}{c.epithet ? <span className="v13-hero-ep">{c.epithet}</span> : null}</h1>
+                      <div className="v13-hero-sub" style={{ color: "#d9d4c4" }}>{c.rankName} {"·"} {placeName}{c.clan && c.clan !== "Civilian-born" ? " · " + c.clan : ""}</div>
+                      <div className="v13-chips">
+                        {chips.map(([t, col]) => <span key={t} className="v13-chip" style={{ color: col, borderColor: col + "88", background: "rgba(6,7,11,.55)" }}>{t}</span>)}
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="v13-cols">
+                    <div className="v13-col">
+                      {rv && (
+                        <section className="v13-review" style={{ ...glass(T.gold) }}>
+                          <div className="flex items-start justify-between gap-2">
+                            {kick("THE YEAR THAT WAS · " + rv.year + " AH", T.gold)}
+                            <button onClick={() => setReview(null)} aria-label="Dismiss the year in review" style={{ color: T.dim, fontSize: 16, lineHeight: 1 }} className="px-1">{"×"}</button>
+                          </div>
+                          {!rv.items.length && !rv.world.length && <p className="v13-p" style={{ color: T.soft }}>A quiet year. You are {rv.age}, and nothing in it will make the histories.</p>}
+                          {rv.items.map((x, i) => <p key={i} className="v13-rv" style={{ color: x.k === "b" ? T.bad : x.k === "e" ? T.text : T.soft, borderColor: x.k === "b" ? T.bad : x.k === "e" ? T.gold : T.line }}>{x.t}</p>)}
+                          {rv.world.length > 0 && <div className="v13-rv-w" style={{ color: T.dim }}>In the world: {rv.world.join(" ")}</div>}
+                          {rv.more > 0 && <button onClick={() => goDest("chronicle")} className="v13-link" style={{ color: accent }}>Everything else that happened ({rv.more}) {"→"}</button>}
+                        </section>
+                      )}
+                      <section className="v13-chapter" style={{ ...glass(chapter.tone), border: "1px solid " + chapter.tone + "55" }}>
+                        {kick("YOUR NEXT CHAPTER · " + chapter.kick, chapter.tone)}
+                        <h2 className="v13-ch-t" style={{ color: T.text }}>{chapter.title}</h2>
+                        {chapter.text ? <p className="v13-ch-p" style={{ color: T.soft }}>{chapter.text}</p> : null}
+                        <div className="v13-ch-acts">
+                          <Btn13 b={chapter.go} primary tone={chapter.tone} />
+                          {(chapter.alt || []).map((b, i) => <Btn13 key={i} b={b} tone={chapter.tone} />)}
+                        </div>
+                      </section>
+                      {sugs.length > 0 && (
+                        <Sect t="OR SPEND THE YEAR ON">
+                          <div className="v13-sugs">
+                            {sugs.map((s) => (
+                              <button key={s.k} onClick={(e) => { if (!s.dis) { ripple(e); s.on(); } }} disabled={!!s.dis} className="v13-sug"
+                                style={{ ...glass(), opacity: s.dis ? .5 : 1 }}>
+                                <Icon name={s.icon || "records"} size={18} color={s.dis ? T.dim : accent} />
+                                <span className="v13-sug-l" style={{ color: T.text }}>{s.l}</span>
+                                <span className="v13-sug-s" style={{ color: T.dim }}>{s.s}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </Sect>
+                      )}
+                      <section className="v13-advance" style={{ ...glass(accent) }}>
+                        <button onClick={(e) => { ripple(e); ageUp(); }} disabled={!!bt} className="v13-adv-big"
+                          style={{ background: "linear-gradient(140deg," + accent + " 0%," + skin.key2 + " 100%)", color: ON(), border: "1px solid " + accent, boxShadow: "0 10px 30px " + skin.glow }}>
+                          <span className="v13-adv-big-l">Advance to {AH(c.year + 1)}</span>
+                          <span className="v13-adv-big-s">You will be {c.age + 1}{c.actions > 0 ? " · " + c.actions + " action" + (c.actions === 1 ? "" : "s") + " still unspent" : " · the year is spent"}</span>
+                        </button>
+                        <div className="v13-notes" style={{ color: T.dim }}>When the year turns: {notes.join(", ")}.</div>
+                      </section>
+                    </div>
+
+                    <aside className="v13-col v13-col-b v13-panel" style={{ ...glass() }}>
+                      <Sect t="WHAT NEEDS YOU" extra={situ.length > pend.length + (chapter.from && situ.some((a) => a.k === chapter.from) ? 1 : 0) ? <button onClick={() => setModal("board")} className="v13-link" style={{ color: accent }}>All {situ.length}</button> : null}>
+                        {!pend.length && <p className="v13-p" style={{ color: T.dim }}>{situ.length ? "Nothing else is waiting on you." : "Nothing is waiting on you. That will not last."}</p>}
+                        {pend.map((a) => (
+                          <button key={a.k} onClick={() => goTo(a.go)} className="v13-pend" style={{ borderColor: SC[a.sev] + "55", background: SC[a.sev] + "0f" }}>
+                            <span className="v13-dot" style={{ background: SC[a.sev] }} />
+                            <span className="v13-pend-tx">
+                              <span style={{ color: T.text }}>{a.chip || cap(a.title.toLowerCase())}</span>
+                              <span style={{ color: T.dim }}>{a.status}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </Sect>
+                      <Sect t="RECENTLY" extra={<button onClick={() => goDest("chronicle")} className="v13-link" style={{ color: accent }}>Your story</button>}>
+                        {!recentImp.length && <p className="v13-p" style={{ color: T.dim }}>Your story has not started yet.</p>}
+                        {recentImp.map((e, i) => (
+                          <p key={i} className="v13-recent" style={{ color: e.k === "b" ? T.bad : e.k === "e" ? T.text : T.soft, borderColor: e.k === "b" ? T.bad + "88" : e.k === "e" ? accent : T.line }}>
+                            <span style={{ color: T.dim }}>Age {e.age}. </span>{e.txt}
+                          </p>
+                        ))}
+                      </Sect>
+                      {c.news && c.news.length > 0 && (
+                        <Sect t="THE TIMES" extra={<button onClick={() => setModal("news")} className="v13-link" style={{ color: accent }}>Read it</button>}>
+                          {(() => { const ld = c.news.find((n) => n.big) || c.news[0]; return <p className="v13-headline" style={{ color: T.text }}><span style={{ color: CAT_COL[ld.cat] || accent }}>{ld.cat} {"·"} </span>{ld.txt}</p>; })()}
+                        </Sect>
+                      )}
+                    </aside>
+                  </div>
+                </div>
+              )}
+
+              {/* ================= EXPLORE ================= */}
+              {dest === "explore" && (
+                <div className="sl-in">
+                  <section className="v13-banner">
+                    <div className="v13-banner-art">{hasVillage && !c.rogue ? <VillageArt vid={c.village} height="100%" /> : <EraArt era={c.era} height="100%" />}</div>
+                    <div className="v13-banner-veil" />
+                    <div className="v13-banner-in">
+                      <div className="v13-kick" style={{ color: "#f0c27a" }}>EXPLORE</div>
+                      <h1 className="v13-banner-t" style={{ color: HERO_TXT }}>{exploreTitle}</h1>
+                      {exploreSub ? <div className="v13-hero-sub" style={{ color: "#d9d4c4" }}>{exploreSub}</div> : null}
+                    </div>
+                  </section>
+                  <div className="v13-places">
+                    {shown.map((p) => {
+                      const btns = (p.acts || []).filter(Boolean);
+                      return (
+                        <article key={p.k} className="v13-place" style={{ ...glass() }} data-place={p.k}>
+                          <div className="v13-place-h">
+                            <span className="v13-door-ic" style={{ background: accent + "1f", borderColor: accent + "55" }}><Icon name={p.icon} size={16} color={accent} /></span>
+                            <h3 className="v13-place-n" style={{ color: T.text }}>{p.n}</h3>
+                          </div>
+                          {p.d ? <p className="v13-place-d" style={{ color: T.soft }}>{p.d}</p> : null}
+                          <div className="v13-place-acts">{btns.map((b, i) => <Btn13 key={i} b={b} primary={i === 0} />)}</div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <p className="v13-foot" style={{ color: T.dim }}>Every place shows only what you can do there. Anything else is under More.</p>
+                </div>
+              )}
+
+              {/* ================= CHARACTER ================= */}
+              {dest === "character" && (
+                <div className="sl-in v13-grid2">
+                  <section className="v13-card" style={{ ...glass(accent) }}>
+                    {kick("YOUR SHINOBI")}
+                    <h1 className="v13-ch-t" style={{ color: T.text }}>{c.name}</h1>
+                    <p className="v13-p" style={{ color: T.soft }}>{c.rankName} {"·"} {placeName}{c.clan !== "Civilian-born" ? " · " + c.clan : ""} {"·"} age {c.age}, {ageStage(c)}</p>
+                    <p className="v13-p" style={{ color: T.dim }}>{AGE_STAGES[ageStage(c)]}</p>
+                    <div className="v13-nums">
+                      {[["Power", pw, accent], ["Health", c.health, c.health > 60 ? T.good : c.health > 30 ? T.gold : T.bad], [c.rogue ? "Infamy" : "Standing", c.rogue ? c.infamy : c.standing, c.rogue ? T.blood : T.gold], ["Battle HP", maxHP(c), T.text], ["Chakra", maxCK(c), T.ck], ["Ryo", money(c.ryo), T.gold]].map(([l, v2, col]) => (
+                        <div key={l} className="v13-num"><b style={{ color: col }}>{v2}</b><span style={{ color: T.dim }}>{l}</span></div>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="v13-card" style={{ ...glass() }}>
+                    {kick("THE BODY", T.soft)}
+                    <div className="v13-stats">{STAT_KEYS.map(([k, l]) => statBar(k, l))}</div>
+                    <div className="v13-row-acts">
+                      <Btn13 b={actOf("train", "Train")} primary />
+                      <Btn13 b={actOf("jutsu", "Study a technique")} />
+                    </div>
+                  </section>
+                  <section className="v13-card" style={{ ...glass(T.epic) }}>
+                    {kick("ABILITIES", T.epic)}
+                    <div className="flex flex-wrap gap-1.5 mb-2">{(c.natures || []).map((n) => <Chip key={n} col={NC[n]}>{n}</Chip>)}{!(c.natures || []).length && <span style={{ color: T.dim, fontSize: 12 }}>No chakra nature yet.</span>}</div>
+                    {powersList.map(([l, v2]) => <div key={l} className="v13-kv"><span style={{ color: T.dim }}>{l}</span><span style={{ color: T.text }}>{v2}</span></div>)}
+                    <div className="v13-kv"><span style={{ color: T.dim }}>Techniques</span><span style={{ color: T.text }}>{c.jutsu.length} known</span></div>
+                    <div className="v13-row-acts">
+                      <Btn13 b={{ l: "Powers", on: () => setModal("powers"), dis: !hasPowers || c.actions < 1 }} primary />
+                      <Btn13 b={{ l: "Special", on: () => setModal("special") }} />
+                      {c.beast ? <Btn13 b={{ l: "The beast", on: () => setModal("beast") }} /> : null}
+                      {RITUALS.some((r2) => r2.needs(c)) ? <Btn13 b={{ l: "Rituals", on: () => setModal("rituals") }} /> : null}
+                      {otsuAvailable(c) ? <Btn13 b={{ l: "The Celestial", on: () => setModal("otsu") }} /> : null}
+                    </div>
+                  </section>
+                  <section className="v13-card" style={{ ...glass() }}>
+                    {kick("YOUR PEOPLE", T.soft)}
+                    {!people.length && <p className="v13-p" style={{ color: T.dim }}>Your parents, {c.parents.f.name} and {c.parents.m.name}. Nobody else yet.</p>}
+                    {people.map(([l, v2]) => <div key={l} className="v13-kv"><span style={{ color: T.dim }}>{l}</span><span style={{ color: T.text }}>{v2}</span></div>)}
+                    <div className="v13-row-acts">
+                      <Btn13 b={{ l: "People", on: () => setModal("people") }} primary />
+                      <Btn13 b={{ l: "Your line", on: () => { setChronTab("line"); setModal("chronicle"); } }} />
+                      <Btn13 b={{ l: "Relationships", on: () => hubOpen("people") }} />
+                    </div>
+                  </section>
+                  <section className="v13-card" style={{ ...glass(T.gold) }}>
+                    {kick("YOUR PATH", T.gold)}
+                    <p className="v13-p" style={{ color: T.soft }}>{c.way && WAYS[c.way.id] ? "You are walking " + WAYS[c.way.id].n + "." : "You have not chosen a way to walk yet."}{c.specialty ? " Your specialty: " + ((SPECIALTIES.find((s) => s.id === c.specialty) || {}).n || c.specialty) + "." : ""}</p>
+                    {c.anbu && <div className="v13-kv"><span style={{ color: T.dim }}>{TT(c, "anbuName")}</span><span style={{ color: T.text }}>{c.anbu.code}{c.anbu.commander ? ", commander" : c.anbu.captain ? ", captain" : ""}</span></div>}
+                    {c.bingo && <div className="v13-kv"><span style={{ color: T.dim }}>Bingo Book</span><span style={{ color: T.blood }}>{c.bingo}-rank{c.bounty ? ", " + money(c.bounty) : ""}</span></div>}
+                    <div className="v13-row-acts">
+                      <Btn13 b={{ l: "Ninja path", on: () => setModal("path"), dis: c.actions < 1 }} primary />
+                      {A("students") ? <Btn13 b={actOf("students", c.students ? c.studentSquad || "Your cell" : "Take students")} /> : null}
+                    </div>
+                  </section>
+                  <section className="v13-card" style={{ ...glass() }}>
+                    {kick("GEAR AND RECORD", T.soft)}
+                    <div className="v13-kv"><span style={{ color: T.dim }}>Weapon</span><span style={{ color: T.text }}>{c.gear.weapon ? c.gear.weapon.n : "none"}</span></div>
+                    <div className="v13-kv"><span style={{ color: T.dim }}>Armour</span><span style={{ color: T.text }}>{c.gear.armor ? c.gear.armor.n : "none"}</span></div>
+                    <div className="v13-kv"><span style={{ color: T.dim }}>Items</span><span style={{ color: T.text }}>{itemCount}</span></div>
+                    <div className="v13-kv"><span style={{ color: T.dim }}>Titles</span><span style={{ color: T.text }}>{c.titles.length}</span></div>
+                    <div className="v13-row-acts">
+                      <Btn13 b={{ l: "Profile and titles", on: () => setModal("profile") }} primary />
+                      <Btn13 b={{ l: "Body and work", on: () => setModal("life") }} />
+                      <Btn13 b={{ l: "Shop", on: () => setModal("shop") }} />
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {/* ================= WORLD ================= */}
+              {dest === "world" && (
+                <div className="sl-in">
+                  <section className="v13-card v13-world-h" style={{ ...glass(accent) }}>
+                    {kick("THE WORLD · " + c.year + " AH" + (ws.age ? " · " + ws.age.toUpperCase() : ""))}
+                    <h1 className="v13-ch-t" style={{ color: T.text }}>{ws.tags.slice(0, 3).map((t) => cap(t.toLowerCase())).join(" · ")}</h1>
+                    <p className="v13-p" style={{ color: T.soft }}>{eraOf(c).n}. {eraOf(c).d}</p>
+                  </section>
+                  {c.war && (
+                    <Sect t="YOUR WAR" col={T.blood}>
+                      <Door13 n={c.war.name} d={(liveFoes(c.war).length > 1 ? liveFoes(c.war).length + " fronts · " : "") + "against " + (foeSummary(c.war, 2) || c.war.enemyName) + " · momentum " + c.war.momentum + "%"} on={() => setModal("war")} tone={T.blood} icon="war" dis={c.rank < 2} />
+                      {warLead && <Door13 n="The War Room" d="Fronts, armies, plans, production, intelligence and the peace table." on={() => openWarRoom()} tone={T.blood} icon="rule" />}
+                    </Sect>
+                  )}
+                  <Sect t="WHAT IS HAPPENING">
+                    <Door13 n="The Shinobi Times" d={c.news.length ? c.news[0].txt : "Nothing has been printed yet."} on={() => setModal("news")} icon="times" badge={c.news.length || null} />
+                    <Door13 n="Everything ongoing" d={situ.length ? situ.length + " matters, worst first." : "Nothing is unfolding right now."} on={() => setModal("board")} icon="live" badge={situ.length || null} />
+                    <Door13 n="The world map" d="Villages, wars, refugees, organisations, Kage and fugitives on one map." on={() => setModal("map")} icon="globe" />
+                  </Sect>
+                  <Sect t="POWERS OF THE WORLD">
+                    <Door13 n="Politics" d="Who holds which seat, what each village wants, and who is losing patience." on={() => hubOpen("politics")} icon="rule" />
+                    <Door13 n="Society" d="Institutions, generations, succession, civil unrest and what the villages believe." on={() => hubOpen("society")} icon="clans" />
+                    <Door13 n="Lands and organisations" d="Every country, its people and prices, and every organisation with a doctrine." on={() => { setLandsTab("lands"); setModal("lands"); }} icon="path" />
+                    <Door13 n="The world at a glance" d="Disasters, refugees, crises in motion." on={() => hubOpen("world")} icon="globe" />
+                  </Sect>
+                  <Sect t={c.rogue || c.akatsuki ? "THE HUNTED AND THE HUNTERS" : "THE DANGEROUS"} col={T.blood}>
+                    <Door13 n="The Bingo Book" d="The named, the wanted, and their files." on={() => setModal("bingo")} icon="bingo" tone={T.blood} dis={c.rank < 2 && !c.rogue} />
+                    <Door13 n="The Village Roll" d="Who serves, at what rank, and who is strongest." on={() => setModal("villageroll")} icon="path" />
+                    {c.akatsuki && <Door13 n={"The Ring " + c.akatsuki.ring} d={"Inside the organisation, with " + c.akatsuki.partner + "."} on={() => setModal("akatsuki")} icon="bingo" tone={T.blood} />}
+                    {c.beast && <Door13 n="The tailed beasts" d="Who holds which beast, and what is loose." on={() => hubOpen("power")} icon="powers" tone={T.epic} />}
+                  </Sect>
+                  {justice && (
+                    <Sect t="JUSTICE" col={IRON}>
+                      <Door13 n="Law and the Iron Scales" d={c.iron && c.iron.seated ? "Your court at Tetsu, the Vault and the standing orders." : "The court at Tetsu, the Iron Vault and the standing orders."} on={() => hubOpen("law")} icon="rule" tone={IRON} />
+                      {A("bench") && <Door13 n="The Tribunal" d={A("bench").sub} on={A("bench").onClick} icon="rule" dis={A("bench").disabled} />}
+                    </Sect>
+                  )}
+                </div>
+              )}
+
+              {/* ================= CHRONICLE ================= */}
+              {dest === "chronicle" && (
+                <div className="sl-in v13-cols">
+                  <div className="v13-col">
+                    <Sect t="YOUR STORY SO FAR" extra={<button onClick={() => setModal("history")} className="v13-link" style={{ color: accent }}>Your whole life</button>}>
+                      <div className="v13-feed sl-scroll" style={{ ...glass(skin.key) }}>
+                        <div style={{ position: "absolute", left: 15, top: 12, bottom: 12, width: 1, background: "linear-gradient(180deg,transparent," + T.line + " 12%," + T.line + " 88%,transparent)" }} />
+                        <div style={{ position: "relative" }}>{recent.length ? feed(recent) : <p className="v13-p" style={{ color: T.dim }}>Nothing has happened yet.</p>}</div>
+                      </div>
+                    </Sect>
+                  </div>
+                  <aside className="v13-col v13-col-b v13-panel" style={{ ...glass() }}>
+                    <Sect t="THE RECORD">
+                      <Door13 n="The Shinobi Chronicle" d={(c.chron || []).length + " entries, by year, era, war, village, person and clan."} on={() => { setChronTab("chron"); setModal("chronicle"); }} icon="records" tone={T.gold} />
+                      <Door13 n="The story of this save" d={saveStory(c).title + "."} on={() => setModal("story")} icon="scroll" />
+                      <Door13 n="Your line" d="Your family across the generations." on={() => { setChronTab("line"); setModal("chronicle"); }} icon="people" />
+                      <Door13 n="The Histories" d="The ages, the wars, the seats and the houses." on={() => setModal("histories")} icon="records" />
+                      <Door13 n="Kage lines" d="Every seat, and who held it." on={() => setModal("records")} icon="rule" />
+                      <Door13 n="Rumours, secrets and investigations" d={openCases ? openCases + " open case" + (openCases === 1 ? "" : "s") + "." : "What people say, and what you know."} on={() => hubOpen("records")} icon="bingo" badge={openCases || null} />
+                      <Door13 n="The Times archive" d={c.news.length + " stories."} on={() => setModal("news")} icon="times" />
+                      <Door13 n={"What changed in " + CHANGELOG[0].v} d={CHANGELOG[0].n + "."} on={() => setModal("changelog")} icon="scroll" />
+                    </Sect>
+                  </aside>
+                </div>
+              )}
+            </main>
+
+            {/* ---------- phones: the five destinations within thumb reach ---------- */}
+            <nav className="v13-bottom" aria-label="Destinations" style={{ background: THEME.light ? T.ink + "f2" : "rgba(7,8,12,.94)", borderTop: "1px solid " + (THEME.light ? T.line : "rgba(255,255,255,.08)") }}>
+              {DESTS.map(([k, n, ic]) => (
+                <button key={k} onClick={() => goDest(k)} aria-label={n} aria-current={dest === k ? "page" : undefined} className={"v13-bt" + (dest === k ? " is-on" : "")} style={{ color: dest === k ? accent : T.dim }}>
+                  <Icon name={ic} size={19} color={dest === k ? accent : T.dim} /><span>{n}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        );
+      })()}
 
       {/* ---------- THE SCROLL ----------
            A different interface, not a different coat of paint. No dossier card,
@@ -27574,9 +28300,9 @@ export default function ShinobiLife() {
         const grs = grudgesOf(c).filter((g) => !g.settled);
         const ws = worldStateOf(c);
         return (
-          <Modal wide title="THE WORLD, ARRANGED" accent={G} onClose={() => setModal(null)}>
+          <Modal wide title={ui === "life" ? ({ world: "THE WORLD", character: "YOUR LIFE AND PEOPLE", chronicle: "THE RECORD" }[HUB_GROUP[hub]] || "THE WORLD, ARRANGED") : "THE WORLD, ARRANGED"} accent={G} onClose={() => setModal(null)}>
             <div className="flex gap-1.5 mb-3 overflow-x-auto sl-quick">
-              {V11_HUBS.map(([k2, n2, ic]) => (
+              {V11_HUBS.filter(([k2]) => ui !== "life" || HUB_GROUP[k2] === HUB_GROUP[hub]).map(([k2, n2, ic]) => (
                 <button key={k2} onClick={() => setHub(k2)} style={{ flexShrink: 0, background: hub === k2 ? G : T.panel2, color: hub === k2 ? ON() : T.soft, border: "1px solid " + (hub === k2 ? G : T.line), borderRadius: 99, display: "flex", alignItems: "center", gap: 6 }} className="px-3 py-1.5 text-xs font-semibold">
                   <Icon name={ic} size={12} color={hub === k2 ? ON() : T.dim} />{n2}
                 </button>
@@ -29135,13 +29861,14 @@ export default function ShinobiLife() {
           <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
             Not a colour scheme — a different build of the game's screen. The Scroll throws away the dossier header, the labelled tiles and the bottom dock, and lays the whole life out as one column with the actions as a grid of seals and the year turned from a disc that floats over the page.
           </div>
-          {[["dossier", "The Dossier", "The original. A sticky header with your vitals, big labelled tiles two across, a four-slot dock along the bottom, and side columns for the body and the paper."],
+          {[["life", "A Life Worth Living", "The V13 interface. Five destinations (Home, Explore, Character, World, Chronicle), one next chapter at a time, and everything else one press away under More."],
+            ["dossier", "The Dossier", "The original. A sticky header with your vitals, big labelled tiles two across, a four-slot dock along the bottom, and side columns for the body and the paper."],
             ["scroll", "The Scroll", "One column, no cards. Vitals as three rings around your age, every action as a square seal read by its mark, the life running unboxed underneath, and a floating seal for the year."]].map(([id, n2, d2]) => (
             <Row key={id} label={n2} sub={d2} right={ui === id ? "In use" : "Use"} onClick={() => setUi(id)} disabled={ui === id} tone={ui === id ? accent : null} />
           ))}
 
           <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mb-2">LAYOUT</div>
-          {ui === "scroll" && <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>The Scroll builds its own column, so these only take effect back on The Dossier.</div>}
+          {ui !== "dossier" && <div style={{ color: T.dim, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>{ui === "scroll" ? "The Scroll builds its own column" : "A Life Worth Living lays itself out"}, so these only take effect back on The Dossier.</div>}
           {[["stacked", "Stacked", "One wide column down the middle, big tiles two across, everything else beneath it. The roomiest reading."],
             ["classic", "Classic", "Body and record on the left, your life in the middle, the paper down the right. Roomy tiles, tall feed."],
             ["columns", "Three columns", "The same three columns, slightly tighter, with both rails sticky so they stay with you as you scroll."],
@@ -31781,6 +32508,77 @@ export default function ShinobiLife() {
                         right="Help" onClick={() => folkUi("help", f.id)} disabled={c.actions < 1} tone={r.min >= 3 ? T.gold : accent} />
                     </div>
                   )}
+                </div>
+              );
+            })}
+          </Modal>
+        );
+      })()}
+
+      {/* ---------- MORE: every screen in the game, in one organised place ---------- */}
+      {modal === "more" && (() => {
+        const seen = new Set();
+        const E = (key, l, s, on, extra) => { if (seen.has(key)) return null; seen.add(key); return { key, l, s, on, ...(extra || {}) }; };
+        const fromA = (a) => (a ? E("act:" + a.id, a.label, a.sub, a.onClick, { dis: a.disabled, tone: a.tone }) : null);
+        const go = (d) => () => { setModal(null); setDest(d); if (ui !== "life") setUi("life"); };
+        const groups = [
+          ["THIS YEAR", acts.filter((a) => a.grp !== "know").map(fromA).concat([
+            !c.rogue && c.rank >= 2 ? E("patrol", "Walk the border patrol", "Three stops along the line", () => patrolUi("start"), { dis: c.actions < 1 }) : null,
+            c.age >= 6 ? E("folk", c.rogue ? "The people you left behind" : "Walk through " + folkVillageName(c), "The people who live there", () => folkUi("open")) : null,
+            c.rogue || c.akatsuki ? E("strike", "Strike at someone", "A person, their people, a group or a village", () => { setStrikeSel(null); setModal("strike"); }, { dis: c.actions < 1 }) : null,
+            E("scrolls", "The scroll broker", "Buy exactly the technique you want", () => setModal("scrolls")),
+            c.broadcast && !c.broadcast.answered ? E("broadcast", "Happening now: " + c.broadcast.targetName, "Being broadcast live", () => setModal("broadcast"), { tone: T.blood }) : null,
+          ])],
+          ["YOU", [
+            E("profile", "Profile and titles", "Missions, battles, titles and epithets", () => setModal("profile")),
+            E("people", "People", "Everyone you know, and how they feel about it", () => setModal("people")),
+            E("life", "Body and work", "Injuries, career and investigations", () => setModal("life")),
+            E("special", "Special", "Everything you can do that most people cannot", () => setModal("special")),
+            c.beast ? E("beast", "The beast", "What is sealed inside you", () => setModal("beast"), { tone: T.epic }) : null,
+            RITUALS.some((r2) => r2.needs(c)) ? E("rituals", "Rituals", "Rites, not attacks", () => setModal("rituals"), { tone: T.blood }) : null,
+            otsuAvailable(c) ? E("otsu", "The Celestial", "What came down from the moon", () => setModal("otsu"), { tone: T.epic }) : null,
+            E("hub:life", "Your life, feuds and beliefs", "Your line, feuds and what you believe", () => { setHub("life"); setModal("hub"); }),
+          ]],
+          ["THE WORLD", acts.filter((a) => a.grp === "know").map(fromA).concat([
+            E("news", "The Shinobi Times", c.news.length + " stories", () => setModal("news")),
+            E("board", "Everything ongoing", situationOf(c).length + " matters, worst first", () => setModal("board")),
+            E("map", "The world map", "Every layer of the world on one map", () => setModal("map")),
+            E("lands", "The lands", "Countries, people and prices", () => { setLandsTab("lands"); setModal("lands"); }),
+            E("orgs", "Organisations", "Doctrines, rivals and founders", () => { setLandsTab("orgs"); setModal("lands"); }),
+            c.war ? E("warroom", "The War Room", c.war.name, () => openWarRoom(), { tone: T.blood }) : null,
+          ]).concat(V11_HUBS.filter(([k]) => HUB_GROUP[k] === "world").map(([k, n]) => E("hub:" + k, n, "Hub: " + n.toLowerCase(), () => { setHub(k); setModal("hub"); })))],
+          ["HISTORY", [
+            E("chronicle", "The Shinobi Chronicle", (c.chron || []).length + " entries", () => { setChronTab("chron"); setModal("chronicle"); }),
+            E("story", "The story of this save", "Years, generations, wars", () => setModal("story")),
+            E("history", "Your whole life", "Every line of your record", () => setModal("history")),
+            E("histories", "The Histories", "The ages, the wars, the seats and the houses", () => setModal("histories")),
+            E("hub:records", "Rumours, secrets and investigations", "What people say and what you know", () => { setHub("records"); setModal("hub"); }),
+          ]],
+          ["SETTINGS", [
+            E("look", "Appearance", "Interface, theme, background and music", () => setModal("look")),
+            E("changelog", "Changelog", "Version " + CHANGELOG[0].v + ", " + CHANGELOG[0].n, () => setModal("changelog")),
+            owner ? E("owner", "Owner panel", "", () => setModal("owner"), { tone: T.epic }) : null,
+          ]],
+        ];
+        return (
+          <Modal wide title="EVERYTHING" accent={accent} onClose={() => setModal(null)}>
+            <p style={{ color: T.soft, fontFamily: SERIF }} className="text-sm mb-3">
+              Every screen in the game, in one place. The five destinations put whatever matters to your life first; this is all of it.
+            </p>
+            <div className="flex gap-1.5 mb-3 flex-wrap sl-more-dests">
+              {DESTS.map(([k, n, ic]) => (
+                <button key={k} onClick={go(k)} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.text, borderRadius: 99, display: "flex", alignItems: "center", gap: 6 }} className="px-3 py-1.5 text-xs font-semibold">
+                  <Icon name={ic} size={13} color={accent} />{n}
+                </button>
+              ))}
+            </div>
+            {groups.map(([t, list]) => {
+              const L2 = list.filter(Boolean);
+              if (!L2.length) return null;
+              return (
+                <div key={t} className="sl-more-group">
+                  <div style={{ color: T.dim, letterSpacing: ".22em", fontSize: 9.5 }} className="font-bold mt-4 mb-2">{t}</div>
+                  {L2.map((e) => <Row key={e.key} label={e.l} sub={e.s} onClick={e.on} disabled={!!e.dis} tone={e.tone} />)}
                 </div>
               );
             })}

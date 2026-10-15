@@ -1,13 +1,14 @@
 {
   "name": "shinobi-life",
-  "version": "9.0.0",
+  "version": "13.0.0",
   "private": true,
   "description": "Original Naruto-inspired BitLife-style shinobi life simulator.",
   "type": "module",
   "scripts": {
     "build:css": "tailwindcss -i ./src/index.css -o ./style.css --minify",
     "build:js": "node esbuild.config.js",
-    "build": "npm run build:css && npm run build:js"
+    "build": "npm run build:css && npm run build:js",
+    "test": "node tests/run.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",

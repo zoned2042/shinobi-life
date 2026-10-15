@@ -10,6 +10,13 @@ character creation, the calendar/world simulation, clans and kage lines,
 missions and crime, the hand-seal combat engine, training, jutsu, tailed
 beasts, wars, and more.
 
+Since V13 the screen is organised into five destinations: **Home** (who you
+are, your next chapter, what needs you, advancing the year), **Explore**
+(places and what you can do in each), **Character**, **World** and
+**Chronicle**, with every other screen under **More**. The older Dossier and
+Scroll interfaces are still available under Appearance. See `docs/V13.md`
+for the interface map and the plan.
+
 ## Running it
 
 The game ships pre-built as static files, so you can just **open
@@ -26,17 +33,33 @@ This regenerates `bundle.js` (the game, bundled with esbuild) and
 `style.css` (Tailwind, compiled to only the classes actually used). Both are
 committed so the built game always works standalone.
 
+## Tests
+
+```
+npm test                 # every suite, two at a time
+node tests/run.cjs v13   # just one
+```
+
+The suites drive the built game in Chromium with Playwright (installed
+globally here; `npm i -g playwright` elsewhere, and point `SL_CHROMIUM` at a
+Chromium binary if it is not at `/opt/pw-browsers/chromium`). The runner
+serves the game itself, so nothing else needs to be running.
+
 ## Project structure
 
 ```
 index.html          static entry point — open this to play
 bundle.js            built game bundle (React + the game, IIFE, not a module)
 style.css            built Tailwind stylesheet
+img/home.webp        the Home screen art
+audio/               music
 src/ShinobiLife.jsx  the game itself
 src/main.jsx         mounts <ShinobiLife /> into #root
 src/index.css        Tailwind entry (source for style.css)
 esbuild.config.js    bundles src/main.jsx -> bundle.js
 tailwind.config.js   scans src/**/*.jsx for classes used
+tests/               Playwright suites (npm test) and their shared harness
+docs/V13.md          the V13 interface map and migration plan
 ```
 
 ## Combat
