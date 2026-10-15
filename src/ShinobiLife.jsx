@@ -6805,7 +6805,7 @@ function v111Tick(c, L) {
 
 /* one beaten country, one term. used by the settlement after a won war and by the peace table in the War Room */
 function settleFoe(c, L, f, kind) {
-  if (!c.world) c.world = worldInit(c);
+  worldEnsure(c);
   if (!c.pacts) c.pacts = {};
   if (!c.vdamage) c.vdamage = {};
   const stab = c.world.stability;
@@ -10131,7 +10131,7 @@ function buildWar(c, L, opts) {
   if (declaredGreat) {
     c.greatWars = (c.greatWars || 0) + 1;
     const prior = (c.world && c.world.greatNo) || countGreatWarsBefore(c);
-    c.world = c.world || worldInit(c);
+    worldEnsure(c);
     c.world.greatNo = prior + 1;
   }
   const side = ERA.hideVillages ? "the " + c.clan + " clan" : c.founded ? c.founded.name : (VILLAGES.find((v) => v.id === c.village) || {}).name || "your village";
@@ -10221,7 +10221,7 @@ function beginWar(c, L, forcedEnemy, great, withMe) {
     if (clanTargets.length) { beginClanWar(c, L, clanTargets); return; }
   }
   const def = WAR_DEFS[ERA.id] || WAR_DEFS.third;
-  if (!c.world) c.world = worldInit(c);
+  worldEnsure(c);
   const canon = greatWarAt(c.year);
   if (def.fixed && !targets.length) {
     buildWar(c, L, {
@@ -10681,6 +10681,17 @@ function worldInit(c) {
     stability: VILLAGES.reduce((a, v) => { a[v.id] = rr(50, 78); return a; }, {}),
   };
 }
+/* some systems start c.world as an empty object if they run before the first year does.
+   A world found half-built is finished here instead of trusted, so the year tick never
+   meets one without its wars, hosts or stability (and a save stuck that way mends itself). */
+function worldEnsure(c) {
+  if (!c.world) c.world = worldInit(c);
+  else if (!c.world.wars || !c.world.hosts || !c.world.stability) {
+    const base = worldInit(c);
+    Object.keys(base).forEach((k) => { if (c.world[k] == null) c.world[k] = base[k]; });
+  }
+  return c.world;
+}
 
 /* nobody outside a seal knows what these things are called. until a host says it out loud,
    or you carry one yourself, the world only knows how many tails it has. */
@@ -10866,7 +10877,7 @@ function clanWarTick(c, L) {
   }
 }
 function worldTick(c, L) {
-  if (!c.world) c.world = worldInit(c);
+  worldEnsure(c);
   const w = c.world;
   const others = existing(c);
   applyHistoricDeaths(c, L);
@@ -11297,6 +11308,8 @@ const CHANGELOG = [
     "The world answers what you did, years later, and every answer is tied in the Chronicle to the deed that caused it. Take the seat, and five years on the village says whether it is steadier or restless (your standing moves with it); twelve years on, the children born that year start at the Academy never having known another Kage. Win a battle big enough for the front page, and ten years on there is a memorial on the field with your name on it. Leave your village, and two years on it strikes your name from the roll; ten years on it tells its own version of why. The festival day held in your name is still kept ten years on. Teach the kid who follows you around, and their graduation, chunin and jonin are recorded as your doing; six years after they make jonin they have a genin cell of their own",
     "Because of You, on Home: the latest things that happened because of you, each with the deed behind it and a tap through to the full record, and how many things you set going are still on their way. The year in review has its own part for it, And Because of What You Did, and tells each consequence once. The Chronicle has What You Set in Motion: each turning point with what came of it",
     "It carries on in the family. What a parent set going lands in the life of the child who plays on, marked as your mother's or your father's doing",
+    "Fixed a bug that could stop the year from turning for good. A few of the rarer systems could start the wider world as an empty shell if they ran before its first year, and the yearly update then failed on it every year after. A half-built world is now completed when it is found, which also mends saves that were stuck this way",
+    "Fixed: the council's answer to a jonin nomination no longer begins \"The the council\"",
     "Two new test suites: one covers each of these pieces; the other plays a whole life through the new interface, from a child training on the card through graduation, missions, the Chunin Exams, jonin, marriage and a child, a field battle won, the seat, the memorial and the verdict on your rule years later, old age and death, to the child playing on into what their parent set going",
   ] },
   { v: "13.0", n: "A Life Worth Living", items: [
@@ -18053,7 +18066,7 @@ export default function ShinobiLife() {
         P(L, "You lost your temper and the seal thinned. People saw the red chakra.", "b");
       }
       const ERA = eraOf(c);
-      if (!c.world) c.world = worldInit(c);
+      worldEnsure(c);
       worldTick(c, L);
       /* the jonin roll is finite — a place on it opens when somebody leaves it */
       if (!c.joninVacancy && c.rank === 3 && c.age >= 13 && roll(c.war ? 45 : 26)) {
@@ -18474,7 +18487,7 @@ export default function ShinobiLife() {
       const st = c.settlement;
       if (!st || st.taken) return;
       st.taken = true;
-      if (!c.world) c.world = worldInit(c);
+      worldEnsure(c);
       if (!c.pacts) c.pacts = {};
       const names = joinList(st.foes.map((f) => f.name));
       st.foes.forEach((f) => settleFoe(c, L, f, kind));
@@ -21208,7 +21221,7 @@ export default function ShinobiLife() {
         const agenda = (arg && arg.agenda) || "alliance";
         const invited = (arg && arg.invited) || [];
         if (!invited.length) { P(L, "You called a summit and invited nobody to it.", "b"); return; }
-        if (!c.world) c.world = worldInit(c);
+        worldEnsure(c);
         if (!c.pacts) c.pacts = {};
         const nameOf = (k) => clanMode ? "the " + k + " clan" : ((VILLAGES.find((v) => v.id === k) || {}).name || k);
         const host = c.founded ? c.founded.name : clanMode ? "the " + c.clan + " clan" : (VILLAGES.find((v) => v.id === c.village) || {}).name;
@@ -21307,7 +21320,7 @@ export default function ShinobiLife() {
       const now = cur + gain;
       if (now >= 100) {
         c.mastery[l.j] = 100;
-        if (!c.world) c.world = worldInit(c);
+        worldEnsure(c);
         if (!c.world.firstUser) { c.world.firstUser = {}; c.world.known = {}; }
         const org = JUTSU_ORIGIN[l.j];
         const beatenToIt = org && c.year >= org.year;

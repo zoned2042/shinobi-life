@@ -16,7 +16,7 @@ async function open(opts = {}) {
   const page = await browser.newPage({ viewport: opts.viewport || { width: 1200, height: 950 } });
   page.setDefaultTimeout(15000);
   const errs = [];
-  page.on('pageerror', (e) => errs.push('PAGEERR: ' + e.message));
+  page.on('pageerror', (e) => errs.push('PAGEERR: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 4).map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '')).join(' < ')));
   page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('404')) errs.push('CONSOLE: ' + m.text().slice(0, 200)); });
   await page.goto(URL, { waitUntil: 'load' });
   /* prefs: quiet visuals so tests are fast. opts.ui pins an interface; leaving it out

@@ -144,5 +144,12 @@ const { open } = require('./lib/harness.cjs');
   const grad = (sv.c.chron || []).find((x) => x.cause === (aroot && aroot.id) && /taught them/.test(x.txt));
   T('A2 when they graduate, the record ties it to you', !!grad, grad && grad.txt);
 
+  /* ---------- a world something else started half-built ---------- */
+  await inject("const c=s.c; c.dilemma=null; c.world={};");
+  sv = await save(); const y0 = sv.c.year;
+  await ageOnce(); await settle();
+  sv = await save();
+  T('R1 a world found half-built is finished and the year still turns', sv.c.year > y0 && Array.isArray(sv.c.world.wars) && !!sv.c.world.hosts && !!sv.c.world.stability, { y0, y: sv.c.year, keys: Object.keys(sv.c.world || {}).slice(0, 8) });
+
   await H.done();
 })();
