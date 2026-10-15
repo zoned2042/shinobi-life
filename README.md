@@ -14,8 +14,10 @@ Since V13 the screen is organised into five destinations: **Home** (who you
 are, your next chapter, what needs you, advancing the year), **Explore**
 (places and what you can do in each), **Character**, **World** and
 **Chronicle**, with every other screen under **More**. The older Dossier and
-Scroll interfaces are still available under Appearance. See `docs/V13.md`
-for the interface map and the plan.
+Scroll interfaces are still available under Appearance. Since V13.1 most
+places can be used right on their card, and the world comes back to what you
+did years later, tied in the Chronicle to the deed that caused it. See
+`docs/V13.md` for the interface map and the plan.
 
 ## Running it
 
@@ -38,6 +40,7 @@ committed so the built game always works standalone.
 ```
 npm test                 # every suite, two at a time
 node tests/run.cjs v13   # just one
+node tests/run.cjs lifefull   # one whole life, start to finish
 ```
 
 The suites drive the built game in Chromium with Playwright (installed

@@ -1,7 +1,8 @@
 /* npm test: serve the built game, run every suite in tests/, report.
    node tests/run.cjs              all suites, two at a time
    node tests/run.cjs v13 strike   just those
-   LANES=1 node tests/run.cjs      one at a time (slower, steadier) */
+   LANES=1 node tests/run.cjs      one at a time (slower, steadier)
+   SL_LOGS=dir node tests/run.cjs  also keep each suite's full output in dir */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +32,7 @@ server.listen(0, '127.0.0.1', async () => {
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { out += d; });
     p.on('close', (code) => {
+      if (process.env.SL_LOGS) { try { fs.mkdirSync(process.env.SL_LOGS, { recursive: true }); fs.writeFileSync(path.join(process.env.SL_LOGS, s + '.log'), out); } catch (e) { /* the log is a convenience */ } }
       const fails = out.split('\n').filter((l) => /: FAIL/.test(l));
       const passes = (out.match(/: PASS/g) || []).length;
       const errs = (out.match(/^ERRORS (\d+)/m) || [])[1];

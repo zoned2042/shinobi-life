@@ -102,9 +102,9 @@ const { open } = require('./lib/harness.cjs');
   T('W3 the chapter button opens the real field battle', /FIELD COMMAND · KANNABI BRIDGE/.test(await modalTxt()));
   await clickOv('^Fall back'); await wait(250); await clickOv('^Back to the war$'); await wait(250); await clear();
   await dest('World'); m = await home();
-  T('W4 World shows your war and, for a jonin, the War Room', /YOUR WAR/.test(m) && /The War Room/.test(m), m.slice(0, 260));
+  T('W4 World shows your war, with the War Room in the same place', /YOUR WAR/.test(m) && /The war against Iwagakure/.test(m) && /the War Room, in one place/.test(m), m.slice(0, 260));
   await press('^More$'); await wait(250);
-  T('W5 More adds the War Room while there is a war', /The War Room/.test(await modalTxt()));
+  T('W5 More adds the war while there is one', /The war against Iwagakure/.test(await modalTxt()));
   await clear();
 
   /* ---------- a spent year points at the one thing left ---------- */
@@ -117,8 +117,8 @@ const { open } = require('./lib/harness.cjs');
   await inject("const c=s.c; c.rank=3; c.rankName='Chunin'; c.actions=4; c.cheats.infActions=true; c.cheats.oneShot=true; c.cheats.god=true; c.dilemma=null; c.examCooldown=1;");
   await dest('Explore');
   sv = await save(); const ms0 = sv.c.missions || 0;
-  await page.evaluate(() => { const card = document.querySelector('.v13-place[data-place="desk"]'); const b = card && [...card.querySelectorAll('button')].find((x) => /^Missions$/.test(x.innerText.trim())); if (b) b.click(); }); await wait(300);
-  await clickOv('^C-rank mission'); await wait(400);
+  await page.evaluate(() => { const card = document.querySelector('.v13-place[data-place="desk"]'); const b = card && [...card.querySelectorAll('button')].find((x) => /^See the board$/.test(x.innerText.trim())); if (b) b.click(); }); await wait(300);
+  await page.evaluate(() => { const card = document.querySelector('.v13-place[data-place="desk"]'); const b = card && [...card.querySelectorAll('button')].find((x) => /^C-rank mission/.test(x.innerText.trim()) && !x.disabled); if (b) b.click(); }); await wait(400);
   await clickOv('check · you have'); await wait(500);
   const fought = await fightTo('YOUR NEXT CHAPTER|EXPLORE');
   sv = await save();
