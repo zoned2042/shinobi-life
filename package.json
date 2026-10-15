@@ -1,6 +1,6 @@
 {
   "name": "shinobi-life",
-  "version": "13.1.0",
+  "version": "13.2.0",
   "private": true,
   "description": "Original Naruto-inspired BitLife-style shinobi life simulator.",
   "type": "module",

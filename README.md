@@ -55,6 +55,10 @@ index.html          static entry point — open this to play
 bundle.js            built game bundle (React + the game, IIFE, not a module)
 style.css            built Tailwind stylesheet
 img/home.webp        the Home screen art
+img/road/            The Road's place art
+img/faces/           portraits, by role: <role>-<n>.webp or <role>-m|f-<n>.webp
+                     (roles: wanted, squad, sensei, family, apprentice, street);
+                     add more files and the game uses them, no code changes
 audio/               music
 src/ShinobiLife.jsx  the game itself
 src/main.jsx         mounts <ShinobiLife /> into #root

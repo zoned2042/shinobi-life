@@ -151,8 +151,8 @@ const { open } = require('./lib/harness.cjs');
 
   /* ---------- death ---------- */
   let t = '';
-  for (let k = 0; k < 6 && !/THE MISSION ENDS/.test(t); k++) {
-    await inject("const c=s.c; " + calm + " c.cheats.god=false; c.health=0; c.actions=0;");
+  for (let k = 0; k < 10 && !/THE MISSION ENDS/.test(t); k++) {
+    await inject("const c=s.c; " + calm + " c.cheats.god=false; c.health=0; c.age=Math.max(c.age,90); c.year=(c.birthYear||0)+c.age; c.actions=0;");
     await ageOnce(); await wait(900);
     t = await bodyTxt();
   }

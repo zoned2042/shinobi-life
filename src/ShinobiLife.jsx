@@ -6599,6 +6599,8 @@ function repWord(c) {
 /* the five places the whole game now lives */
 const DESTS = [["home", "Home", "home"], ["explore", "Explore", "compass"], ["character", "Character", "profile"], ["world", "World", "globe"], ["chronicle", "Chronicle", "scroll"]];
 /* which destination each of the old hubs belongs to, so a hub opened from World only shows World's tabs */
+/* a missing-nin's Explore is The Road */
+const destsOf = (c) => DESTS.map((d) => (d[0] === "explore" && c && c.rogue ? ["explore", "The Road", "bingo"] : d));
 const HUB_GROUP = { life: "character", people: "character", records: "chronicle", world: "world", politics: "world", society: "world", law: "world", power: "world" };
 /* whether you have a real part in running the war, not only fighting in it */
 const warLeadOf = (c) => !!c.war && ["kage", "jonin", "anbu", "arbiter"].includes(warRole(c));
@@ -6643,6 +6645,7 @@ function milestoneTick(c, L) {
   if (!M || M.name !== c.name) { c.v13m = { name: c.name, rogue: !!c.rogue, seat, vid: c.village }; return; }
   if (c.rogue && !M.rogue && M.vid && villageExists(c, M.vid) && c.canonId !== "madara") {
     const root = chron(c, { y: c.year - 1, cat: "villages", line: c.name, big: true, txt: c.name + " left " + vName2(M.vid) + " and did not come back." });
+    M.leftRoot = root;
     /* the root is dated to the year that just ended, so these land two and ten years after it */
     echo(c, "leftBehind", 1, { root, name: c.name, vid: M.vid });
     echo(c, "leftLong", 9, { root, name: c.name, vid: M.vid });
@@ -6710,6 +6713,142 @@ Object.assign(ECHOES, {
     echoSay(c, L, e, e.ap + " has a genin cell of their own now. You caught them teaching one of the kids your old throwing grip.", e.ap + " has a genin cell of their own now. They tell their students about your " + (relOf(c, e.name) || "family") + ".", "e");
   },
 });
+/* ---------- The Road: a missing-nin's life, and the way back ----------
+   One place for everything a missing-nin does, the people left behind, and three ways home
+   that move with what you do. Every number on the screen is one of these. */
+const ROAD_TOWNS = ["Tanzaku Town", "Otafuku Gai", "Shukuba Town", "the harbour at Degarashi"];
+const ROAD_FAVOURS = 5;
+const ROAD_CAUSE = 3;
+function roadOf(c) {
+  if (!c.road) c.road = { favours: 0, favourYear: null, paid: 0, cause: 0, causeYear: null, word: {}, fam: 55 };
+  if (!c.road.word) c.road.word = {};
+  return c.road;
+}
+const roadHome = (c) => (c.v13m && c.v13m.vid) || c.village;
+/* the towns that know your face now, worst first, and the one you still work out of */
+const roadClosed = (c) => ROAD_TOWNS.slice(0, (c.infamy || 0) >= 75 ? 3 : (c.infamy || 0) >= 50 ? 2 : (c.infamy || 0) >= 25 ? 1 : 0);
+const roadTown = (c) => ROAD_TOWNS[roadClosed(c).length];
+/* the debt is your bounty: the price on you, paid back into the treasury of the village that set it */
+const roadOwed = (c) => Math.max(100000, Math.round((c.bounty || 0) / 1000) * 1000);
+function roadHomeAtWar(c) {
+  const v = roadHome(c); const W = c.world || {};
+  return !!greatWarAt(c.year) || (W.wars || []).some((w) => w.years > 0 && (w.a === v || w.b === v));
+}
+function roadPaths(c) {
+  const R = c.road || {}; const owed = roadOwed(c);
+  return [
+    { k: "pardon", n: "Pardon", have: R.favours || 0, need: ROAD_FAVOURS, f: Math.min(1, (R.favours || 0) / ROAD_FAVOURS), what: "the favours" },
+    { k: "debt", n: "Debt", have: Math.min(R.paid || 0, owed), need: owed, money: true, f: Math.min(1, (R.paid || 0) / owed), what: "the debt" },
+    { k: "cause", n: "A greater cause", have: R.cause || 0, need: ROAD_CAUSE, f: Math.min(1, (R.cause || 0) / ROAD_CAUSE), what: "the war" },
+  ];
+}
+const roadBest = (c) => roadPaths(c).reduce((a, p) => (p.f > a.f ? p : a));
+/* what the village says to an envoy: long odds alone, better the further down any road home you are, certain at the end of one */
+const pardonOdds = (c) => (roadBest(c).f >= 1 ? 100 : cl(25 - (c.infamy || 0) * 0.35 + c.stats.int * 0.2 + roadBest(c).f * 55, 2, 90));
+const pardonWord = (o) => (o >= 100 ? "They are ready to take you back." : o >= 70 ? "They are likely to say yes." : o >= 45 ? "It could go either way." : o >= 20 ? "It could go either way, mostly no." : "They would almost certainly say no.");
+function roadBlocked(c) {
+  if (c.akatsuki) return "You would have to leave the Akatsuki first.";
+  if (c.canonId === "madara") return "This story does not go home.";
+  if (!villageExists(c, roadHome(c))) return "There is no village left to go home to.";
+  return null;
+}
+/* how likely somebody sees you near home, in words, from your notoriety and the state of the border */
+const roadSeen = (c) => cl(12 + (c.infamy || 0) * 0.4 + (roadHomeAtWar(c) ? 15 : 0), 5, 80);
+const roadSeenWord = (c) => { const s = roadSeen(c); return s < 25 ? "unlikely to be seen" : s < 50 ? "they may notice you" : "they are watching the road"; };
+/* each action: can it happen, does it cost the year an action, and what it does */
+const ROAD_ACTS = {
+  word: {
+    cost: false,
+    can: (c, who) => roadOf(c).word[who] !== c.year,
+    go: (c, L, who) => {
+      const R = roadOf(c); R.word[who] = c.year;
+      if (who === "squad") { (c.team || []).forEach((t) => { if (t.alive) t.rel = cl(t.rel + rr(3, 7)); }); P(L, "You sent word to your old squad through a courier who owes you. It said you were alive, and nothing else. That was the point.", "n"); }
+      if (who === "family") { R.fam = cl(R.fam + rr(4, 8)); P(L, "You sent word home. No return address. Somebody will read it twice.", "n"); }
+      if (who === "apprentice") {
+        const f = c.folk && c.folk.list.find((x) => x.role === "apprentice" && x.alive !== false);
+        if (f) { f.bond = cl(f.bond + rr(3, 7)); P(L, "You left a note where " + f.name + " trains: three lines on their footwork. They will know who it is from.", "n"); }
+      }
+    },
+  },
+  sensei: {
+    cost: true,
+    can: (c) => !!(c.sensei && c.sensei.alive) && roadOf(c).word.sensei !== c.year,
+    go: (c, L) => {
+      roadOf(c).word.sensei = c.year;
+      c.sensei.rel = cl(c.sensei.rel + rr(8, 14));
+      P(L, "You found " + c.sensei.name + " at the old training ground before dawn. They did not raise the alarm. They did not say much either.", "g");
+      if (roll(roadSeen(c))) {
+        c.infamy = cl((c.infamy || 0) + 3);
+        P(L, "Someone saw you on the way out.", "b");
+        newsItem(c, c.name + " was seen near " + vName2(roadHome(c)) + " before dawn. The village has not said who they came to see.", "BINGO BOOK");
+      }
+    },
+  },
+  favour: {
+    cost: true,
+    can: (c) => !roadBlocked(c) && roadOf(c).favourYear !== c.year && (roadOf(c).favours || 0) < ROAD_FAVOURS,
+    go: (c, L) => {
+      const R = roadOf(c); R.favourYear = c.year;
+      const V = vName2(roadHome(c));
+      if (roll(cl(45 + power(c) * 0.4, 25, 92))) {
+        R.favours = Math.min(ROAD_FAVOURS, (R.favours || 0) + 1);
+        P(L, pick([
+          "You cleared the rockfall off " + V + "'s eastern trade road before the first cart came through. Nobody saw who did it.",
+          "A gang had been leaning on " + V + "'s border farms. They left this spring and did not say why.",
+          "You carried a lost genin cell's injured back to the edge of " + V + "'s patrol line and left before they woke.",
+          "The bridge on the river road into " + V + " was repaired overnight. The council has questions and no answers.",
+        ]) + " Favour " + R.favours + " of " + ROAD_FAVOURS + ".", "g");
+        if (R.favours >= 3) newsItem(c, "Somebody keeps doing " + V + " good turns and not staying to be thanked. The council has started keeping a list.", "THE VILLAGES");
+      } else P(L, "You tried to do " + V + " a quiet favour and it did not come off. Nobody knows you were there, which is the only good part.", "n");
+    },
+  },
+  pay: {
+    cost: false,
+    can: (c) => !roadBlocked(c) && c.ryo >= 1000 && (roadOf(c).paid || 0) < roadOwed(c),
+    go: (c, L, amt) => {
+      const R = roadOf(c);
+      const a = Math.max(0, Math.min(Math.round(amt || 0), c.ryo, roadOwed(c) - (R.paid || 0)));
+      if (!a) return;
+      c.ryo -= a; R.paid = (R.paid || 0) + a;
+      P(L, "You had " + money(a) + " carried into " + vName2(roadHome(c)) + "'s treasury, unsigned. " + money(R.paid) + " of " + money(roadOwed(c)) + " paid back.", "n");
+    },
+  },
+  cause: {
+    cost: true,
+    can: (c) => !roadBlocked(c) && roadHomeAtWar(c) && roadOf(c).causeYear !== c.year && (roadOf(c).cause || 0) < ROAD_CAUSE,
+    go: (c, L) => {
+      const R = roadOf(c); R.causeYear = c.year;
+      const V = vName2(roadHome(c));
+      if (roll(cl(40 + power(c) * 0.5, 20, 90))) {
+        R.cause = Math.min(ROAD_CAUSE, (R.cause || 0) + 1);
+        P(L, "You fought on " + V + "'s side at the edge of the war, without a headband and without being asked. Somebody on their side wrote it down. " + R.cause + " of " + ROAD_CAUSE + ".", "e");
+        newsItem(c, "Soldiers from " + V + " describe a missing-nin fighting on their flank this year. Several of them say it was " + c.name + ".", "WAR");
+      } else { c.health = cl(c.health - rr(6, 14)); P(L, "You went to fight for " + V + " and it went badly. They never knew you were there.", "b"); }
+    },
+  },
+};
+/* portraits: img/faces/<role>-<n>.webp, or <role>-m-<n> / <role>-f-<n> for one gender. Whatever is in the folder is used;
+   each person keeps the same face for life, chosen from their name. Nothing there means initials. */
+const FACE_ROLES = ["wanted", "squad", "sensei", "family", "apprentice", "street"];
+let FACES_FOUND = null;
+function probeFaces() {
+  if (FACES_FOUND) return Promise.resolve(FACES_FOUND);
+  const tryOne = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(true); im.onerror = () => res(false); im.src = src; });
+  const keys = [];
+  FACE_ROLES.forEach((r) => ["", "-m", "-f"].forEach((s) => keys.push(r + s)));
+  return Promise.all(keys.map(async (k) => {
+    const got = [];
+    for (let n = 1; n <= 8; n++) { const src = "img/faces/" + k + "-" + n + ".webp"; if (await tryOne(src)) got.push(src); else break; }
+    return [k, got];
+  })).then((pairs) => { FACES_FOUND = {}; pairs.forEach(([k, v]) => { FACES_FOUND[k] = v; }); return FACES_FOUND; });
+}
+const faceHash = (s) => { let h = 7; String(s || "").split("").forEach((ch) => { h = (h * 31 + ch.charCodeAt(0)) >>> 0; }); return h; };
+function faceSrc(found, role, name, g) {
+  if (!found) return null;
+  const gl = g ? found[role + "-" + g] || [] : [];
+  const list = gl.length ? gl : found[role] || [];
+  return list.length ? list[faceHash(name) % list.length] : null;
+}
 /* what turning the year will settle, in plain words */
 function advanceNotes(c) {
   const out = [];
@@ -11299,6 +11438,15 @@ const ANBU_OPS = [
 
 /* ============================ CHANGELOG ============================ */
 const CHANGELOG = [
+  { v: "13.2", n: "The Road", items: [
+    "For a missing-nin, Explore is now The Road: one screen for life on the run, with the wanted poster, the places you can still go, the people you left and the way home on a single page. It is laid out for a laptop or desktop screen; on a narrow window it stacks",
+    "The wanted poster: your name, Bingo Book rank, bounty, how long you have been gone and how far your face has travelled, in words. It grows with you: a scrawl with no likeness on file, then a printed portrait, then the red seal at S-rank or great infamy",
+    "The road: your hideout (train while you lie low, strike, or the Akatsuki), the black market, the border towns and their bounties, the underworld's contracts, and your old village after dark. Each card says one true thing about the place right now and opens where it is. As your infamy climbs, towns close to you one by one, and the screen says which",
+    "What you left behind: your squad, your sensei, your family, your apprentice and your old street, each with a face, a line on how they feel about you now, and one thing you can do. Send word (free, once a year each), visit your sensei (it costs an action, the risk is said in words, and being seen makes the Bingo Book), or see the street after dark",
+    "The way back: three roads home with real progress. Pardon: five quiet favours for the old village, one a year. Debt: your bounty, paid back into its treasury. A greater cause: three battles fought on its side, open only while it is at war. Finish any one and they take you back. Before that, an envoy's odds grow the further down any road you are, and the screen says in plain words what an envoy would hear. Coming home goes in the Chronicle as the end of the leaving. Seek a pardon in the Dossier and the Scroll uses the same odds",
+    "An Akatsuki member sees what stands in the way home instead of an envoy",
+    "Faces: portraits chosen by role and kept for life. Put more in img/faces (squad-2.webp, sensei-3.webp, or family-m-1.webp for one gender) and the game picks them up with no code changes; anyone without a portrait gets their initials",
+  ] },
   { v: "13.1", n: "The World Answers", items: [
     "Explore's places work where they are. Open the Training Grounds and every regimen you can do is on the card with what it gives you. The Mission Desk shows the missions given to you by name, D through S rank, and the duties of your rank. The Streets show everybody you know there, who you have already seen this year and what they are asking for. The Bounty Station shows the open bounties. Pick one and it happens, and what came of it shows under the card as Just now. One place opens at a time, across the full width, and the rest close up around it",
     "Character: your people are on the card. Spar with or confide in each teammate, train with your sensei or your sibling, challenge your rival, look for someone, spend the day with them, propose, have a child and train your children, all without opening People",
@@ -17509,6 +17657,8 @@ export default function ShinobiLife() {
   const [layout, setLayout] = useState(() => INITIAL_PREFS.layout || "stacked");
   /* which interface the game wears, not which colours it wears */
   const [ui, setUi] = useState(() => (INITIAL_PREFS.v13 ? INITIAL_PREFS.ui || "life" : "life"));
+  const [faces, setFaces] = useState(FACES_FOUND);
+  useEffect(() => { if (!faces && c && c.rogue && ui === "life" && dest === "explore") probeFaces().then(setFaces); }, [faces, c && c.rogue, ui, dest]);
   /* How loud the touch effects are. This has been tuned by guesswork across
      three rounds of "still too big", so it is a setting now rather than a
      number I keep picking for somebody else's screen. */
@@ -21383,6 +21533,15 @@ export default function ShinobiLife() {
     startBattle(s2.key, { type: "hit", i: H.i, id: s2.id || null }, adv, hitOpener(c, H), s2.id ? null : s2.forced);
     setModal(null);
   }
+  /* The Road's actions: allowed, then paid for, then done */
+  function roadDo(k, arg) {
+    commit((c2, L) => {
+      const a = ROAD_ACTS[k];
+      if (!a || !a.can(c2, arg)) return;
+      if (a.cost) { if (c2.actions < 1 && !(c2.cheats && c2.cheats.infActions)) return; spend(c2); }
+      a.go(c2, L, arg);
+    });
+  }
   /* in the new interface the war and the War Room are one screen with two views */
   const warSwitch = (here) => (ui === "life" && c && c.war ? (
     <div className="v13-switch" role="tablist" aria-label="The war">
@@ -23141,7 +23300,20 @@ export default function ShinobiLife() {
     setModal(null);
   }
   function seekPardon() {
-    commit((c, L) => { spend(c); if (roll(cl(25 - c.infamy * 0.35 + c.stats.int * 0.2, 2, 55))) { c.rogue = false; c.infamy = cl(c.infamy - 40); c.bingo = null; c.bounty = 0; c.bountyLog = null; c.rank = 2; c.rankName = rankLabel(c, 2); c.standing = 20; P(L, "Someone in the tower vouched for you. Probation, a new headband, a lot of eyes on your back.", "e"); } else P(L, "Your envoy came back in pieces. The village said no.", "b"); });
+    commit((c, L) => {
+      spend(c);
+      const best = roadBest(c);
+      if (roll(pardonOdds(c))) {
+        const root = c.v13m && c.v13m.leftRoot;
+        c.rogue = false; c.infamy = cl(c.infamy - 40); c.bingo = null; c.bounty = 0; c.bountyLog = null; c.rank = 2; c.rankName = rankLabel(c, 2); c.standing = 20;
+        const why = best.f >= 1 ? { pardon: "The favours had been counted, every one of them.", debt: "The debt had been paid to the last ryo.", cause: "Too many of them had seen who fought on their flank." }[best.k] + " " : "";
+        P(L, why + "Someone in the tower vouched for you. Probation, a new headband, a lot of eyes on your back.", "e");
+        const txt = c.name + " came home to " + vName2(c.village) + ".";
+        chron(c, { cat: "villages", big: true, line: c.name, cause: root || null, txt });
+        newsItem(c, c.name + " has been taken back by " + vName2(c.village) + " on probation. " + (best.f >= 1 ? cap(why.trim()) : "Somebody in the tower vouched for them."), "THE VILLAGES", true);
+        c.road = null;
+      } else P(L, "Your envoy came back in pieces. The village said no.", "b");
+    });
     setModal(null);
   }
   function recruitClan() {
@@ -24682,6 +24854,71 @@ export default function ShinobiLife() {
       .v13-motion-x { display: block; width: 100%; text-align: left; border-left: 2px solid; padding: 2px 0 2px 10px; margin-top: 7px; font-family: Georgia,'Times New Roman',serif; font-size: 13px; line-height: 1.45; background: none; }
       .v13-switch { display: flex; gap: 6px; margin-bottom: 12px; }
       .v13-switch-b { flex: 1; border: 1px solid; border-radius: 99px; padding: 7px 12px; font-size: 12px; font-weight: 800; }
+      .rd-head { display: grid; grid-template-columns: minmax(0, 660px) minmax(0, 1fr); gap: 26px; align-items: center; margin-bottom: 20px; }
+      .rd-poster { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; padding: 22px 150px 22px 22px; color: #2a1a0b; filter: drop-shadow(0 14px 24px rgba(0,0,0,.55)); }
+      .rd-poster::before, .rd-poster::after { content: ""; position: absolute; inset: 0; clip-path: polygon(0 3%, 4% 0, 21% 2%, 39% 0, 61% 1.6%, 80% 0, 97% 1.2%, 100% 4%, 99.2% 34%, 100% 66%, 99% 97%, 96% 100%, 72% 98%, 47% 100%, 22% 98.4%, 3% 100%, 0 96%, .8% 64%, 0 31%); }
+      .rd-poster::before { background: radial-gradient(ellipse at 22% 18%, #f1e1ba 0%, #dcc08a 42%, #b8925a 78%, #8a6436 100%); box-shadow: inset 0 0 46px rgba(70,40,12,.6); }
+      .rd-poster::after { background: repeating-radial-gradient(circle at 30% 40%, rgba(60,35,10,.07) 0 1px, transparent 1px 3px), linear-gradient(115deg, transparent 55%, rgba(70,40,12,.18) 56%, transparent 62%); pointer-events: none; }
+      .rd-pic, .rd-ptx { position: relative; z-index: 1; }
+      .rd-portrait { display: block; width: 132px; height: 124px; object-fit: cover; border: 3px solid #4a3218; border-radius: 2px; filter: sepia(.5) contrast(1.06) saturate(.85); }
+      .rd-nolike { display: flex; align-items: center; justify-content: center; text-align: center; font: 800 10px/1.5 system-ui, sans-serif; letter-spacing: .2em; color: #6a4a26; background: repeating-linear-gradient(45deg, rgba(80,50,20,.12) 0 6px, transparent 6px 12px); }
+      .rd-wanted { font-family: Georgia,'Times New Roman',serif; font-weight: 900; font-size: 46px; line-height: .92; color: #2a1508; }
+      .rd-pname { font-family: Georgia,'Times New Roman',serif; font-size: 22px; font-weight: 700; margin-top: 8px; }
+      .rd-pep { font-weight: 400; font-style: italic; font-size: 16px; }
+      .rd-prank { font-size: 13px; color: #4a3218; margin-top: 2px; }
+      .rd-pbounty { font-family: Georgia,'Times New Roman',serif; font-size: 17px; color: #8f2318; margin-top: 6px; }
+      .rd-pbounty b { font-weight: 800; }
+      .rd-pline { font-family: Georgia,'Times New Roman',serif; font-size: 13.5px; line-height: 1.45; color: #3a2612; margin-top: 8px; max-width: 360px; }
+      .rd-seal { position: absolute; right: 28px; top: 18px; z-index: 2; writing-mode: vertical-rl; font-family: serif; font-weight: 900; font-size: 26px; letter-spacing: .1em; color: #a5231a; border: 3px solid #a5231a; padding: 6px 4px; transform: rotate(5deg); opacity: .82; }
+      .rd-band { position: absolute; right: 18px; bottom: 18px; z-index: 2; transform: rotate(-12deg); filter: drop-shadow(0 4px 6px rgba(0,0,0,.45)); }
+      .rd-tag { font-family: Georgia,'Times New Roman',serif; font-style: italic; font-size: 22px; line-height: 1.45; }
+      .rd-heard { border-top: 1px solid; margin-top: 16px; padding-top: 10px; }
+      .rd-heard p { font-family: Georgia,'Times New Roman',serif; font-size: 13.5px; line-height: 1.45; margin-top: 4px; }
+      .rd-sub { font-size: 12px; letter-spacing: 0; font-weight: 500; white-space: nowrap; }
+      .rd-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+      .rd-card { display: flex; flex-direction: column; text-align: left; border: 1px solid; border-radius: 12px; overflow: hidden; background: var(--v13-base); padding: 0; transition: transform .14s ease, box-shadow .14s ease; }
+      .rd-card:not(:disabled):hover { transform: translateY(-2px); }
+      .rd-art { display: block; height: 92px; background-size: cover; background-position: center; }
+      .rd-card.is-locked .rd-art { filter: grayscale(1) brightness(.55); }
+      .rd-card-b { display: flex; flex-direction: column; gap: 4px; padding: 9px 11px 11px; }
+      .rd-card-n { display: flex; align-items: center; gap: 7px; font-family: Georgia,'Times New Roman',serif; font-size: 15px; font-weight: 700; line-height: 1.2; }
+      .rd-card-f { font-size: 12px; line-height: 1.35; }
+      .rd-panel, .rd-person, .rd-way { position: relative; isolation: isolate; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+      .rd-panel::before, .rd-person::before, .rd-way::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--v13-base); z-index: -1; pointer-events: none; }
+      .rd-panel { margin-top: 12px; padding: 14px 16px; border-radius: 14px; }
+      .rd-panel-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      .rd-panel-h h3 { font-family: Georgia,'Times New Roman',serif; font-size: 18px; font-weight: 700; margin: 0; }
+      .rd-panel-h span { font-size: 12.5px; }
+      .rd-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+      .rd-person { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; }
+      .rd-person-top { display: flex; gap: 11px; padding: 11px; flex: 1; }
+      .rd-face { width: 64px; height: 72px; flex-shrink: 0; border-radius: 9px; object-fit: cover; border: 1px solid rgba(255,255,255,.12); }
+      .rd-face.rd-portrait { width: 132px; height: 124px; border-radius: 2px; border: 3px solid #4a3218; }
+      .rd-mono.rd-portrait { font-size: 40px; background: rgba(80,50,20,.18) !important; color: #4a3218 !important; }
+      .rd-mono { display: flex; align-items: center; justify-content: center; font: 700 20px/1 Georgia,'Times New Roman',serif; border: 1px solid; }
+      .rd-person-t { font-family: Georgia,'Times New Roman',serif; font-size: 15px; font-weight: 700; }
+      .rd-person-w { font-size: 11.5px; margin-top: 1px; }
+      .rd-person-l { font-family: Georgia,'Times New Roman',serif; font-size: 13px; line-height: 1.4; margin-top: 5px; }
+      .rd-person-a { border-top: 1px solid; padding: 9px; font-size: 12.5px; font-weight: 800; background: rgba(255,255,255,.02); }
+      .rd-person-a:not(:disabled):hover { background: rgba(255,255,255,.06); }
+      .rd-way { margin-top: 18px; border-radius: 16px; padding: 16px; display: grid; grid-template-columns: minmax(220px, 1.1fr) minmax(0, 2.6fr) minmax(210px, 1fr); gap: 16px; align-items: stretch; }
+      .rd-way .v13-did { grid-column: 1 / -1; margin-top: 0; }
+      .rd-way-l h2 { font-family: Georgia,'Times New Roman',serif; font-size: 20px; font-weight: 700; margin: 6px 0 0; line-height: 1.25; }
+      .rd-way-l p { font-family: Georgia,'Times New Roman',serif; font-size: 13.5px; line-height: 1.5; margin-top: 8px; }
+      .rd-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .rd-path { border: 1px solid; border-radius: 12px; padding: 11px 12px; display: flex; flex-direction: column; gap: 6px; background: rgba(255,255,255,.02); }
+      .rd-path-n { font-family: Georgia,'Times New Roman',serif; font-size: 15px; font-weight: 700; }
+      .rd-path-v { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .rd-bar { height: 6px; border-radius: 99px; background: rgba(0,0,0,.45); overflow: hidden; }
+      .rd-bar span { display: block; height: 100%; border-radius: 99px; }
+      .rd-path-s { font-size: 11.5px; line-height: 1.4; flex: 1; }
+      .rd-path-b { border: 1px solid; border-radius: 99px; padding: 6px 10px; font-size: 12px; font-weight: 800; background: none; }
+      .rd-return { border: 1px solid; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+      .rd-return p:first-child { font-family: Georgia,'Times New Roman',serif; font-size: 15px; line-height: 1.35; }
+      .rd-return p { font-size: 12.5px; line-height: 1.4; }
+      .rd-return .v13-btn { margin-top: 4px; }
+      @media (max-width: 1000px) { .rd-head, .rd-way { grid-template-columns: minmax(0, 1fr); } }
+      @media (max-width: 720px) { .rd-poster { grid-template-columns: minmax(0, 1fr); padding: 20px; } .rd-seal, .rd-band { display: none; } .rd-paths { grid-template-columns: minmax(0, 1fr); } .rd-wanted { font-size: 36px; } }
       .v13-toast-wrap { position: fixed; left: 0; right: 0; top: 74px; z-index: 66; display: flex; justify-content: center; padding: 0 16px; pointer-events: none; }
       .v13-toast { position: relative; width: 100%; max-width: 460px; border: 1px solid; border-radius: 14px; padding: 11px 16px 12px 20px; overflow: hidden; }
       .v13-toast-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
@@ -25991,7 +26228,7 @@ export default function ShinobiLife() {
                   <div className="v13-id-s" style={{ color: T.dim }}><span style={{ color: accent }}>{c.rankName}</span> {"·"} {placeName}</div>
                 </div>
                 <nav className="v13-tabs" aria-label="Destinations">
-                  {DESTS.map(([k, n, ic]) => (
+                  {destsOf(c).map(([k, n, ic]) => (
                     <button key={k} onClick={() => goDest(k)} aria-label={n} aria-current={dest === k ? "page" : undefined} className={"v13-tab" + (dest === k ? " is-on" : "")}
                       style={{ color: dest === k ? T.text : T.dim, borderColor: dest === k ? accent : "transparent" }}>
                       <Icon name={ic} size={15} color={dest === k ? accent : T.dim} /><span>{n}</span>
@@ -26130,7 +26367,7 @@ export default function ShinobiLife() {
               )}
 
               {/* ================= EXPLORE ================= */}
-              {dest === "explore" && (
+              {dest === "explore" && !c.rogue && (
                 <div className="sl-in">
                   <section className="v13-banner">
                     <div className="v13-banner-art">{hasVillage && !c.rogue ? <VillageArt vid={c.village} height="100%" /> : <EraArt era={c.era} height="100%" />}</div>
@@ -26173,6 +26410,206 @@ export default function ShinobiLife() {
                   <p className="v13-foot" style={{ color: T.dim }}>Every place shows only what you can do there, and most of it can be done right here. Anything else is under More.</p>
                 </div>
               )}
+
+              {/* ================= THE ROAD (a missing-nin's Explore) ================= */}
+              {dest === "explore" && c.rogue && (() => {
+                const R = c.road || {};
+                const HV = vName2(roadHome(c));
+                const blocked = roadBlocked(c);
+                const paths = roadPaths(c); const best = roadBest(c); const odds = pardonOdds(c);
+                const closed = roadClosed(c);
+                const leftE = c.v13m && c.v13m.leftRoot ? chronById(c, c.v13m.leftRoot) : null;
+                const gone = leftE ? c.year - leftE.y : null;
+                /* the poster grows with you: a scrawl, then a printed likeness, then the seal */
+                const ptier = c.bingo === "S" || (c.infamy || 0) >= 70 ? 2 : c.bingo || (c.infamy || 0) >= 30 ? 1 : 0;
+                const inf = c.infamy || 0;
+                const notor = inf < 20 ? "Most people have already forgotten the face." : inf < 45 ? "Your face is on a few boards near the border." : inf < 70 ? "Every border post between here and the sea has your description." : "Your name is used to frighten children in three countries.";
+                const status = (gone != null ? (gone <= 0 ? "Gone from " + HV + " since this year. " : "Gone from " + HV + " " + gone + " year" + (gone === 1 ? "" : "s") + ". ") : "") + notor;
+                const heard = (c.news || []).find((n) => n.txt.includes(c.name));
+                const tag = best.f >= 1 ? ["The gate is open.", "You only have to walk through it."] : best.f >= 0.34 ? ["Every road bends somewhere.", "Yours is bending home."] : ["Different roads. Same village.", "You're still on it."];
+                const P_ = (k) => places.find((p) => p.k === k) || {};
+                const no = c.actions < 1;
+                const Face = ({ role, name, g, cls }) => {
+                  const src = faceSrc(faces, role, name, g);
+                  const ini = String(name || "?").split(" ").map((w) => w.charAt(0)).slice(0, 2).join("");
+                  return src ? <img className={"rd-face " + (cls || "")} src={src} alt="" /> : <span className={"rd-face rd-mono " + (cls || "")} style={{ background: accent + "1f", color: accent, borderColor: accent + "55" }}>{ini}</span>;
+                };
+                /* ---------- the places a missing-nin can still go, each with one true thing about it ---------- */
+                const trainRows = P_("train").rows ? P_("train").rows() : [];
+                const cards = [
+                  { k: "hideout", n: c.akatsuki ? "The Akatsuki Hideout" : "Your Hideout", art: "hideout", icon: "home",
+                    fact: c.akatsuki ? c.akatsuki.partner + " is waiting" : c.hit && !c.hit.done ? "A mark half-finished: " + c.hit.label : c.actions + " action" + (c.actions === 1 ? "" : "s") + " left this year",
+                    rows: () => trainRows, note: "Train while you lie low.", acts: (P_("hideout").acts || []).filter(Boolean) },
+                  { k: "market", n: "The Black Market", art: "market", icon: "shop", fact: "Your purse: " + money(c.ryo),
+                    acts: (P_("market").acts || []).filter(Boolean), note: "Gear, pills, tutors and the scroll broker, and nobody asks your name." },
+                  { k: "towns", n: "Border Towns", art: "border", icon: "bounty",
+                    fact: (c.bounties || []).length ? c.bounties.length + " bount" + (c.bounties.length === 1 ? "y" : "ies") + " posted in " + roadTown(c) : "Working out of " + roadTown(c),
+                    rows: P_("bounty").rows || null, note: "You work out of " + roadTown(c) + " now.", acts: [A("bounty") ? { l: "The whole board", on: A("bounty").onClick, dis: A("bounty").disabled } : null].filter(Boolean) },
+                  { k: "underworld", n: "The Underworld", art: "underworld", icon: "mission", fact: "Three contracts on the table",
+                    rows: () => ["Low", "Mid", "High"].map((k) => ({ k: "c" + k, l: k + "-risk contract", s: { Low: "Quick work and quiet pay.", Mid: "A real job with a real fight in it.", High: "The kind nobody else would take." }[k], r: "Go", on: () => startCrime(k), dis: no, tone: k === "High" ? T.blood : null })),
+                    note: "No backup, no extraction, no questions.", acts: [{ l: "Everything on offer", on: () => setModal("mission"), dis: no }] },
+                  { k: "village", n: "Old Village (Night)", art: "village", icon: "people",
+                    fact: c.folk ? c.folk.list.filter((f) => f.alive !== false && f.bond >= 35).length + " of them still ask about you" : "Nobody you know is awake",
+                    rows: P_("streets").rows || null, note: "After dark, in " + HV + ", for a few minutes at a time.", acts: [{ l: c.folk ? "The whole street" : "Go after dark", on: () => folkUi("open") }] },
+                  A("summitraid") ? { k: "summit", n: "The Kage Summit", art: null, icon: "war", fact: A("summitraid").sub, acts: [actOf("summitraid", "Go")] } : null,
+                  closed.length ? { k: "closed", n: closed[closed.length - 1].replace(/^the /, "The "), art: "closed", icon: "rule", fact: "They know your face there now.", locked: true } : null,
+                ].filter(Boolean);
+                const open = cards.find((x) => x.k === openPlace && !x.locked);
+                const openRows = open && open.rows ? open.rows().filter(Boolean) : [];
+                /* ---------- the people who still think about you ---------- */
+                const team = (c.team || []).filter((t) => t.alive);
+                const tRel = team.length ? Math.round(team.reduce((a, t) => a + (t.rel || 0), 0) / team.length) : 0;
+                const ap = c.folk && c.folk.list.find((f) => f.role === "apprentice" && f.alive !== false);
+                const famWho = c.spouse ? { n: c.spouse.name, rel: c.gender === "f" ? "husband" : "wife", g: c.gender === "f" ? "m" : "f" }
+                  : c.parents && c.parents.m && c.parents.m.alive ? { n: c.parents.m.name, rel: "mother", g: "f" }
+                  : c.parents && c.parents.f && c.parents.f.alive ? { n: c.parents.f.name, rel: "father", g: "m" }
+                  : c.sibling && c.sibling.alive ? { n: c.sibling.name, rel: "sibling", g: c.sibling.gender } : null;
+                const fam = R.fam != null ? R.fam : 55;
+                const street = c.folk ? c.folk.list.filter((f) => f.alive !== false && f.role !== "apprentice") : [];
+                const sBond = street.length ? Math.round(street.reduce((a, f) => a + f.bond, 0) / street.length) : 0;
+                const sent = (who) => (R.word || {})[who] === c.year;
+                const left = [
+                  team.length ? { k: "squad", t: "Your squad", who: team.map((t) => t.name.split(" ")[0]).join(" and "), face: ["squad", team[0].name, team[0].gender],
+                    line: tRel >= 60 ? "They don't know where you are. They'd take you back." : tRel >= 35 ? "They stopped saying your name at mess. They have not stopped thinking it." : "They took your leaving personally, and they are not wrong to.",
+                    act: { l: sent("squad") ? "Word sent this year" : "Send word", on: () => roadDo("word", "squad"), dis: sent("squad") } } : null,
+                  c.sensei && c.sensei.alive ? { k: "sensei", t: "Your sensei", who: c.sensei.name, face: ["sensei", c.sensei.name, null],
+                    line: c.sensei.rel >= 60 ? "Disappointed, but still proud of the shinobi you are." : c.sensei.rel >= 35 ? "They wrote your name in the margin of a report and crossed it out." : "They have stopped defending you to the council.",
+                    act: { l: sent("sensei") ? "Seen this year" : "Visit (" + roadSeenWord(c) + ")", on: () => roadDo("sensei"), dis: sent("sensei") || no } } : null,
+                  famWho ? { k: "family", t: "Your family", who: "Your " + famWho.rel + ", " + famWho.n, face: ["family", famWho.n, famWho.g],
+                    line: fam >= 60 ? "They worry. They hope. They still talk about you." : fam >= 35 ? "They keep a place at the table and do not say who it is for." : "They have stopped asking people if they have seen you.",
+                    act: { l: sent("family") ? "Word sent this year" : "Send word", on: () => roadDo("word", "family"), dis: sent("family") } } : null,
+                  ap ? { k: "apprentice", t: "Your apprentice", who: ap.name, face: ["apprentice", ap.name, null],
+                    line: ap.bond >= 50 ? "They ask about you every week. “When are they coming back?”" : ap.bond >= 25 ? "They have a new teacher now, and still throw the way you showed them." : "They do not mention you any more.",
+                    act: { l: sent("apprentice") ? "Word sent this year" : "Send word", on: () => roadDo("word", "apprentice"), dis: sent("apprentice") } } : null,
+                  street.length ? { k: "street", t: "Your street", who: street.length + " people in " + HV, face: ["street", street[0].name, null],
+                    line: sBond >= 40 ? "They still tell stories about you, some true, some not." : "The stories are different now. Some say you were wronged. Others say you're a criminal.",
+                    act: { l: "See them after dark", on: () => { setOpenPlace("village"); setInl(null); try { const el = document.querySelector('.rd-card[data-place="village"]'); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { /* only a convenience */ } } } } : null,
+                ].filter(Boolean);
+                const chunk = Math.max(0, Math.min(c.ryo, roadOwed(c) - (R.paid || 0), Math.max(25000, Math.round(roadOwed(c) / 5 / 1000) * 1000)));
+                const pathUi = {
+                  pardon: { val: (R.favours || 0) + " / " + ROAD_FAVOURS + " favours", sub: "Quiet favours for " + HV + ", one a year.", b: { l: R.favourYear === c.year ? "Done this year" : "Do them a quiet favour", on: () => roadDo("favour"), dis: no || !ROAD_ACTS.favour.can(c) } },
+                  debt: { val: money(Math.min(R.paid || 0, roadOwed(c))) + " / " + money(roadOwed(c)), sub: "Your bounty, paid back into " + HV + "'s treasury.", b: { l: chunk >= 1000 ? "Pay " + money(chunk) : "Nothing to pay with", on: () => roadDo("pay", chunk), dis: chunk < 1000 || !ROAD_ACTS.pay.can(c) } },
+                  cause: { val: R.cause ? R.cause + " / " + ROAD_CAUSE + " battles" : "Not started", sub: roadHomeAtWar(c) ? HV + " is at war. Fight for them, unasked." : "Opens if " + HV + " goes to war.", b: { l: R.causeYear === c.year ? "Fought this year" : "Fight for them", on: () => roadDo("cause"), dis: no || !ROAD_ACTS.cause.can(c) } },
+                };
+                return (
+                  <div className="sl-in rd">
+                    {/* ---------- the poster, and what is said about you ---------- */}
+                    <div className="rd-head">
+                      <section className={"rd-poster rd-t" + ptier} aria-label="Your wanted poster">
+                        <div className="rd-pic">
+                          {ptier >= 1 ? <Face role="wanted" name={c.name} g={c.gender} cls="rd-portrait" /> : <div className="rd-portrait rd-nolike">NO LIKENESS<br />ON FILE</div>}
+                        </div>
+                        <div className="rd-ptx">
+                          <div className="rd-wanted">WANTED</div>
+                          <div className="rd-pname">{c.name}{c.epithet ? <span className="rd-pep"> {c.epithet}</span> : null}</div>
+                          <div className="rd-prank">Missing-nin {"·"} {c.bingo ? "Rank " + c.bingo : "Unranked"}</div>
+                          <div className="rd-pbounty">{c.bounty ? <>Bounty <b>{money(c.bounty)}</b></> : "No price on you yet"}</div>
+                          <p className="rd-pline">{status}</p>
+                        </div>
+                        {ptier >= 2 && <div className="rd-seal" aria-hidden="true">追放</div>}
+                        <div className="rd-band" aria-hidden="true"><Headband size={54} slashed /></div>
+                      </section>
+                      <aside className="rd-side">
+                        <p className="rd-tag" style={{ color: T.soft }}>{tag[0]}<br /><span style={{ color: accent }}>{tag[1]}</span></p>
+                        {heard && (
+                          <div className="rd-heard" style={{ borderColor: T.line }}>
+                            {kick("LAST HEARD · " + heard.year + " AH", T.dim)}
+                            <p style={{ color: T.soft }}>{shortTxt(heard.txt, 150)}</p>
+                          </div>
+                        )}
+                      </aside>
+                    </div>
+
+                    {/* ---------- the road ---------- */}
+                    <Sect t="THE ROAD" col={accent} extra={<span className="rd-sub" style={{ color: T.dim }}>Places you can still go. Each one has a price.</span>}>
+                      <div className="rd-cards">
+                        {cards.map((x) => {
+                          const on = open && open.k === x.k;
+                          return (
+                            <button key={x.k} data-place={x.k} className={"rd-card" + (on ? " is-on" : "") + (x.locked ? " is-locked" : "")} disabled={!!x.locked}
+                              onClick={() => { if (!x.locked) { setOpenPlace(on ? null : x.k); setInl(null); } }} aria-expanded={x.locked ? undefined : !!on}
+                              style={{ borderColor: on ? accent : x.locked ? T.line : "rgba(255,255,255,.09)", boxShadow: on ? "0 0 0 1px " + accent + ", 0 10px 26px " + accent + "33" : "none" }}>
+                              <span className="rd-art" style={x.art ? { backgroundImage: "url(img/road/" + x.art + ".webp)" } : { background: "linear-gradient(140deg," + T.panel2 + "," + accent + "33)" }} />
+                              <span className="rd-card-b">
+                                <span className="rd-card-n" style={{ color: x.locked ? T.dim : T.text }}><Icon name={x.icon} size={14} color={x.locked ? T.dim : accent} />{x.n}</span>
+                                <span className="rd-card-f" style={{ color: x.locked ? T.blood : T.soft }}>{x.locked ? "Closed · " : ""}{x.fact}</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {open && (
+                        <section className="rd-panel" style={{ ...glass(accent), border: "1px solid " + accent + "55" }} data-panel={open.k}>
+                          <div className="rd-panel-h">
+                            <h3 style={{ color: T.text }}>{open.n}</h3>
+                            <span style={{ color: T.dim }}>{open.note}</span>
+                            <button onClick={() => setOpenPlace(null)} className="v13-link" style={{ color: T.dim, marginLeft: "auto" }} aria-label={"Close " + open.n}>Close</button>
+                          </div>
+                          <Did k={open.k} />
+                          {openRows.length > 0 && <div className="v13-irows">{openRows.map((r) => <IRow key={r.k} r={r} at={open.k} />)}</div>}
+                          {(open.acts || []).length > 0 && <div className="v13-place-acts">{open.acts.filter(Boolean).map((b, i) => <Btn13 key={i} b={b} primary={!openRows.length && i === 0} />)}</div>}
+                        </section>
+                      )}
+                    </Sect>
+
+                    {/* ---------- what you left behind ---------- */}
+                    {left.length > 0 && (
+                      <Sect t="WHAT YOU LEFT BEHIND" col={T.soft} extra={<button onClick={() => setModal("people")} className="v13-link" style={{ color: accent }}>Everyone {"→"}</button>}>
+                        <Did k="left" />
+                        <div className="rd-people">
+                          {left.map((p) => (
+                            <article key={p.k} className="rd-person" style={{ ...glass() }} data-who={p.k}>
+                              <div className="rd-person-top">
+                                <Face role={p.face[0]} name={p.face[1]} g={p.face[2]} />
+                                <div className="rd-person-tx">
+                                  <div className="rd-person-t" style={{ color: T.text }}>{p.t}</div>
+                                  <div className="rd-person-w" style={{ color: T.dim }}>{p.who}</div>
+                                  <p className="rd-person-l" style={{ color: T.soft }}>{p.line}</p>
+                                </div>
+                              </div>
+                              <button onClick={(e) => { if (!p.act.dis) { ripple(e); setInl({ k: "left", n: log.length }); p.act.on(); } }} disabled={!!p.act.dis} className="rd-person-a"
+                                style={{ color: p.act.dis ? T.dim : accent, borderColor: T.line }}>{p.act.l}</button>
+                            </article>
+                          ))}
+                        </div>
+                      </Sect>
+                    )}
+
+                    {/* ---------- the way back ---------- */}
+                    <section className="rd-way" style={{ ...glass(T.gold), border: "1px solid " + T.gold + "44" }} aria-label="The way back">
+                      <div className="rd-way-l">
+                        {kick("THE WAY BACK", T.gold)}
+                        <h2 style={{ color: T.text }}>You're not gone. You're just further away.</h2>
+                        <p style={{ color: T.soft }}>{blocked || "The road home to " + HV + " is still open, but it won't be easy. Finish any one of these and they will take you back."}</p>
+                      </div>
+                      <div className="rd-paths">
+                        {paths.map((p) => {
+                          const u = pathUi[p.k];
+                          return (
+                            <div key={p.k} className="rd-path" data-path={p.k} style={{ borderColor: p.f >= 1 ? T.gold : T.line }}>
+                              <div className="rd-path-n" style={{ color: T.text }}>{p.n}</div>
+                              <div className="rd-path-v" style={{ color: p.f >= 1 ? T.gold : T.soft }}>{u.val}</div>
+                              <div className="rd-bar"><span style={{ width: Math.round(p.f * 100) + "%", background: "linear-gradient(90deg," + T.gold + "aa," + T.gold + ")" }} /></div>
+                              <div className="rd-path-s" style={{ color: T.dim }}>{u.sub}</div>
+                              {!blocked && p.f < 1 && <button onClick={(e) => { if (!u.b.dis) { ripple(e); setInl({ k: "way", n: log.length }); u.b.on(); } }} disabled={!!u.b.dis} className="rd-path-b" style={{ color: u.b.dis ? T.dim : T.gold, borderColor: u.b.dis ? T.line : T.gold + "77" }}>{u.b.l}</button>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="rd-return" style={{ borderColor: best.f >= 1 && !blocked ? T.gold : T.line }}>
+                        {blocked ? <p style={{ color: T.soft }}>{blocked}</p> : (
+                          <>
+                            <p style={{ color: T.text }}>{best.f >= 1 ? "They are ready to take you back." : best.f > 0 ? "Closest: " + best.what + ", " + Math.round(best.f * 100) + "% of the way." : "No road home has started yet."}</p>
+                            <p style={{ color: T.dim }}>{best.f >= 1 ? "Send word and walk in through the front gate." : "An envoy now: " + pardonWord(odds).charAt(0).toLowerCase() + pardonWord(odds).slice(1)}</p>
+                            <Btn13 b={{ l: best.f >= 1 ? "Go home to " + HV : "Send an envoy home", on: () => seekPardon(), dis: no }} primary={best.f >= 1} tone={T.gold} />
+                          </>
+                        )}
+                      </div>
+                      <Did k="way" />
+                    </section>
+                  </div>
+                );
+              })()}
 
               {/* ================= CHARACTER ================= */}
               {dest === "character" && (
@@ -26355,7 +26792,7 @@ export default function ShinobiLife() {
 
             {/* ---------- phones: the five destinations within thumb reach ---------- */}
             <nav className="v13-bottom" aria-label="Destinations" style={{ background: THEME.light ? T.ink + "f2" : "rgba(7,8,12,.94)", borderTop: "1px solid " + (THEME.light ? T.line : "rgba(255,255,255,.08)") }}>
-              {DESTS.map(([k, n, ic]) => (
+              {destsOf(c).map(([k, n, ic]) => (
                 <button key={k} onClick={() => goDest(k)} aria-label={n} aria-current={dest === k ? "page" : undefined} className={"v13-bt" + (dest === k ? " is-on" : "")} style={{ color: dest === k ? accent : T.dim }}>
                   <Icon name={ic} size={19} color={dest === k ? accent : T.dim} /><span>{n}</span>
                 </button>
@@ -27457,7 +27894,7 @@ export default function ShinobiLife() {
               ))}
             </>
           )}
-          {c.rogue && <Row label="Seek a pardon" sub={"Long odds at " + c.infamy + " infamy"} onClick={seekPardon} />}
+          {c.rogue && <Row label="Seek a pardon" sub={pardonWord(pardonOdds(c)) + (roadBest(c).f > 0 ? " The further down a road home you are, the better your odds." : " Long odds at " + c.infamy + " infamy.")} onClick={seekPardon} />}
           {!c.rogue && !c.founded && c.rank >= 2 && <Row label={eraOf(c).hideVillages ? "Walk out on the clan" : "Defect from the village"} sub={eraOf(c).hideVillages ? "Take your name off the roll and go. Clanless, hunted, and worth something dead." : "Slash your headband. There is no coming back."} right={eraOf(c).hideVillages ? "Ronin" : "Rogue"} onClick={defect} tone={T.blood + "66"} />}
           {!c.rogue && !eraOf(c).hideVillages && villageExists(c, c.village) && c.kages[c.village] && c.rank >= 2 && c.rank < 6 && (
             <>
@@ -32921,7 +33358,7 @@ export default function ShinobiLife() {
               Every screen in the game, in one place. The five destinations put whatever matters to your life first; this is all of it.
             </p>
             <div className="flex gap-1.5 mb-3 flex-wrap sl-more-dests">
-              {DESTS.map(([k, n, ic]) => (
+              {destsOf(c).map(([k, n, ic]) => (
                 <button key={k} onClick={go(k)} style={{ background: T.panel2, border: "1px solid " + T.line, color: T.text, borderRadius: 99, display: "flex", alignItems: "center", gap: 6 }} className="px-3 py-1.5 text-xs font-semibold">
                   <Icon name={ic} size={13} color={accent} />{n}
                 </button>

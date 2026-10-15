@@ -9,6 +9,7 @@ const { open } = require('./lib/harness.cjs');
   const home = () => page.evaluate(() => { const m = document.querySelector('.v13-main'); return m ? m.innerText : ''; });
   const chapterTxt = () => page.evaluate(() => { const m = document.querySelector('.v13-chapter'); return m ? m.innerText : ''; });
   const places = () => page.evaluate(() => [...document.querySelectorAll('.v13-place')].map((p) => p.getAttribute('data-place')));
+  const road = () => page.evaluate(() => [...document.querySelectorAll('.rd-card')].map((p) => p.getAttribute('data-place')));
 
   /* ---------- a brand new player lands in the new interface ---------- */
   await newLife({ name: 'Haruki' });
@@ -79,12 +80,12 @@ const { open } = require('./lib/harness.cjs');
   T('S5 a jonin: the village leans on them, and the tribunal and the court are open to them', /THE VILLAGE LEANS ON YOU/.test(m) && pl.includes('tribunal') && pl.includes('court'), { m, pl });
   await stage("c.rank=4; c.rogue=true; c.rankName='Missing-nin'; c.infamy=60; c.bingo='A'; c.bounty=900000; c.age=30;");
   m = await chapterTxt(); hm = await home();
-  await dest('Explore'); pl = await places();
-  T('S6 a missing-nin: hunted; the hideout and the underworld come first, no desk, no border', /HUNTED/.test(m) && /Find a contract/.test(m) && pl[0] === 'hideout' && pl.includes('underworld') && !pl.includes('desk') && !pl.includes('border') && /Bounty ¥900,000/.test(hm), { m, pl });
+  await dest('The Road'); pl = await road();
+  T('S6 a missing-nin: hunted; The Road has the hideout first and the underworld, no desk, no border patrol', /HUNTED/.test(m) && /Find a contract/.test(m) && pl[0] === 'hideout' && pl.includes('underworld') && !pl.includes('desk') && !pl.includes('border') && /Bounty ¥900,000/.test(hm), { m, pl });
   await stage("c.rank=4; c.rogue=true; c.rankName='Missing-nin'; c.infamy=90; c.bingo='S'; c.akatsuki={ ring:'Kuu', ringName:'Sky', since:c.year-2, partner:'Kisame Hoshigaki', partnerId:'kisame', jobs:3, sealed:0, taken:[] }; c.age=30;");
   m = await chapterTxt(); hm = await home();
   T('S7 an Akatsuki member: the organisation is the chapter, with the strike beside it, and it is not repeated under what needs you', /THE ORGANISATION/.test(m) && /Ring Kuu of the Akatsuki/.test(m) && /Strike at someone/.test(m) && !/WHAT NEEDS YOU[\s\S]*Akatsuki ·/.test(hm), m);
-  await dest('Explore'); pl = await places();
+  await dest('The Road'); pl = await road();
   T('S8 their hideout is the Akatsuki hideout', pl[0] === 'hideout' && /The Akatsuki Hideout/.test(await home()), pl);
   await stage("c.rank=6; c.rankName='Third Hokage'; c.standing=100; c.age=45;");
   m = await chapterTxt();

@@ -38,10 +38,11 @@ const { open } = require('./lib/harness.cjs');
   T('L5 a reload comes back to the same life, on Home', sv2.c.name === sv.c.name && sv2.c.year === sv.c.year && !!(await page.$('.v13-hero')) && new RegExp(sv.c.name).test(await bodyTxt()));
 
   /* ---------- death, and the next generation ---------- */
-  /* a body at zero dies at the turn of the year unless the year heals it first, so give it a few tries */
+  /* a body at zero dies at the turn of the year unless the year heals it first */
   let t = '';
-  for (let k = 0; k < 6 && !/THE MISSION ENDS/.test(t); k++) {
-    await inject("const c=s.c; c.dilemma=null; c.cheats.god=false; c.health=0; c.age=Math.max(c.age,40); c.actions=0;");
+  /* at ninety, with nothing left, each turn of the year is close to even odds of the last; ten tries */
+  for (let k = 0; k < 10 && !/THE MISSION ENDS/.test(t); k++) {
+    await inject("const c=s.c; c.dilemma=null; c.cheats.god=false; c.health=0; c.age=Math.max(c.age,90); c.year=(c.birthYear||0)+c.age; c.actions=0;");
     await ageOnce(); await wait(900);
     t = await bodyTxt();
   }
